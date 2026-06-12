@@ -13,7 +13,7 @@ export async function GET(
 
   try {
     // 1. Try local cache lookup by ID, ISBN, or Work Key
-    let book = getCachedBook(id);
+    let book = await getCachedBook(id);
     if (book) {
       return NextResponse.json({ success: true, book });
     }

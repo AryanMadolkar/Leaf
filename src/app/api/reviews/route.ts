@@ -1,8 +1,15 @@
 import { NextResponse } from "next/server";
-import { getDatabase } from "@/utils/db";
+import { createClient } from "@/utils/supabase/server";
 
 export async function POST(request: Request) {
   try {
+    const supabase = await createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await request.json();
     const { reviewId, action } = body; // action: 'like' or 'unlike'
 
@@ -10,21 +17,31 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Missing reviewId" }, { status: 400 });
     }
 
-    const db = getDatabase();
+    // Fetch review to get current likes count
+    const { data: review, error: fetchError } = await supabase
+      .from("reviews")
+      .select("likes_count")
+      .eq("id", reviewId)
+      .maybeSingle();
 
-    const existing = db.prepare("SELECT likes_count FROM user_books WHERE id = ?").get(reviewId) as { likes_count: number } | undefined;
-    if (!existing) {
+    if (fetchError || !review) {
       return NextResponse.json({ success: false, error: "Review not found" }, { status: 404 });
     }
 
-    let newLikes = existing.likes_count;
+    let newLikes = review.likes_count || 0;
     if (action === "like") {
       newLikes += 1;
     } else if (action === "unlike") {
       newLikes = Math.max(0, newLikes - 1);
     }
 
-    db.prepare("UPDATE user_books SET likes_count = ? WHERE id = ?").run(newLikes, reviewId);
+    // Update review likes count
+    const { error: updateError } = await supabase
+      .from("reviews")
+      .update({ likes_count: newLikes })
+      .eq("id", reviewId);
+
+    if (updateError) throw updateError;
 
     return NextResponse.json({ success: true, likesCount: newLikes });
   } catch (error: any) {

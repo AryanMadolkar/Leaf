@@ -1,34 +1,216 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Header from "@/components/Header";
 import BookCard from "@/components/BookCard";
 import ReviewCard, { StarDisplay } from "@/components/ReviewCard";
 import { useLeaf } from "@/context/LeafContext";
 import { Calendar, Layers, Heart, BookOpen, UserCheck, UserPlus, Grid, Flame, ArrowUpRight } from "lucide-react";
 import Link from "next/link";
+import { createClient } from "@/utils/supabase/client";
 
 export default function ProfilePage({ params }: { params: Promise<{ username: string }> }) {
   const { username } = React.use(params);
   const {
-    users,
-    books,
-    reviews,
-    diaryLogs,
-    lists,
     currentUser,
     toggleFollowUser,
-    userStats,
+    lists,
+    reviews,
   } = useLeaf();
 
+  const supabase = createClient();
   const [activeTab, setActiveTab] = useState<"activity" | "diary" | "lists" | "likes">("activity");
+  const [targetUser, setTargetUser] = useState<any | null>(null);
+  const [userStats, setUserStats] = useState<any | null>(null);
+  const [finishedLogs, setFinishedLogs] = useState<any[]>([]);
+  const [userReviews, setUserReviews] = useState<any[]>([]);
+  const [favoriteBooks, setFavoriteBooks] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Find user by username
-  const user = users.find(
-    (u) => u.username.toLowerCase() === decodeURIComponent(username).toLowerCase()
-  );
+  useEffect(() => {
+    async function loadProfileData() {
+      try {
+        setLoading(true);
+        // Find profile by username
+        const { data: prof, error: profError } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("username", username)
+          .maybeSingle();
 
-  if (!user) {
+        if (profError || !prof) {
+          setTargetUser(null);
+          setLoading(false);
+          return;
+        }
+
+        // Fetch stats
+        const { data: stats } = await supabase
+          .from("user_stats")
+          .select("*")
+          .eq("user_id", prof.id)
+          .maybeSingle();
+
+        // Fetch user books
+        const { data: userBooks } = await supabase
+          .from("user_books")
+          .select(`
+            id,
+            status,
+            rating,
+            review,
+            current_page,
+            started_at,
+            finished_at,
+            created_at,
+            book:books(*)
+          `)
+          .eq("user_id", prof.id);
+
+        // Fetch reviews
+        const { data: dbReviews } = await supabase
+          .from("reviews")
+          .select(`
+            id,
+            user_id,
+            book_id,
+            rating,
+            review_text,
+            likes_count,
+            created_at,
+            profile:profiles(display_name, avatar_url, username),
+            book:books(title, author_name, cover_url)
+          `)
+          .eq("user_id", prof.id)
+          .order("created_at", { ascending: false });
+
+        // Fetch social follower/following counts
+        const { count: followersCount } = await supabase
+          .from("follows")
+          .select("follower_id", { count: "exact", head: true })
+          .eq("following_id", prof.id);
+
+        const { count: followingCount } = await supabase
+          .from("follows")
+          .select("following_id", { count: "exact", head: true })
+          .eq("follower_id", prof.id);
+
+        // Check if current user is following target user
+        let isFollowing = false;
+        if (currentUser?.id) {
+          const { data: followRel } = await supabase
+            .from("follows")
+            .select("*")
+            .eq("follower_id", currentUser.id)
+            .eq("following_id", prof.id)
+            .maybeSingle();
+          isFollowing = !!followRel;
+        }
+
+        // Map finished logs
+        const mappedFinished = userBooks ? userBooks
+          .filter((ub: any) => ub.status === "finished")
+          .map((ub: any) => {
+            const dateStr = ub.finished_at || ub.created_at || new Date().toISOString();
+            const dateLogged = dateStr.includes("T") ? dateStr.split("T")[0] : dateStr;
+
+            return {
+              id: ub.id,
+              userId: prof.id,
+              bookId: ub.book?.id || "",
+              status: "Finished" as const,
+              dateLogged,
+              rating: ub.rating !== null ? ub.rating : undefined,
+              currentPage: ub.current_page || 0,
+              bookTitle: ub.book?.title || "Unknown Book",
+              bookAuthor: ub.book?.author_name || "Unknown Author",
+              bookCover: ub.book?.cover_url || "",
+            };
+          }) : [];
+
+        // Map reviews
+        const mappedReviews = dbReviews ? dbReviews.map((r: any) => {
+          const dateObj = new Date(r.created_at);
+          const dateString = dateObj.toLocaleDateString("en-US", {
+            month: "short",
+            day: "2-digit",
+            year: "numeric",
+          });
+
+          return {
+            id: r.id,
+            userId: r.user_id,
+            bookId: r.book_id,
+            rating: r.rating || 0.0,
+            content: r.review_text,
+            dateString,
+            likesCount: r.likes_count || 0,
+            commentsCount: 0,
+            isLiked: false,
+            reviewerName: r.profile?.display_name || prof.display_name || "Reader",
+            reviewerAvatar: r.profile?.avatar_url || prof.avatar_url || "",
+            reviewerUsername: r.profile?.username || prof.username || "reader",
+            bookTitle: r.book?.title || "",
+            bookAuthor: r.book?.author_name || "",
+            bookCover: r.book?.cover_url || "",
+          };
+        }) : [];
+
+        // Map favorite books (rating = 5)
+        const mappedFavorites = userBooks ? userBooks
+          .filter((ub: any) => ub.status === "finished" && ub.rating === 5)
+          .map((ub: any) => ({
+            id: ub.book?.id || "",
+            title: ub.book?.title || "",
+            author: ub.book?.author_name || "Unknown Author",
+            coverImage: ub.book?.cover_url || "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=600&auto=format&fit=crop&q=80",
+            pages: ub.book?.page_count || 300,
+            averageRating: ub.rating || 5.0,
+            genres: ub.book?.subjects ? JSON.parse(ub.book.subjects) : [],
+            description: ub.book?.description || "",
+          })) : [];
+
+        setTargetUser({
+          id: prof.id,
+          username: prof.username,
+          name: prof.display_name || "Reader",
+          avatar: prof.avatar_url || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80",
+          bio: prof.bio || "",
+          followersCount: followersCount || 0,
+          followingCount: followingCount || 0,
+          isFollowing,
+        });
+
+        setUserStats(stats);
+        setFinishedLogs(mappedFinished);
+        setUserReviews(mappedReviews);
+        setFavoriteBooks(mappedFavorites);
+      } catch (err) {
+        console.error("Error loading target user profile details:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadProfileData();
+  }, [username, currentUser, supabase]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-cream flex flex-col">
+        <Header />
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+          <svg className="animate-spin h-8 w-8 text-brand mb-4" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          <p className="text-xs text-charcoal-muted">Retrieving profile details...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!targetUser) {
     return (
       <div className="min-h-screen bg-cream flex flex-col">
         <Header />
@@ -43,34 +225,26 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
     );
   }
 
-  const isMe = user.id === currentUser.id;
+  const isMe = targetUser.id === currentUser?.id;
 
-  // Reviews written by this user
-  const userReviews = reviews.filter((r) => r.userId === user.id);
-
-  // Books finished by this user (logs with Finished status)
-  const finishedLogs = diaryLogs
-    .filter((l) => l.userId === user.id && l.status === "Finished")
-    .sort((a, b) => new Date(b.dateLogged).getTime() - new Date(a.dateLogged).getTime());
-
-  // Reading stats derived
+  // Deriving reading stats
   const totalBooksRead = finishedLogs.length;
-  const totalPagesRead = finishedLogs.reduce((acc, curr) => {
-    const book = books.find((b) => b.id === curr.bookId);
-    return acc + (book ? book.pages : 0);
-  }, 0);
+  const totalPagesRead = finishedLogs.reduce((acc, curr) => acc + curr.currentPage, 0);
 
   // User curated lists
-  const userLists = lists.filter((l) => l.userId === user.id);
+  const userLists = lists.filter((l) => l.userId === targetUser.id);
 
-  // User liked reviews
-  const likedReviews = reviews.filter((r) => r.isLiked);
+  // User liked reviews (for public reviews where target user is the reviewer or likes count exists)
+  const likedReviews = reviews.filter((r) => r.userId === targetUser.id && r.likesCount > 0);
 
-  // Favorites shelf books
-  const favoriteBooks = books.filter((b) => user.favoriteBookIds.includes(b.id));
-
-  const handleFollowClick = () => {
-    toggleFollowUser(user.id);
+  const handleFollowClick = async () => {
+    const originalFollowingState = targetUser.isFollowing;
+    setTargetUser((prev: any) => ({
+      ...prev,
+      isFollowing: !prev.isFollowing,
+      followersCount: prev.isFollowing ? prev.followersCount - 1 : prev.followersCount + 1,
+    }));
+    await toggleFollowUser(targetUser.id);
   };
 
   return (
@@ -84,8 +258,8 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
           {/* Avatar */}
           <div className="w-24 h-24 md:w-32 md:h-32 rounded-full border-2 border-cream-border overflow-hidden shadow-md">
             <img
-              src={user.avatar}
-              alt={user.name}
+              src={targetUser.avatar}
+              alt={targetUser.name}
               className="w-full h-full object-cover"
             />
           </div>
@@ -95,7 +269,7 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
             <div className="space-y-1">
               <div className="flex flex-col md:flex-row md:items-center gap-3 justify-center md:justify-start">
                 <h1 className="font-serif text-3xl font-bold text-charcoal">
-                  {user.name}
+                  {targetUser.name}
                 </h1>
                 
                 {/* Follow Button */}
@@ -103,12 +277,12 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
                   <button
                     onClick={handleFollowClick}
                     className={`h-7 px-3.5 rounded-lg text-[10px] font-semibold flex items-center gap-1.5 transition-all shadow-sm ${
-                      user.isFollowing
+                      targetUser.isFollowing
                         ? "bg-cream-dark border border-cream-border text-charcoal hover:bg-cream-dark/80"
                         : "bg-brand text-cream hover:bg-brand-light"
                     }`}
                   >
-                    {user.isFollowing ? (
+                    {targetUser.isFollowing ? (
                       <>
                         <UserCheck className="w-3.5 h-3.5" />
                         <span>Following</span>
@@ -122,22 +296,22 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
                   </button>
                 )}
               </div>
-              <p className="text-xs text-charcoal-muted font-medium">@{user.username}</p>
+              <p className="text-xs text-charcoal-muted font-medium">@{targetUser.username}</p>
             </div>
 
             {/* Bio */}
             <p className="text-xs text-charcoal-light max-w-xl leading-relaxed">
-              {user.bio}
+              {targetUser.bio}
             </p>
 
             {/* Following stats */}
             <div className="flex justify-center md:justify-start gap-8 text-xs font-semibold text-charcoal">
               <div className="flex gap-1.5">
-                <span className="font-serif text-sm font-bold">{user.followersCount}</span>
+                <span className="font-serif text-sm font-bold">{targetUser.followersCount}</span>
                 <span className="text-charcoal-muted">followers</span>
               </div>
               <div className="flex gap-1.5">
-                <span className="font-serif text-sm font-bold">{user.followingCount}</span>
+                <span className="font-serif text-sm font-bold">{targetUser.followingCount}</span>
                 <span className="text-charcoal-muted">following</span>
               </div>
             </div>
@@ -147,9 +321,11 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
           <div className="bg-cream-card border border-cream-border rounded-2xl p-5 w-full max-w-[320px] shadow-sm space-y-4 scale-95 md:scale-100">
             <div className="flex justify-between items-center border-b border-cream-border/60 pb-2">
               <span className="text-[10px] font-bold text-charcoal uppercase tracking-wider">Reading Activity</span>
-              <Link href="/stats" className="text-[9px] font-bold text-brand hover:underline flex items-center gap-0.5">
-                Full Stats <ArrowUpRight className="w-3.5 h-3.5" />
-              </Link>
+              {isMe && (
+                <Link href="/stats" className="text-[9px] font-bold text-brand hover:underline flex items-center gap-0.5">
+                  Full Stats <ArrowUpRight className="w-3.5 h-3.5" />
+                </Link>
+              )}
             </div>
             
             <div className="grid grid-cols-2 gap-4">
@@ -162,18 +338,18 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
                 <p className="font-serif text-2xl font-bold text-charcoal mt-0.5">{totalPagesRead}</p>
               </div>
               
-              {isMe && userStats && (
+              {userStats && (
                 <>
                   <div className="text-center py-1 border-t border-cream-border/60 pt-2.5">
                     <p className="text-[9px] font-bold text-charcoal-muted uppercase">Streak</p>
                     <p className="font-serif text-2xl font-bold text-charcoal mt-0.5 flex items-center justify-center gap-1">
-                      {userStats.current_streak} <Flame className="w-4 h-4 text-brand fill-brand/10 animate-pulse" />
+                      {userStats.reading_streak || 0} <Flame className="w-4 h-4 text-brand fill-brand/10 animate-pulse" />
                     </p>
                   </div>
                   <div className="text-center py-1 border-t border-l border-cream-border/60 pt-2.5">
                     <p className="text-[9px] font-bold text-charcoal-muted uppercase">Top Genre</p>
                     <p className="font-sans text-xs font-bold text-charcoal mt-1.5 truncate px-1" title={userStats.favorite_genre}>
-                      {userStats.favorite_genre}
+                      {userStats.favorite_genre || "Fiction"}
                     </p>
                   </div>
                 </>
@@ -181,7 +357,7 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
             </div>
 
             {/* Reading Goal Progress Bar */}
-            {isMe && userStats && (
+            {userStats && (
               <div className="space-y-1.5 pt-2 border-t border-cream-border/60">
                 <div className="flex justify-between text-[9px] font-bold text-charcoal-muted uppercase">
                   <span>Yearly Goal</span>
@@ -302,8 +478,12 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
                     </thead>
                     <tbody className="divide-y divide-cream-border/60">
                       {finishedLogs.map((log) => {
-                        const book = books.find((b) => b.id === log.bookId);
-                        if (!book) return null;
+                        const book = {
+                          id: log.bookId,
+                          title: log.bookTitle,
+                          author: log.bookAuthor,
+                          coverImage: log.bookCover,
+                        };
                         return (
                           <tr key={log.id} className="hover:bg-cream-dark/20 transition-colors">
                             <td className="p-4 pl-6 text-charcoal-muted font-medium">
@@ -342,7 +522,7 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
                   </table>
                 ) : (
                   <div className="text-center py-12 text-charcoal-muted text-xs">
-                    Your reading diary is currently empty.
+                    The reading diary is currently empty.
                   </div>
                 )}
               </div>
@@ -375,22 +555,6 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
                         <p className="text-xs text-charcoal-muted leading-relaxed line-clamp-2">
                           {list.description}
                         </p>
-                        
-                        <div className="flex gap-1">
-                          {list.bookIds.map((bid) => {
-                            const b = books.find((x) => x.id === bid);
-                            if (!b) return null;
-                            return (
-                              <Link key={bid} href={`/book/${bid}`} title={b.title}>
-                                <img
-                                  src={b.coverImage}
-                                  alt={b.title}
-                                  className="w-7 h-10 object-cover rounded shadow-sm hover:-translate-y-1 transition-transform border border-cream-border"
-                                />
-                              </Link>
-                            );
-                          })}
-                        </div>
                       </div>
                     </div>
                   ))

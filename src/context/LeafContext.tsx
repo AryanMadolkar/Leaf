@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { createClient } from "@/utils/supabase/client";
 import {
   Book,
   User,
@@ -39,31 +40,67 @@ interface LeafContextType {
   ) => void;
   createList: (title: string, description: string, coverImage: string, bookIds: string[]) => void;
   toggleFollowUser: (userId: string) => void;
-  updateProfile: (name: string, bio: string, avatar: string, favoriteBookIds: string[]) => void;
+  updateProfile: (name: string, bio: string, avatar: string, favoriteBookIds: string[], genres?: string[]) => void;
   addCachedBookToContext: (book: Book) => void;
   readingSessions: any[];
   userStats: any | null;
   logReadingSession: (bookId: string, pagesRead: number, note?: string, readingMinutes?: number) => Promise<any>;
   updateBookProgressDirectly: (bookId: string, currentPage: number) => Promise<any>;
+  
+  // Live Supabase Authenticated States
+  session: any | null;
+  profile: any | null;
+  signInWithPassword: (email: string, password: string) => Promise<any>;
+  signUpWithPassword: (email: string, password: string, username: string, name: string) => Promise<any>;
+  signInWithGoogle: () => Promise<any>;
+  resetPassword: (email: string) => Promise<any>;
 }
 
 const LeafContext = createContext<LeafContextType | undefined>(undefined);
 
 export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const supabase = createClient();
   const [books, setBooks] = useState<Book[]>(INITIAL_BOOKS);
   const [users, setUsers] = useState<User[]>(INITIAL_USERS);
   const [reviews, setReviews] = useState<Review[]>(INITIAL_REVIEWS);
-  const [diaryLogs, setDiaryLogs] = useState<ReadingLog[]>(INITIAL_DIARY_LOGS);
+  const [diaryLogs, setDiaryLogs] = useState<ReadingLog[]>([]);
   const [lists, setLists] = useState<CuratedList[]>(INITIAL_LISTS);
   const [comments, setComments] = useState<Comment[]>(INITIAL_COMMENTS);
-  const [currentUser, setCurrentUser] = useState<User>(INITIAL_USERS[4]); // Rowan Archer
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
+  const [currentUser, setCurrentUser] = useState<User>(INITIAL_USERS[4]); // Rowan Fallback
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [readingSessions, setReadingSessions] = useState<any[]>([]);
   const [userStats, setUserStats] = useState<any | null>(null);
 
-  // Load from database on mount
+  // Supabase auth sessions
+  const [session, setSession] = useState<any | null>(null);
+  const [profile, setProfile] = useState<any | null>(null);
+
+  // Setup Auth Subscription
   useEffect(() => {
-    async function fetchInitialData() {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setIsAuthenticated(!!session);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setIsAuthenticated(!!session);
+      if (_event === "SIGNED_OUT") {
+        setProfile(null);
+        setUserStats(null);
+        setDiaryLogs([]);
+        setReadingSessions([]);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [supabase]);
+
+  // Load user data dynamically from active session
+  useEffect(() => {
+    if (!session?.user) return;
+
+    async function fetchUserData() {
       try {
         const res = await fetch("/api/init");
         if (res.ok) {
@@ -74,61 +111,89 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setReviews(data.reviews);
             setReadingSessions(data.sessions || []);
             setUserStats(data.stats || null);
-            save("leaf_books", data.books);
-            save("leaf_logs", data.diaryLogs);
-            save("leaf_reviews", data.reviews);
-            return;
+            
+            // Map profile details to the Client currentUser interface for layout compatibility
+            if (data.profile) {
+              setProfile(data.profile);
+              setCurrentUser({
+                id: data.profile.id,
+                username: data.profile.username,
+                name: data.profile.display_name || "Reader",
+                avatar: data.profile.avatar_url || INITIAL_USERS[4].avatar,
+                bio: data.profile.bio || "",
+                followersCount: data.profile.followersCount || 0,
+                followingCount: data.profile.followingCount || 0,
+                favoriteBookIds: data.profile.favoriteBookIds || [],
+              });
+            }
           }
         }
       } catch (err) {
-        console.error("Failed to load initial data from DB:", err);
-      }
-
-      // Fallback to local storage
-      if (typeof window !== "undefined") {
-        const storedBooks = localStorage.getItem("leaf_books");
-        const storedReviews = localStorage.getItem("leaf_reviews");
-        const storedLogs = localStorage.getItem("leaf_logs");
-        if (storedBooks) setBooks(JSON.parse(storedBooks));
-        if (storedReviews) setReviews(JSON.parse(storedReviews));
-        if (storedLogs) setDiaryLogs(JSON.parse(storedLogs));
+        console.error("Failed to load authenticated user profile details:", err);
       }
     }
 
-    fetchInitialData();
-
-    if (typeof window !== "undefined") {
-      const storedUsers = localStorage.getItem("leaf_users");
-      const storedLists = localStorage.getItem("leaf_lists");
-      const storedComments = localStorage.getItem("leaf_comments");
-      const storedCurrentUser = localStorage.getItem("leaf_current_user");
-      const storedAuth = localStorage.getItem("leaf_auth");
-
-      if (storedUsers) setUsers(JSON.parse(storedUsers));
-      if (storedLists) setLists(JSON.parse(storedLists));
-      if (storedComments) setComments(JSON.parse(storedComments));
-      if (storedCurrentUser) setCurrentUser(JSON.parse(storedCurrentUser));
-      if (storedAuth) setIsAuthenticated(JSON.parse(storedAuth));
-    }
-  }, []);
-
-  // Save state helper
-  const save = (key: string, data: any) => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem(key, JSON.stringify(data));
-    }
-  };
+    fetchUserData();
+  }, [session]);
 
   const signIn = (email: string) => {
+    // Legacy fallback, do nothing or mock signin
     setIsAuthenticated(true);
-    save("leaf_auth", true);
   };
 
-  const signOut = () => {
+  const signOut = async () => {
+    await supabase.auth.signOut();
     setIsAuthenticated(false);
-    save("leaf_auth", false);
+    setSession(null);
+    setProfile(null);
   };
 
+  // Auth Action Methods
+  const signInWithPassword = async (email: string, password: string) => {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    if (error) throw error;
+    return data;
+  };
+
+  const signUpWithPassword = async (email: string, password: string, username: string, name: string) => {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: `${window.location.origin}/api/auth/callback`,
+        data: {
+          username,
+          display_name: name,
+        },
+      },
+    });
+    if (error) throw error;
+    return data;
+  };
+
+  const signInWithGoogle = async () => {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/api/auth/callback`,
+      },
+    });
+    if (error) throw error;
+    return data;
+  };
+
+  const resetPassword = async (email: string) => {
+    const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth?reset=true`,
+    });
+    if (error) throw error;
+    return data;
+  };
+
+  // Review Operations
   const addReview = (bookId: string, rating: number, content: string) => {
     logBook(bookId, "Finished", rating, content);
   };
@@ -139,7 +204,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const action = review.isLiked ? "unlike" : "like";
 
-    // Optimistic UI update
+    // Optimistic UI updates
     const updatedReviews = reviews.map((r) => {
       if (r.id === reviewId) {
         const isLiked = !r.isLiked;
@@ -152,7 +217,6 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return r;
     });
     setReviews(updatedReviews);
-    save("leaf_reviews", updatedReviews);
 
     try {
       await fetch("/api/reviews", {
@@ -161,7 +225,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
         body: JSON.stringify({ reviewId, action }),
       });
     } catch (err) {
-      console.error("Failed to sync review like to database:", err);
+      console.error("Failed to sync review like:", err);
     }
   };
 
@@ -178,7 +242,6 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return l;
     });
     setLists(updatedLists);
-    save("leaf_lists", updatedLists);
   };
 
   const addComment = (reviewId: string, content: string) => {
@@ -196,9 +259,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const updatedComments = [...comments, newComment];
     setComments(updatedComments);
-    save("leaf_comments", updatedComments);
 
-    // Update comment count on review or list
     const updatedReviews = reviews.map((r) => {
       if (r.id === reviewId) {
         return { ...r, commentsCount: r.commentsCount + 1 };
@@ -206,18 +267,9 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return r;
     });
     setReviews(updatedReviews);
-    save("leaf_reviews", updatedReviews);
-
-    const updatedLists = lists.map((l) => {
-      if (l.id === reviewId) {
-        return { ...l, commentsCount: l.commentsCount + 1 };
-      }
-      return l;
-    });
-    setLists(updatedLists);
-    save("leaf_lists", updatedLists);
   };
 
+  // Sync Log Book to DB
   const logBook = async (
     bookId: string,
     status: "Want to Read" | "Currently Reading" | "Finished",
@@ -229,7 +281,6 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId: currentUser.id,
           bookId,
           status,
           rating,
@@ -244,32 +295,30 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setReviews(data.reviews);
           setReadingSessions(data.sessions || []);
           setUserStats(data.stats || null);
-          save("leaf_logs", data.diaryLogs);
-          save("leaf_reviews", data.reviews);
-
-          // Refresh books in case a new book was added
+          
+          // Trigger hot reload of profile catalog
           const initRes = await fetch("/api/init");
           if (initRes.ok) {
             const initData = await initRes.json();
             if (initData.success) {
               setBooks(initData.books);
-              save("leaf_books", initData.books);
             }
           }
         }
       }
     } catch (err) {
-      console.error("Failed to sync log entry to database:", err);
+      console.error("Failed to log book shelf update:", err);
     }
   };
 
+  // Log progress reading sessions
   const logReadingSession = async (
     bookId: string,
     pagesRead: number,
     note?: string,
     readingMinutes?: number
   ) => {
-    const log = diaryLogs.find((l) => l.bookId === bookId && l.userId === currentUser.id);
+    const log = diaryLogs.find((l) => l.bookId === bookId);
     const startPage = log && log.currentPage ? log.currentPage : 0;
     const endPage = startPage + pagesRead;
 
@@ -278,7 +327,6 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId: currentUser.id,
           bookId,
           pagesRead,
           startPage,
@@ -295,29 +343,25 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setReviews(data.reviews);
           setReadingSessions(data.sessions || []);
           setUserStats(data.stats || null);
-          save("leaf_logs", data.diaryLogs);
-          save("leaf_reviews", data.reviews);
 
-          // Refresh books in case a new book was added
           const initRes = await fetch("/api/init");
           if (initRes.ok) {
             const initData = await initRes.json();
             if (initData.success) {
               setBooks(initData.books);
-              save("leaf_books", initData.books);
             }
           }
           return data;
         }
       }
     } catch (err) {
-      console.error("Failed to log reading session:", err);
+      console.error("Failed to save reading session progress:", err);
     }
     return null;
   };
 
   const updateBookProgressDirectly = async (bookId: string, currentPage: number) => {
-    const log = diaryLogs.find((l) => l.bookId === bookId && l.userId === currentUser.id);
+    const log = diaryLogs.find((l) => l.bookId === bookId);
     const startPage = log && log.currentPage ? log.currentPage : 0;
     const pagesRead = Math.max(0, currentPage - startPage);
     return await logReadingSession(bookId, pagesRead, undefined, undefined);
@@ -335,14 +379,11 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
       commentsCount: 0,
       isLiked: false,
     };
-
-    const updatedLists = [newList, ...lists];
-    setLists(updatedLists);
-    save("leaf_lists", updatedLists);
+    setLists([newList, ...lists]);
   };
 
-  const toggleFollowUser = (userId: string) => {
-    // Toggle follow state in users list
+  const toggleFollowUser = async (userId: string) => {
+    // Optimistic local update
     const updatedUsers = users.map((u) => {
       if (u.id === userId) {
         const isFollowing = !u.isFollowing;
@@ -354,62 +395,51 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       return u;
     });
-
     setUsers(updatedUsers);
-    save("leaf_users", updatedUsers);
 
-    // Update currentUser following count
-    const targetUser = users.find((u) => u.id === userId);
-    if (targetUser) {
-      const currentlyFollowing = !targetUser.isFollowing; // state is inverted in updatedUsers but we calculate based on original list
-      const updatedCurrentUser = {
-        ...currentUser,
-        followingCount: currentlyFollowing
-          ? currentUser.followingCount + 1
-          : currentUser.followingCount - 1,
-      };
-      setCurrentUser(updatedCurrentUser);
-      save("leaf_current_user", updatedCurrentUser);
-
-      // also sync current user in user list
-      const syncedUsers = updatedUsers.map((u) => {
-        if (u.id === currentUser.id) {
-          return updatedCurrentUser;
-        }
-        return u;
+    try {
+      await fetch(`/api/user-books?followId=${userId}`, {
+        method: "PUT",
       });
-      setUsers(syncedUsers);
-      save("leaf_users", syncedUsers);
+    } catch (err) {
+      console.error("Failed to save follow relationship:", err);
     }
   };
 
-  const updateProfile = (name: string, bio: string, avatar: string, favoriteBookIds: string[]) => {
-    const updatedCurrentUser = {
-      ...currentUser,
-      name,
-      bio,
-      avatar,
-      favoriteBookIds,
-    };
-    setCurrentUser(updatedCurrentUser);
-    save("leaf_current_user", updatedCurrentUser);
+  const updateProfile = async (name: string, bio: string, avatar: string, favoriteBookIds: string[], genres?: string[]) => {
+    if (!session?.user) return;
 
-    const updatedUsers = users.map((u) => {
-      if (u.id === currentUser.id) {
-        return updatedCurrentUser;
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .update({
+          display_name: name,
+          bio,
+          avatar_url: avatar,
+          favorite_genres: genres || [],
+        })
+        .eq("id", session.user.id)
+        .select()
+        .single();
+
+      if (!error && data) {
+        setProfile(data);
+        setCurrentUser((prev) => ({
+          ...prev,
+          name: data.display_name || prev.name,
+          bio: data.bio || prev.bio,
+          avatar: data.avatar_url || prev.avatar,
+        }));
       }
-      return u;
-    });
-    setUsers(updatedUsers);
-    save("leaf_users", updatedUsers);
+    } catch (err) {
+      console.error("Failed to sync profile update to Supabase:", err);
+    }
   };
 
   const addCachedBookToContext = (book: Book) => {
     setBooks((prev) => {
       if (prev.some((b) => b.id === book.id)) return prev;
-      const next = [...prev, book];
-      save("leaf_books", next);
-      return next;
+      return [...prev, book];
     });
   };
 
@@ -439,6 +469,14 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
         userStats,
         logReadingSession,
         updateBookProgressDirectly,
+        
+        // Supabase Auth
+        session,
+        profile,
+        signInWithPassword,
+        signUpWithPassword,
+        signInWithGoogle,
+        resetPassword,
       }}
     >
       {children}

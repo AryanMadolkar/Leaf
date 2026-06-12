@@ -1,32 +1,50 @@
 import { NextResponse } from "next/server";
-import { getDatabase } from "@/utils/db";
+import { createClient } from "@/utils/supabase/server";
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const userId = searchParams.get("userId");
-
-  if (!userId) {
-    return NextResponse.json({ success: false, error: "Missing userId" }, { status: 400 });
-  }
-
   try {
-    const db = getDatabase();
+    const supabase = await createClient();
+    const { searchParams } = new URL(request.url);
 
-    // 1. Fetch main stats
-    const stats = db.prepare("SELECT * FROM user_reading_stats WHERE user_id = ?").get(userId) as any;
+    // Default to active user session, fallback to searchParam if querying another profile
+    const { data: { user } } = await supabase.auth.getUser();
+    const targetUserId = searchParams.get("userId") || user?.id;
 
-    if (!stats) {
+    if (!targetUserId) {
+      return NextResponse.json({ success: false, error: "Missing target userId" }, { status: 400 });
+    }
+
+    // 1. Fetch main user stats row
+    const { data: stats, error: statsError } = await supabase
+      .from("user_stats")
+      .select("*")
+      .eq("user_id", targetUserId)
+      .maybeSingle();
+
+    if (statsError || !stats) {
       return NextResponse.json({ success: true, stats: null });
     }
 
-    // 2. Fetch Heatmap data (daily pages read for all-time)
-    const heatmapRows = db.prepare(`
-      SELECT SUBSTR(logged_at, 1, 10) as date, SUM(pages_read) as pagesRead
-      FROM reading_sessions
-      WHERE user_id = ?
-      GROUP BY date
-      ORDER BY date ASC
-    `).all(userId) as any[];
+    // 2. Fetch all reading sessions to compute charts in memory
+    const { data: allSessions } = await supabase
+      .from("reading_sessions")
+      .select("pages_read, logged_at")
+      .eq("user_id", targetUserId)
+      .order("logged_at", { ascending: true });
+
+    const sessionsList = allSessions || [];
+
+    // Group daily pages read for all-time heatmap
+    const dailyMap: Record<string, number> = {};
+    sessionsList.forEach((s: any) => {
+      const dateStr = s.logged_at.split("T")[0];
+      dailyMap[dateStr] = (dailyMap[dateStr] || 0) + s.pages_read;
+    });
+
+    const heatmapRows = Object.entries(dailyMap).map(([date, pagesRead]) => ({
+      date,
+      pagesRead,
+    }));
 
     // 3. Pages read over time (Week, Month, Year, All Time)
     // Week: Last 7 days
@@ -35,11 +53,10 @@ export async function GET(request: Request) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       const dateStr = d.toISOString().split("T")[0];
-      const match = heatmapRows.find((h) => h.date === dateStr);
       last7Days.push({
         label: d.toLocaleDateString("en-US", { weekday: "short" }),
         date: dateStr,
-        pages: match ? match.pagesRead : 0,
+        pages: dailyMap[dateStr] || 0,
       });
     }
 
@@ -49,34 +66,28 @@ export async function GET(request: Request) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       const dateStr = d.toISOString().split("T")[0];
-      const match = heatmapRows.find((h) => h.date === dateStr);
       last30Days.push({
         label: d.toLocaleDateString("en-US", { day: "numeric" }),
         date: dateStr,
-        pages: match ? match.pagesRead : 0,
+        pages: dailyMap[dateStr] || 0,
       });
     }
 
     // Year: Last 12 months
     const last12Months = [];
-    const currentYearStr = new Date().getFullYear();
-    const prevYearStr = currentYearStr - 1;
-
     for (let i = 11; i >= 0; i--) {
       const d = new Date();
       d.setMonth(d.getMonth() - i);
       const yearMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       
-      const monthSessions = db.prepare(`
-        SELECT SUM(pages_read) as pages
-        FROM reading_sessions
-        WHERE user_id = ? AND SUBSTR(logged_at, 1, 7) = ?
-      `).get(userId, yearMonth) as { pages: number | null };
+      const totalInMonth = sessionsList
+        .filter((s: any) => s.logged_at.startsWith(yearMonth))
+        .reduce((sum: number, s: any) => sum + s.pages_read, 0);
 
       last12Months.push({
         label: d.toLocaleDateString("en-US", { month: "short" }),
         period: yearMonth,
-        pages: monthSessions?.pages || 0,
+        pages: totalInMonth,
       });
     }
 
@@ -85,26 +96,29 @@ export async function GET(request: Request) {
     const finishedCurrentYear = Array(12).fill(0);
     const finishedPrevYear = Array(12).fill(0);
 
-    const completedBooks = db.prepare(`
-      SELECT finished_at
-      FROM user_books
-      WHERE user_id = ? AND status = 'finished' AND finished_at IS NOT NULL
-    `).all(userId) as { finished_at: string }[];
+    const { data: completedBooks } = await supabase
+      .from("user_books")
+      .select("finished_at")
+      .eq("user_id", targetUserId)
+      .eq("status", "finished")
+      .not("finished_at", "is", null);
 
     const currentYear = new Date().getFullYear();
     const prevYear = currentYear - 1;
 
-    for (const row of completedBooks) {
-      const parts = row.finished_at.split("-");
-      if (parts.length === 3) {
-        const year = parseInt(parts[0]);
-        const monthIdx = parseInt(parts[1]) - 1;
-        if (year === currentYear) {
-          finishedCurrentYear[monthIdx]++;
-        } else if (year === prevYear) {
-          finishedPrevYear[monthIdx]++;
+    if (completedBooks) {
+      completedBooks.forEach((row: any) => {
+        const parts = row.finished_at.split("-");
+        if (parts.length === 3) {
+          const year = parseInt(parts[0]);
+          const monthIdx = parseInt(parts[1]) - 1;
+          if (year === currentYear) {
+            finishedCurrentYear[monthIdx]++;
+          } else if (year === prevYear) {
+            finishedPrevYear[monthIdx]++;
+          }
         }
-      }
+      });
     }
 
     const booksFinishedComparison = months.map((name, idx) => ({
@@ -114,29 +128,34 @@ export async function GET(request: Request) {
     }));
 
     // 5. Genre Distribution (Percentage & Count)
-    const userBooksGenres = db.prepare(`
-      SELECT b.subjects
-      FROM user_books ub
-      JOIN books b ON ub.book_id = b.id
-      WHERE ub.user_id = ?
-    `).all(userId) as { subjects: string }[];
-    
+    const { data: userBooksGenres } = await supabase
+      .from("user_books")
+      .select(`
+        book:books(subjects)
+      `)
+      .eq("user_id", targetUserId);
+
     const genreCounts: Record<string, number> = {};
     let totalGenresCount = 0;
 
-    for (const row of userBooksGenres) {
-      if (row.subjects) {
-        try {
-          const genres = JSON.parse(row.subjects) as string[];
-          for (const g of genres) {
-            genreCounts[g] = (genreCounts[g] || 0) + 1;
-            totalGenresCount++;
-          }
-        } catch (e) {}
-      }
+    if (userBooksGenres) {
+      userBooksGenres.forEach((row: any) => {
+        if (row.book?.subjects) {
+          try {
+            const genres = typeof row.book.subjects === "string"
+              ? JSON.parse(row.book.subjects)
+              : row.book.subjects;
+            if (Array.isArray(genres)) {
+              genres.forEach((g: string) => {
+                genreCounts[g] = (genreCounts[g] || 0) + 1;
+                totalGenresCount++;
+              });
+            }
+          } catch (e) {}
+        }
+      });
     }
 
-    // Map to array and sort
     const genreDistribution = Object.entries(genreCounts)
       .map(([name, count]) => ({
         name,
@@ -147,22 +166,65 @@ export async function GET(request: Request) {
       .slice(0, 5); // top 5
 
     // 6. Chronological Reading Activity Timeline
-    const timelineSessions = db.prepare(`
-      SELECT rs.id, 'session' as type, rs.pages_read as pages, rs.logged_at as date, rs.note, b.title, b.author_name as author, b.cover_url as coverImage
-      FROM reading_sessions rs
-      JOIN books b ON rs.book_id = b.id
-      WHERE rs.user_id = ?
-    `).all(userId) as any[];
+    const { data: timelineSessions } = await supabase
+      .from("reading_sessions")
+      .select(`
+        id,
+        pages_read,
+        logged_at,
+        note,
+        book:books(title, author_name, cover_url)
+      `)
+      .eq("user_id", targetUserId);
 
-    const timelineBooks = db.prepare(`
-      SELECT ub.id, 'status_change' as type, ub.status, ub.rating, ub.review, COALESCE(ub.finished_at, ub.started_at, ub.created_at) as date, b.title, b.author_name as author, b.cover_url as coverImage
-      FROM user_books ub
-      JOIN books b ON ub.book_id = b.id
-      WHERE ub.user_id = ?
-    `).all(userId) as any[];
+    const { data: timelineBooks } = await supabase
+      .from("user_books")
+      .select(`
+        id,
+        status,
+        rating,
+        review,
+        started_at,
+        finished_at,
+        created_at,
+        book:books(title, author_name, cover_url)
+      `)
+      .eq("user_id", targetUserId);
 
-    // Combine and sort by date descending
-    const rawTimeline = [...timelineSessions, ...timelineBooks];
+    const rawTimeline: any[] = [];
+    if (timelineSessions) {
+      timelineSessions.forEach((s: any) => {
+        rawTimeline.push({
+          id: s.id,
+          type: "session",
+          pages: s.pages_read,
+          date: s.logged_at,
+          note: s.note,
+          title: s.book?.title || "Unknown Book",
+          author: s.book?.author_name || "Unknown Author",
+          coverImage: s.book?.cover_url || "",
+        });
+      });
+    }
+
+    if (timelineBooks) {
+      timelineBooks.forEach((ub: any) => {
+        const dateStr = ub.finished_at || ub.started_at || ub.created_at || new Date().toISOString();
+        rawTimeline.push({
+          id: ub.id,
+          type: "status_change",
+          status: ub.status,
+          rating: ub.rating,
+          review: ub.review,
+          date: dateStr,
+          title: ub.book?.title || "Unknown Book",
+          author: ub.book?.author_name || "Unknown Author",
+          coverImage: ub.book?.cover_url || "",
+        });
+      });
+    }
+
+    // Sort by date descending
     rawTimeline.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
     const timeline = rawTimeline.slice(0, 15).map((item) => {
@@ -195,42 +257,56 @@ export async function GET(request: Request) {
     });
 
     // 7. Advanced Reading Pace details
-    const completedBooksList = db.prepare(`
-      SELECT ub.*, b.title, b.page_count
-      FROM user_books ub
-      JOIN books b ON ub.book_id = b.id
-      WHERE ub.user_id = ? AND ub.status = 'finished' AND ub.started_at IS NOT NULL AND ub.finished_at IS NOT NULL
-    `).all(userId) as any[];
+    const { data: completedBooksList } = await supabase
+      .from("user_books")
+      .select(`
+        started_at,
+        finished_at,
+        current_page,
+        book:books(title, page_count, cover_url)
+      `)
+      .eq("user_id", targetUserId)
+      .eq("status", "finished")
+      .not("started_at", "is", null)
+      .not("finished_at", "is", null);
 
     let fastestBook = null;
     let longestBook = null;
     let avgDaysToFinish = 0;
     
-    if (completedBooksList.length > 0) {
+    if (completedBooksList && completedBooksList.length > 0) {
       let maxLen = 0;
       let minDays = Infinity;
       let totalDays = 0;
 
-      for (const row of completedBooksList) {
+      completedBooksList.forEach((row: any) => {
         const d1 = new Date(row.started_at);
         const d2 = new Date(row.finished_at);
         const days = Math.ceil(Math.abs(d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24)) || 1;
         totalDays += days;
 
+        const pageCount = row.book?.page_count || 300;
+
         if (days < minDays) {
           minDays = days;
-          fastestBook = { title: row.title, days, coverImage: row.cover_url };
+          fastestBook = { title: row.book?.title, days, coverImage: row.book?.cover_url };
         }
-        if (row.page_count > maxLen) {
-          maxLen = row.page_count;
-          longestBook = { title: row.title, pages: row.page_count, coverImage: row.cover_url };
+        if (pageCount > maxLen) {
+          maxLen = pageCount;
+          longestBook = { title: row.book?.title, pages: pageCount, coverImage: row.book?.cover_url };
         }
-      }
+      });
       avgDaysToFinish = parseFloat((totalDays / completedBooksList.length).toFixed(1));
     }
 
-    const booksCompletedAllTime = db.prepare("SELECT COUNT(*) as count FROM user_books WHERE user_id = ? AND status = 'finished'").get(userId) as { count: number };
-    const avgBooksPerMonth = parseFloat((booksCompletedAllTime.count / 12).toFixed(1));
+    const { count: completedCount } = await supabase
+      .from("user_books")
+      .select("id", { count: "exact" })
+      .eq("user_id", targetUserId)
+      .eq("status", "finished");
+
+    const booksCompletedAllTime = completedCount || 0;
+    const avgBooksPerMonth = parseFloat((booksCompletedAllTime / 12).toFixed(1));
 
     const pace = {
       avgPagesPerDay: stats.average_pages_per_day,
@@ -249,12 +325,11 @@ export async function GET(request: Request) {
     const everestClimbsScaled = (everestClimbs * 10000).toFixed(1); // scalable metric
 
     const insights = [
-      `Your favorite genre this year is ${stats.favorite_genre}.`,
+      `Your favorite genre is ${stats.favorite_genre}.`,
       `Your average completed book length is ${stats.average_book_length} pages.`,
-      `You read most frequently on weekends and late evenings.`,
       `You've logged ${stats.total_pages_read} pages, which is equivalent to ~${Math.round(stats.total_pages_read / 350)} standard volumes!`,
       `Your pages read could climb Mount Everest ${everestClimbsScaled} times if each page were stacked flat!`,
-      `Your current reading streak is a stellar ${stats.current_streak} days, with a record of ${stats.longest_streak} days.`
+      `Your current reading streak is a stellar ${stats.reading_streak} days, with a record of ${stats.longest_streak} days.`
     ];
 
     return NextResponse.json({

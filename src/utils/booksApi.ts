@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { getDatabase } from "./db";
+import { createClient } from "@/utils/supabase/server";
 import { Book } from "@/data/mockData";
 
 export interface NormalizedBook {
@@ -20,19 +20,10 @@ export interface NormalizedBook {
 }
 
 // Map database record + ratings to client Book structure
-export function mapDbBookToClientBook(dbBook: any): Book {
-  const db = getDatabase();
-  
-  // Calculate average rating dynamically from reviews/logs
-  const ratingRow = db
-    .prepare("SELECT AVG(rating) as avg, COUNT(rating) as count FROM user_books WHERE book_id = ? AND rating IS NOT NULL")
-    .get(dbBook.id) as { avg: number | null; count: number };
-
-  let averageRating = 4.0;
-  if (ratingRow && ratingRow.count > 0 && ratingRow.avg !== null) {
-    averageRating = parseFloat(ratingRow.avg.toFixed(1));
-  } else {
-    // Stable hash fallback based on title to keep mock data ratings consistent
+export function mapDbBookToClientBook(dbBook: any, avgRating?: number): Book {
+  let averageRating = avgRating;
+  if (averageRating === undefined) {
+    // Stable hash fallback based on title to keep ratings consistent
     let ratingHash = 0;
     const title = dbBook.title || "";
     for (let i = 0; i < title.length; i++) {
@@ -45,11 +36,12 @@ export function mapDbBookToClientBook(dbBook: any): Book {
   let genres: string[] = ["Fiction"];
   if (dbBook.subjects) {
     try {
-      genres = JSON.parse(dbBook.subjects);
+      genres = typeof dbBook.subjects === "string" 
+        ? JSON.parse(dbBook.subjects) 
+        : dbBook.subjects;
       if (!Array.isArray(genres) || genres.length === 0) {
         genres = ["Fiction"];
       } else {
-        // limit to 4 genres
         genres = genres.slice(0, 4);
       }
     } catch (e) {
@@ -70,18 +62,10 @@ export function mapDbBookToClientBook(dbBook: any): Book {
   };
 }
 
-// Fetch Author Details and cache in database
+// Fetch Author Details (Stateless fetch from Open Library API, no database table needed)
 export async function getOrFetchAuthor(authorKey: string): Promise<{ name: string; bio?: string; photo_url?: string } | null> {
-  const db = getDatabase();
   const cleanKey = authorKey.startsWith("/authors/") ? authorKey : `/authors/${authorKey}`;
 
-  // Check database first
-  const existing = db.prepare("SELECT * FROM authors WHERE open_library_author_key = ?").get(cleanKey) as any;
-  if (existing) {
-    return { name: existing.name, bio: existing.bio || undefined, photo_url: existing.photo_url || undefined };
-  }
-
-  // Fetch from Open Library
   try {
     const res = await fetch(`https://openlibrary.org${cleanKey}.json`);
     if (!res.ok) return null;
@@ -103,12 +87,6 @@ export async function getOrFetchAuthor(authorKey: string): Promise<{ name: strin
       ? `https://covers.openlibrary.org/a/id/${data.photos[0]}-L.jpg` 
       : undefined;
 
-    // Save in DB
-    db.prepare(`
-      INSERT OR IGNORE INTO authors (id, open_library_author_key, name, bio, photo_url)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(crypto.randomUUID(), cleanKey, name, bio || null, photoUrl || null);
-
     return { name, bio, photo_url: photoUrl };
   } catch (err) {
     console.error(`Error fetching author details for ${cleanKey}:`, err);
@@ -116,114 +94,124 @@ export async function getOrFetchAuthor(authorKey: string): Promise<{ name: strin
   }
 }
 
-// Save a normalized book record to database
-export function saveBookToDatabase(book: Omit<NormalizedBook, "id">): string {
-  const db = getDatabase();
+// Save a normalized book record to Supabase
+export async function saveBookToDatabase(book: Omit<NormalizedBook, "id">): Promise<string> {
+  const supabase = await createClient();
+  
+  // Decide the ID to use: prefer open_library_key or ISBN, otherwise generate a UUID
+  const bookId = book.open_library_key || book.isbn_13 || book.isbn_10 || crypto.randomUUID();
 
-  // If already exists by open_library_key
-  if (book.open_library_key) {
-    const existing = db.prepare("SELECT id FROM books WHERE open_library_key = ?").get(book.open_library_key) as { id: string };
+  try {
+    // Check if book already exists in DB
+    const { data: existing } = await supabase
+      .from("books")
+      .select("id")
+      .eq("id", bookId)
+      .maybeSingle();
+
+    const subjectsStr = JSON.stringify(book.subjects || []);
+
     if (existing) {
-      // Update metadata (to refresh)
-      db.prepare(`
-        UPDATE books SET
-          isbn_10 = COALESCE(?, isbn_10),
-          isbn_13 = COALESCE(?, isbn_13),
-          title = ?,
-          subtitle = ?,
-          description = ?,
-          author_name = ?,
-          author_key = ?,
-          first_publish_year = ?,
-          page_count = ?,
-          language = ?,
-          cover_url = ?,
-          subjects = ?,
-          updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `).run(
-        book.isbn_10 || null,
-        book.isbn_13 || null,
-        book.title,
-        book.subtitle || null,
-        book.description || null,
-        book.author_name || null,
-        book.author_key || null,
-        book.first_publish_year || null,
-        book.page_count || null,
-        book.language || null,
-        book.cover_url || null,
-        JSON.stringify(book.subjects || []),
-        existing.id
-      );
+      // Update metadata to refresh
+      await supabase
+        .from("books")
+        .update({
+          open_library_key: book.open_library_key || null,
+          isbn_10: book.isbn_10 || null,
+          isbn_13: book.isbn_13 || null,
+          title: book.title,
+          author_name: book.author_name || null,
+          cover_url: book.cover_url || null,
+          page_count: book.page_count || 0,
+          subjects: subjectsStr,
+          first_publish_year: book.first_publish_year || null,
+        })
+        .eq("id", existing.id);
+
       return existing.id;
+    } else {
+      // Insert new book
+      await supabase
+        .from("books")
+        .insert({
+          id: bookId,
+          open_library_key: book.open_library_key || null,
+          isbn_10: book.isbn_10 || null,
+          isbn_13: book.isbn_13 || null,
+          title: book.title,
+          author_name: book.author_name || null,
+          cover_url: book.cover_url || null,
+          page_count: book.page_count || 0,
+          subjects: subjectsStr,
+          first_publish_year: book.first_publish_year || null,
+        });
+
+      return bookId;
     }
+  } catch (error) {
+    console.error("Failed to save book to Supabase:", error);
+    return bookId;
   }
-
-  // Insert new book
-  const newId = crypto.randomUUID();
-  db.prepare(`
-    INSERT INTO books (
-      id, open_library_key, isbn_10, isbn_13, title, subtitle, description,
-      author_name, author_key, first_publish_year, page_count, language, cover_url, subjects
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    newId,
-    book.open_library_key,
-    book.isbn_10 || null,
-    book.isbn_13 || null,
-    book.title,
-    book.subtitle || null,
-    book.description || null,
-    book.author_name || null,
-    book.author_key || null,
-    book.first_publish_year || null,
-    book.page_count || null,
-    book.language || null,
-    book.cover_url || null,
-    JSON.stringify(book.subjects || [])
-  );
-
-  return newId;
 }
 
-// Get Cached Book by various keys
-export function getCachedBook(query: string): Book | null {
-  const db = getDatabase();
-  
-  // Try ID lookup (UUID)
-  let dbBook = db.prepare("SELECT * FROM books WHERE id = ?").get(query);
-  if (dbBook) return mapDbBookToClientBook(dbBook);
-
-  // Try open library key
+// Get Cached Book by various keys (using single query or filter)
+export async function getCachedBook(query: string): Promise<Book | null> {
+  const supabase = await createClient();
   const cleanKey = query.startsWith("/works/") ? query : `/works/${query}`;
-  dbBook = db.prepare("SELECT * FROM books WHERE open_library_key = ?").get(cleanKey);
-  if (dbBook) return mapDbBookToClientBook(dbBook);
 
-  // Try ISBN lookup
-  dbBook = db.prepare("SELECT * FROM books WHERE isbn_10 = ? OR isbn_13 = ?").get(query);
-  if (dbBook) return mapDbBookToClientBook(dbBook);
+  try {
+    const { data: dbBook } = await supabase
+      .from("books")
+      .select("*")
+      .or(`id.eq."${query}",id.eq."${cleanKey}",open_library_key.eq."${query}",open_library_key.eq."${cleanKey}",isbn_10.eq."${query}",isbn_13.eq."${query}"`)
+      .maybeSingle();
+
+    if (dbBook) {
+      // Fetch dynamic average rating if applicable
+      const { data: ratingsData } = await supabase
+        .from("user_books")
+        .select("rating")
+        .eq("book_id", dbBook.id)
+        .not("rating", "is", null);
+
+      let avgRating: number | undefined;
+      if (ratingsData && ratingsData.length > 0) {
+        const sum = ratingsData.reduce((acc: number, curr: any) => acc + curr.rating, 0);
+        avgRating = parseFloat((sum / ratingsData.length).toFixed(1));
+      }
+
+      return mapDbBookToClientBook(dbBook, avgRating);
+    }
+  } catch (error) {
+    console.error("Error looking up cached book in Supabase:", error);
+  }
 
   return null;
 }
 
 // Search local database
-export function searchLocalBooks(query: string): Book[] {
-  const db = getDatabase();
-  const likeQuery = `%${query}%`;
-  
-  const records = db.prepare(`
-    SELECT * FROM books 
-    WHERE title LIKE ? OR author_name LIKE ? OR isbn_10 = ? OR isbn_13 = ?
-    LIMIT 20
-  `).all(likeQuery, likeQuery, query, query) as any[];
+export async function searchLocalBooks(query: string): Promise<Book[]> {
+  const supabase = await createClient();
 
-  return records.map(mapDbBookToClientBook);
+  try {
+    const { data: records, error } = await supabase
+      .from("books")
+      .select("*")
+      .or(`title.ilike.%${query}%,author_name.ilike.%${query}%`)
+      .limit(20);
+
+    if (error || !records) return [];
+
+    return records.map((r: any) => mapDbBookToClientBook(r));
+  } catch (error) {
+    console.error("Error doing local search in Supabase:", error);
+    return [];
+  }
 }
 
 // Fetch and Cache Book by Open Library Key
 export async function getBookByOpenLibraryKey(key: string): Promise<Book | null> {
-  const cached = getCachedBook(key);
+  const cached = await getCachedBook(key);
   if (cached) return cached;
 
   const cleanKey = key.startsWith("/works/") ? key : `/works/${key}`;
@@ -256,7 +244,6 @@ export async function getBookByOpenLibraryKey(key: string): Promise<Book | null>
       }
     }
 
-    // Guess first publish year from key/subjects or mock it if missing
     const firstPublishYear = data.created?.value 
       ? new Date(data.created.value).getFullYear() 
       : 2000;
@@ -264,7 +251,7 @@ export async function getBookByOpenLibraryKey(key: string): Promise<Book | null>
     const subjects = data.subjects || [];
 
     // Save in DB
-    const id = saveBookToDatabase({
+    const id = await saveBookToDatabase({
       open_library_key: cleanKey,
       title,
       description,
@@ -274,7 +261,7 @@ export async function getBookByOpenLibraryKey(key: string): Promise<Book | null>
       subjects,
     });
 
-    return getCachedBook(id);
+    return await getCachedBook(id);
   } catch (err) {
     console.error(`Error fetching work details for ${cleanKey}:`, err);
     return null;
@@ -283,13 +270,12 @@ export async function getBookByOpenLibraryKey(key: string): Promise<Book | null>
 
 // Fetch and Cache Book by ISBN
 export async function getBookByISBN(isbn: string): Promise<Book | null> {
-  const cached = getCachedBook(isbn);
+  const cached = await getCachedBook(isbn);
   if (cached) return cached;
 
   try {
     const res = await fetch(`https://openlibrary.org/isbn/${isbn}.json`);
     if (!res.ok) {
-      // If direct ISBN fetch fails, try searching for it
       const searchRes = await searchOpenLibrary(isbn);
       if (searchRes.length > 0) {
         return searchRes[0];
@@ -313,12 +299,10 @@ export async function getBookByISBN(isbn: string): Promise<Book | null> {
       if (yearMatch) publishYear = parseInt(yearMatch[0]);
     }
 
-    // Cover image resolving
     const coverUrl = data.covers?.[0]
       ? `https://covers.openlibrary.org/b/id/${data.covers[0]}-L.jpg`
       : `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg`;
 
-    // Double-hop: Fetch Description and Subjects from associated Work ID
     let description = "";
     let subjects: string[] = [];
     let authorKey = null;
@@ -348,7 +332,6 @@ export async function getBookByISBN(isbn: string): Promise<Book | null> {
       }
     }
 
-    // If author key resolves
     if (authorKey) {
       const auth = await getOrFetchAuthor(authorKey);
       if (auth) authorName = auth.name;
@@ -360,7 +343,7 @@ export async function getBookByISBN(isbn: string): Promise<Book | null> {
 
     const workKey = data.works?.[0]?.key || `/works/OL_${isbn}_W`;
 
-    const id = saveBookToDatabase({
+    const id = await saveBookToDatabase({
       open_library_key: workKey,
       isbn_10,
       isbn_13,
@@ -376,7 +359,7 @@ export async function getBookByISBN(isbn: string): Promise<Book | null> {
       subjects,
     });
 
-    return getCachedBook(id);
+    return await getCachedBook(id);
   } catch (err) {
     console.error(`Error fetching edition details for ISBN ${isbn}:`, err);
     return null;
@@ -388,7 +371,7 @@ export async function searchOpenLibrary(query: string): Promise<Book[]> {
   if (!query || query.trim().length < 2) return [];
 
   // 1. Search local DB first
-  const localResults = searchLocalBooks(query);
+  const localResults = await searchLocalBooks(query);
   if (localResults.length >= 6) {
     return localResults;
   }
@@ -437,11 +420,23 @@ export async function searchOpenLibrary(query: string): Promise<Book[]> {
         subjects,
       };
 
-      const dbId = saveBookToDatabase(book);
-      const cached = getCachedBook(dbId);
-      if (cached) {
-        serverResults.push(cached);
+      const dbId = await saveBookToDatabase(book);
+      let cached = await getCachedBook(dbId);
+      if (!cached) {
+        // Fallback in-memory construction if saving failed
+        cached = {
+          id: dbId,
+          title: book.title,
+          author: book.author_name,
+          year: book.first_publish_year,
+          description: book.description || "No description available.",
+          coverImage: book.cover_url || "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=600&auto=format&fit=crop&q=80",
+          averageRating: 4.0,
+          genres: book.subjects.slice(0, 4),
+          pages: book.page_count,
+        };
       }
+      serverResults.push(cached);
     }
 
     // Merge unique by title+author
