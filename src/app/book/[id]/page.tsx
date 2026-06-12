@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Header, { StarRating } from "@/components/Header";
 import ReviewCard, { StarDisplay } from "@/components/ReviewCard";
 import BookCard from "@/components/BookCard";
 import { useLeaf } from "@/context/LeafContext";
-import { BookOpen, Calendar, Check, Heart, Plus, Star, Users } from "lucide-react";
+import { Book } from "@/data/mockData";
+import { BookOpen, Calendar, Check, Heart, Plus, Star, Users, Award } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function BookDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -17,15 +18,84 @@ export default function BookDetailPage({ params }: { params: Promise<{ id: strin
     currentUser,
     users,
     logBook,
+    addCachedBookToContext,
+    readingSessions,
+    logReadingSession,
   } = useLeaf();
 
-  const book = books.find((b) => b.id === id);
+  const [book, setBook] = useState<Book | null>(null);
+  const [loading, setLoading] = useState(true);
 
   // States for logging review
   const [logStatus, setLogStatus] = useState<"Want to Read" | "Currently Reading" | "Finished" | null>(null);
   const [rating, setRating] = useState<number>(0);
   const [reviewText, setReviewText] = useState("");
   const [showLogDrawer, setShowLogDrawer] = useState(false);
+
+  // Page progress logging states inside book detail page
+  const [detailLogMethod, setDetailLogMethod] = useState<"increment" | "absolute">("increment");
+  const [detailPagesRead, setDetailPagesRead] = useState("");
+  const [detailCurrentPage, setDetailCurrentPage] = useState("");
+  const [detailMinutes, setDetailMinutes] = useState("");
+  const [detailNote, setDetailNote] = useState("");
+
+  // Completion states
+  const [showDetailCompletion, setShowDetailCompletion] = useState(false);
+  const [detailRating, setDetailRating] = useState(0);
+  const [detailReview, setDetailReview] = useState("");
+  const [showStatusSelect, setShowStatusSelect] = useState(false);
+
+  // Fetch book details dynamically
+  useEffect(() => {
+    async function loadBook() {
+      // 1. Check client-side cached list first
+      const cached = books.find(
+        (b) =>
+          b.id === id || 
+          b.coverImage?.includes(id) || 
+          b.id.toLowerCase().includes(id.toLowerCase())
+      );
+      if (cached) {
+        setBook(cached);
+        setLoading(false);
+        return;
+      }
+
+      // 2. Fetch from backend API
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/books/${id}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.book) {
+            setBook(data.book);
+            addCachedBookToContext(data.book);
+          }
+        }
+      } catch (err) {
+        console.error("Error loading book detail page:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadBook();
+  }, [id, books, addCachedBookToContext]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-cream flex flex-col">
+        <Header />
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+          <svg className="animate-spin h-8 w-8 text-brand mb-4" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          <p className="text-xs text-charcoal-muted">Retrieving book archives...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!book) {
     return (
@@ -85,6 +155,56 @@ export default function BookDetailPage({ params }: { params: Promise<{ id: strin
     setLogStatus(null);
   };
 
+  const handleDetailProgressSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    let res = null;
+    if (detailLogMethod === "increment") {
+      const pRead = parseInt(detailPagesRead) || 0;
+      if (pRead <= 0) return;
+      res = await logReadingSession(
+        book.id,
+        pRead,
+        detailNote || undefined,
+        parseInt(detailMinutes) || undefined
+      );
+    } else {
+      const curPage = parseInt(detailCurrentPage) || 0;
+      const startPage = userLogs[0]?.currentPage || 0;
+      const pRead = Math.max(0, curPage - startPage);
+      if (pRead <= 0) return;
+      res = await logReadingSession(
+        book.id,
+        pRead,
+        detailNote || undefined,
+        parseInt(detailMinutes) || undefined
+      );
+    }
+
+    if (res && res.success) {
+      // Clear inputs
+      setDetailPagesRead("");
+      setDetailCurrentPage("");
+      setDetailMinutes("");
+      setDetailNote("");
+
+      if (res.autoFinished) {
+        setShowDetailCompletion(true);
+      }
+    }
+  };
+
+  const handleDetailCompletionSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await logBook(book.id, "Finished", detailRating || undefined, detailReview);
+    setShowDetailCompletion(false);
+    setDetailRating(0);
+    setDetailReview("");
+  };
+
+  const bookSessions = readingSessions
+    ? readingSessions.filter((s) => s.book_id === book.id && s.user_id === currentUser.id)
+    : [];
+
   return (
     <div className="min-h-screen bg-cream flex flex-col">
       <Header />
@@ -101,97 +221,358 @@ export default function BookDetailPage({ params }: { params: Promise<{ id: strin
             <div className="relative w-48 h-72 md:w-56 md:h-84 rounded-xl overflow-hidden book-shadow bg-cream-dark">
               <div className="absolute top-0 bottom-0 left-0 w-[4px] bg-gradient-to-r from-charcoal/25 to-transparent z-10" />
               <div className="absolute top-0 bottom-0 left-[4px] w-[1px] bg-white/25 z-10" />
-              <img
-                src={book.coverImage}
-                alt={book.title}
-                className="w-full h-full object-cover select-none"
-              />
+               {book.coverImage && !book.coverImage.includes("placeholder") ? (
+                <img
+                  src={book.coverImage}
+                  alt={book.title}
+                  className="w-full h-full object-cover select-none"
+                />
+              ) : (
+                <div className="w-full h-full p-6 bg-gradient-to-br from-brand-muted to-brand text-cream flex flex-col justify-between items-center text-center select-none font-serif relative">
+                  <div className="w-full text-left opacity-30 text-[9px] uppercase tracking-widest font-sans font-semibold">Leaf Library Edition</div>
+                  <span className="font-bold text-lg leading-tight mt-6 block">{book.title}</span>
+                  <span className="text-xs italic mt-2 opacity-80 block">by {book.author}</span>
+                  <div className="w-full border-t border-white/20 mt-6 pt-3 text-[8px] uppercase tracking-wider font-sans font-semibold opacity-40">Leaf Reading Club</div>
+                </div>
+              )}
             </div>
 
-            {/* Reading Status Log Widget */}
-            <div className="bg-cream-card border border-cream-border rounded-2xl p-5 w-full max-w-sm shadow-sm space-y-4">
-              <div>
-                <h4 className="text-[10px] font-semibold text-charcoal uppercase tracking-wider">
-                  Log in your Shelf
-                </h4>
-                {currentActiveStatus && (
-                  <p className="text-xs font-semibold text-brand mt-1 flex items-center gap-1.5">
-                    <Check className="w-3.5 h-3.5 stroke-[3px]" />
-                    Shelved as: {currentActiveStatus}
-                    {currentLoggedRating !== undefined && ` (★ ${currentLoggedRating})`}
-                  </p>
-                )}
-              </div>
-
-              {/* Status Toggles */}
-              <div className="grid grid-cols-3 gap-1.5">
-                {(["Want to Read", "Currently Reading", "Finished"] as const).map((status) => {
-                  const isActive = currentActiveStatus === status;
-                  return (
-                    <button
-                      key={status}
-                      onClick={() => handleLogAction(status)}
-                      className={`h-9 text-[10px] font-semibold rounded-lg border transition-all ${
-                        isActive
-                          ? "bg-brand border-brand text-cream shadow-sm"
-                          : "bg-cream border-cream-border text-charcoal hover:border-charcoal"
-                      }`}
-                    >
-                      {status === "Want to Read" ? "Want" : status === "Currently Reading" ? "Reading" : "Finished"}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Log Review inline expansion drawer */}
-              <AnimatePresence>
-                {showLogDrawer && (
-                  <motion.form
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    onSubmit={handleReviewSubmit}
-                    className="space-y-4 pt-3 border-t border-cream-border overflow-hidden"
-                  >
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-charcoal uppercase tracking-wider block">
-                        Your Rating
-                      </label>
-                      <StarRating value={rating} onChange={setRating} size={24} />
+            {currentActiveStatus === "Currently Reading" ? (
+              <div className="bg-cream-card border border-cream-border rounded-2xl p-5 w-full max-w-sm shadow-sm space-y-4">
+                {showDetailCompletion ? (
+                  <form onSubmit={handleDetailCompletionSubmit} className="space-y-4">
+                    <div className="text-center py-2">
+                      <Award className="w-10 h-10 text-brand mx-auto mb-2" />
+                      <h4 className="font-serif text-base font-bold text-charcoal">Finished!</h4>
+                      <p className="text-[11px] text-charcoal-muted mt-0.5">Rate & review this book to complete your entry.</p>
+                    </div>
+                    
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-charcoal uppercase tracking-wider block">Rating</label>
+                      <StarRating value={detailRating} onChange={setDetailRating} size={24} />
                     </div>
 
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-charcoal uppercase tracking-wider block">
-                        Write Review (Optional)
-                      </label>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-charcoal uppercase tracking-wider block">Review (Optional)</label>
                       <textarea
                         rows={3}
-                        placeholder="Write your review or thoughts..."
-                        value={reviewText}
-                        onChange={(e) => setReviewText(e.target.value)}
+                        placeholder="Write a reflection..."
+                        value={detailReview}
+                        onChange={(e) => setDetailReview(e.target.value)}
                         className="w-full p-2.5 text-xs bg-cream border border-cream-border rounded-lg text-charcoal focus:outline-none focus:border-brand-muted"
                       />
                     </div>
 
-                    <div className="flex gap-2">
-                      <button
-                        type="submit"
-                        className="flex-1 py-2 bg-brand hover:bg-brand-light text-cream font-semibold text-xs rounded-lg transition-colors"
-                      >
-                        Save Entry
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setShowLogDrawer(false)}
-                        className="px-3 border border-cream-border hover:bg-cream-dark/30 text-xs font-semibold rounded-lg text-charcoal-muted"
-                      >
-                        Cancel
-                      </button>
+                    <button
+                      type="submit"
+                      className="w-full py-2 bg-brand hover:bg-brand-light text-cream font-semibold text-xs rounded-lg shadow transition-colors"
+                    >
+                      Publish Review
+                    </button>
+                  </form>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-[10px] font-semibold text-charcoal-muted uppercase tracking-wider">
+                          Currently Reading
+                        </h4>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Check className="w-3.5 h-3.5 text-brand stroke-[3px]" />
+                          <span className="text-xs font-bold text-brand">Active Companion</span>
+                        </div>
+                      </div>
+                      
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setShowStatusSelect(!showStatusSelect)}
+                          className="text-[10px] font-bold text-brand hover:underline"
+                        >
+                          Change Status
+                        </button>
+                        
+                        {showStatusSelect && (
+                          <div className="absolute right-0 mt-2 w-36 bg-cream border border-cream-border rounded-xl shadow-lg py-1 z-20">
+                            {(["Want to Read", "Currently Reading", "Finished"] as const).map((status) => (
+                              <button
+                                type="button"
+                                key={status}
+                                onClick={() => {
+                                  handleLogAction(status);
+                                  setShowStatusSelect(false);
+                                }}
+                                className="w-full text-left px-3 py-1.5 text-xs text-charcoal hover:bg-cream-dark/50"
+                              >
+                                {status}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </motion.form>
+
+                    {/* Progress details */}
+                    {(() => {
+                      const currentPage = userLogs[0]?.currentPage || 0;
+                      const totalPages = book.pages || 300;
+                      const progressPercent = totalPages > 0 ? Math.round((currentPage / totalPages) * 100) : 0;
+                      const pagesRemaining = Math.max(0, totalPages - currentPage);
+
+                      // Estimate completion date
+                      let estDate = null;
+                      if (bookSessions.length > 0 && pagesRemaining > 0) {
+                        const avgPagesPerSession = bookSessions.reduce((acc, s) => acc + s.pages_read, 0) / bookSessions.length;
+                        const daysLeft = Math.ceil(pagesRemaining / (avgPagesPerSession || 1));
+                        const d = new Date();
+                        d.setDate(d.getDate() + daysLeft);
+                        estDate = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                      }
+
+                      return (
+                        <div className="space-y-3">
+                          <div className="space-y-1.5">
+                            <div className="flex justify-between text-xs font-semibold text-charcoal">
+                              <span>Progress</span>
+                              <span className="text-brand font-serif italic">{progressPercent}%</span>
+                            </div>
+                            <div className="w-full bg-cream-dark h-2 rounded-full overflow-hidden">
+                              <div
+                                className="bg-brand h-full rounded-full transition-all duration-500"
+                                style={{ width: `${progressPercent}%` }}
+                              />
+                            </div>
+                            <div className="flex justify-between text-[9px] text-charcoal-muted pt-0.5">
+                              <span>{pagesRemaining} pages left</span>
+                              {estDate && <span>Est. complete: {estDate}</span>}
+                            </div>
+                          </div>
+
+                          {/* Log session subform */}
+                          <form onSubmit={handleDetailProgressSubmit} className="space-y-3 pt-2 border-t border-cream-border">
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-[10px] font-bold text-charcoal uppercase tracking-wider">Log Progress</span>
+                              <div className="flex rounded bg-cream-dark p-0.5">
+                                {(["increment", "absolute"] as const).map((method) => (
+                                  <button
+                                    type="button"
+                                    key={method}
+                                    onClick={() => setDetailLogMethod(method)}
+                                    className={`px-1.5 py-0.5 text-[8px] font-bold rounded ${
+                                      detailLogMethod === method
+                                        ? "bg-cream text-brand shadow-xs"
+                                        : "text-charcoal-muted"
+                                    }`}
+                                  >
+                                    {method === "increment" ? "+ Pages" : "Page #"}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {detailLogMethod === "increment" ? (
+                              <div className="space-y-2">
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max={pagesRemaining}
+                                  placeholder="Pages read"
+                                  value={detailPagesRead}
+                                  onChange={(e) => setDetailPagesRead(e.target.value)}
+                                  className="w-full h-8 px-2.5 text-xs bg-cream border border-cream-border rounded-lg text-charcoal focus:outline-none focus:border-brand-muted"
+                                  required
+                                />
+                                <div className="flex gap-1">
+                                  {[10, 25, 50].map((p) => {
+                                    const disabled = p > pagesRemaining;
+                                    return (
+                                      <button
+                                        type="button"
+                                        key={p}
+                                        disabled={disabled}
+                                        onClick={() => setDetailPagesRead(p.toString())}
+                                        className={`flex-1 text-[9px] py-1 border rounded font-semibold ${
+                                          disabled
+                                            ? "opacity-40 cursor-not-allowed border-cream-border text-charcoal-muted"
+                                            : "bg-cream border-cream-border hover:border-brand hover:text-brand"
+                                        }`}
+                                      >
+                                        +{p}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ) : (
+                              <input
+                                type="number"
+                                min={currentPage + 1}
+                                max={totalPages}
+                                placeholder={`Current page (Target: ${totalPages})`}
+                                value={detailCurrentPage}
+                                onChange={(e) => setDetailCurrentPage(e.target.value)}
+                                className="w-full h-8 px-2.5 text-xs bg-cream border border-cream-border rounded-lg text-charcoal focus:outline-none focus:border-brand-muted"
+                                required
+                              />
+                            )}
+
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-[8px] font-bold text-charcoal-muted uppercase block mb-0.5">Mins Read</label>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  placeholder="Minutes"
+                                  value={detailMinutes}
+                                  onChange={(e) => setDetailMinutes(e.target.value)}
+                                  className="w-full h-8 px-2 text-xs bg-cream border border-cream-border rounded-lg text-charcoal focus:outline-none"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[8px] font-bold text-charcoal-muted uppercase block mb-0.5">Note</label>
+                                <input
+                                  type="text"
+                                  placeholder="Note"
+                                  value={detailNote}
+                                  onChange={(e) => setDetailNote(e.target.value)}
+                                  className="w-full h-8 px-2 text-xs bg-cream border border-cream-border rounded-lg text-charcoal focus:outline-none"
+                                />
+                              </div>
+                            </div>
+
+                            <button
+                              type="submit"
+                              className="w-full py-2 bg-brand hover:bg-brand-light text-cream font-bold text-xs rounded-lg shadow-sm transition-colors mt-2"
+                            >
+                              Log Progress
+                            </button>
+                          </form>
+                        </div>
+                      );
+                    })()}
+                  </div>
                 )}
-              </AnimatePresence>
-            </div>
+              </div>
+            ) : (
+              <div className="bg-cream-card border border-cream-border rounded-2xl p-5 w-full max-w-sm shadow-sm space-y-4">
+                <div>
+                  <h4 className="text-[10px] font-semibold text-charcoal uppercase tracking-wider">
+                    Log in your Shelf
+                  </h4>
+                  {currentActiveStatus && (
+                    <p className="text-xs font-semibold text-brand mt-1 flex items-center gap-1.5">
+                      <Check className="w-3.5 h-3.5 stroke-[3px]" />
+                      Shelved as: {currentActiveStatus}
+                      {currentLoggedRating !== undefined && ` (★ ${currentLoggedRating})`}
+                    </p>
+                  )}
+                </div>
+
+                {/* Status Toggles */}
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(["Want to Read", "Currently Reading", "Finished"] as const).map((status) => {
+                    const isActive = currentActiveStatus === status;
+                    return (
+                      <button
+                        key={status}
+                        onClick={() => handleLogAction(status)}
+                        className={`h-9 text-[10px] font-semibold rounded-lg border transition-all ${
+                          isActive
+                            ? "bg-brand border-brand text-cream shadow-sm"
+                            : "bg-cream border-cream-border text-charcoal hover:border-charcoal"
+                        }`}
+                      >
+                        {status === "Want to Read" ? "Want" : status === "Currently Reading" ? "Reading" : "Finished"}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Log Review inline expansion drawer */}
+                <AnimatePresence>
+                  {showLogDrawer && (
+                    <motion.form
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      onSubmit={handleReviewSubmit}
+                      className="space-y-4 pt-3 border-t border-cream-border overflow-hidden"
+                    >
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-charcoal uppercase tracking-wider block">
+                          Your Rating
+                        </label>
+                        <StarRating value={rating} onChange={setRating} size={24} />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-charcoal uppercase tracking-wider block">
+                          Write Review (Optional)
+                        </label>
+                        <textarea
+                          rows={3}
+                          placeholder="Write your review or thoughts..."
+                          value={reviewText}
+                          onChange={(e) => setReviewText(e.target.value)}
+                          className="w-full p-2.5 text-xs bg-cream border border-cream-border rounded-lg text-charcoal focus:outline-none focus:border-brand-muted"
+                        />
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button
+                          type="submit"
+                          className="flex-1 py-2 bg-brand hover:bg-brand-light text-cream font-semibold text-xs rounded-lg transition-colors"
+                        >
+                          Save Entry
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowLogDrawer(false)}
+                          className="px-3 border border-cream-border hover:bg-cream-dark/30 text-xs font-semibold rounded-lg text-charcoal-muted"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </motion.form>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
+
+            {/* Book session timeline logs */}
+            {currentActiveStatus === "Currently Reading" && bookSessions.length > 0 && (
+              <div className="bg-cream-card border border-cream-border rounded-2xl p-5 w-full max-w-sm shadow-sm space-y-4">
+                <h4 className="text-[10px] font-semibold text-charcoal uppercase tracking-wider flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-brand" />
+                  Your Sessions
+                </h4>
+                <div className="relative border-l border-cream-border pl-3 ml-1.5 space-y-4">
+                  {bookSessions.slice(0, 5).map((session) => {
+                    const sDate = new Date(session.logged_at).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                    });
+                    return (
+                      <div key={session.id} className="relative text-xs">
+                        <div className="absolute -left-[16px] top-1 w-2.5 h-2.5 rounded-full border-2 border-brand bg-cream" />
+                        <div className="flex justify-between font-semibold text-charcoal">
+                          <span>+{session.pages_read} pages</span>
+                          <span className="text-[10px] text-charcoal-muted font-normal">{sDate}</span>
+                        </div>
+                        {session.reading_minutes && (
+                          <p className="text-[10px] text-charcoal-muted mt-0.5">Read for {session.reading_minutes} mins</p>
+                        )}
+                        {session.note && (
+                          <p className="text-[11px] text-charcoal-light italic mt-1 font-serif bg-cream p-1.5 border border-cream-border/50 rounded-lg">
+                            &ldquo;{session.note}&rdquo;
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Friends who read this widget */}
             {friendsRead.length > 0 && (

@@ -41,6 +41,7 @@ export interface ReadingLog {
   status: "Want to Read" | "Currently Reading" | "Finished";
   dateLogged: string; // e.g. "2026-06-12"
   rating?: number;
+  currentPage?: number;
 }
 
 export interface CuratedList {

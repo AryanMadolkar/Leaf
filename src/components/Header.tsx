@@ -4,7 +4,8 @@ import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useLeaf } from "@/context/LeafContext";
-import { Search, Plus, BookOpen, Star, LogOut, Check, X, Calendar } from "lucide-react";
+import { Book } from "@/data/mockData";
+import { Search, Plus, BookOpen, Star, LogOut, Check, X, Calendar, Clock, Book as BookIcon, Activity, CheckCircle, ChevronRight, Award, Bookmark } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 
 // Star Rating helper
@@ -93,20 +94,55 @@ export const StarRating = ({
 export default function Header() {
   const pathname = usePathname();
   const router = useRouter();
-  const { books, users, currentUser, logBook, signOut } = useLeaf();
+  const { 
+    books, 
+    users, 
+    currentUser, 
+    logBook, 
+    signOut, 
+    addCachedBookToContext,
+    diaryLogs,
+    readingSessions,
+    logReadingSession,
+    updateBookProgressDirectly
+  } = useLeaf();
 
   // Search state
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearchResults, setShowSearchResults] = useState(false);
+  const [headerSearchResults, setHeaderSearchResults] = useState<Book[]>([]);
+  const [headerLoading, setHeaderLoading] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
 
   // Log Modal state
   const [isLogOpen, setIsLogOpen] = useState(false);
   const [logSearch, setLogSearch] = useState("");
+  const [logSearchResults, setLogSearchResults] = useState<Book[]>([]);
+  const [logLoading, setLogLoading] = useState(false);
   const [selectedBook, setSelectedBook] = useState<any>(null);
   const [logStatus, setLogStatus] = useState<"Want to Read" | "Currently Reading" | "Finished">("Finished");
   const [logRating, setLogRating] = useState<number>(0);
   const [logReview, setLogReview] = useState("");
+
+  // Reading Companion Drawer state
+  const [isCompanionOpen, setIsCompanionOpen] = useState(false);
+  const [selectedCompanionBookId, setSelectedCompanionBookId] = useState<string | null>(null);
+  const [logMethod, setLogMethod] = useState<"increment" | "absolute">("increment");
+  const [pagesReadInput, setPagesReadInput] = useState("");
+  const [currentPageInput, setCurrentPageInput] = useState("");
+  const [readingMinutesInput, setReadingMinutesInput] = useState("");
+  const [noteInput, setNoteInput] = useState("");
+  
+  // Companion Search (for starting new books)
+  const [companionSearch, setCompanionSearch] = useState("");
+  const [companionSearchResults, setCompanionSearchResults] = useState<Book[]>([]);
+  const [companionLoading, setCompanionLoading] = useState(false);
+
+  // Completion Form State
+  const [showCompletionSuccess, setShowCompletionSuccess] = useState(false);
+  const [completedBookInfo, setCompletedBookInfo] = useState<any>(null);
+  const [completionRating, setCompletionRating] = useState(0);
+  const [completionReview, setCompletionReview] = useState("");
 
   // Close search results when clicking outside
   useEffect(() => {
@@ -119,15 +155,97 @@ export default function Header() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Filter books/users for header search
-  const searchResultsBooks = searchQuery
-    ? books.filter(
-        (b) =>
-          b.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          b.author.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : [];
+  // Header Search Debounced Fetch
+  useEffect(() => {
+    if (!searchQuery || searchQuery.trim().length < 2) {
+      setHeaderSearchResults([]);
+      return;
+    }
 
+    setHeaderLoading(true);
+    const handler = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/books/search?q=${encodeURIComponent(searchQuery)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) {
+            setHeaderSearchResults(data.books || []);
+            data.books.forEach((book: Book) => {
+              addCachedBookToContext(book);
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Header search API failed:", err);
+      } finally {
+        setHeaderLoading(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(handler);
+  }, [searchQuery, addCachedBookToContext]);
+
+  // Log Modal Search Debounced Fetch
+  useEffect(() => {
+    if (!logSearch || logSearch.trim().length < 2) {
+      setLogSearchResults([]);
+      return;
+    }
+
+    setLogLoading(true);
+    const handler = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/books/search?q=${encodeURIComponent(logSearch)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) {
+            setLogSearchResults(data.books || []);
+            data.books.forEach((book: Book) => {
+              addCachedBookToContext(book);
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Log modal search API failed:", err);
+      } finally {
+        setLogLoading(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(handler);
+  }, [logSearch, addCachedBookToContext]);
+
+  // Companion Search Debounced Fetch
+  useEffect(() => {
+    if (!companionSearch || companionSearch.trim().length < 2) {
+      setCompanionSearchResults([]);
+      return;
+    }
+
+    setCompanionLoading(true);
+    const handler = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/books/search?q=${encodeURIComponent(companionSearch)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) {
+            setCompanionSearchResults(data.books || []);
+            data.books.forEach((book: Book) => {
+              addCachedBookToContext(book);
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Companion search API failed:", err);
+      } finally {
+        setCompanionLoading(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(handler);
+  }, [companionSearch, addCachedBookToContext]);
+
+  // Filter users locally for header search
   const searchResultsUsers = searchQuery
     ? users.filter(
         (u) =>
@@ -136,16 +254,7 @@ export default function Header() {
       )
     : [];
 
-  const hasSearchResults = searchResultsBooks.length > 0 || searchResultsUsers.length > 0;
-
-  // Filter books for log modal search
-  const logBookResults = logSearch
-    ? books.filter(
-        (b) =>
-          b.title.toLowerCase().includes(logSearch.toLowerCase()) ||
-          b.author.toLowerCase().includes(logSearch.toLowerCase())
-      )
-    : [];
+  const hasSearchResults = headerSearchResults.length > 0 || searchResultsUsers.length > 0;
 
   const handleLogSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -164,11 +273,98 @@ export default function Header() {
     router.push("/diary");
   };
 
+  // Get active "Currently Reading" books
+  const currentlyReading = diaryLogs
+    ? (diaryLogs
+        .filter((log) => log.userId === currentUser.id && log.status === "Currently Reading")
+        .map((log) => {
+          const book = books.find((b) => b.id === log.bookId);
+          return book ? { ...book, currentPage: log.currentPage || 0 } : null;
+        })
+        .filter(Boolean) as any[])
+    : [];
+
+  useEffect(() => {
+    if (currentlyReading.length > 0 && !selectedCompanionBookId) {
+      setSelectedCompanionBookId(currentlyReading[0].id);
+    }
+  }, [currentlyReading, selectedCompanionBookId]);
+
+  const handleCompanionSubmit = async (e: React.FormEvent, book: any) => {
+    e.preventDefault();
+    if (!book) return;
+
+    let res = null;
+    if (logMethod === "increment") {
+      const pRead = parseInt(pagesReadInput) || 0;
+      if (pRead <= 0) return;
+      res = await logReadingSession(
+        book.id,
+        pRead,
+        noteInput || undefined,
+        parseInt(readingMinutesInput) || undefined
+      );
+    } else {
+      const curPage = parseInt(currentPageInput) || 0;
+      if (curPage <= 0 || curPage <= book.currentPage) return;
+      res = await updateBookProgressDirectly(book.id, curPage);
+    }
+
+    if (res && res.success) {
+      // Clear log states
+      setPagesReadInput("");
+      setCurrentPageInput("");
+      setReadingMinutesInput("");
+      setNoteInput("");
+
+      if (res.autoFinished) {
+        setCompletedBookInfo(book);
+        setShowCompletionSuccess(true);
+      } else {
+        if (currentlyReading.length <= 1) {
+          setIsCompanionOpen(false);
+        }
+      }
+    }
+  };
+
+  const handleCompletionSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!completedBookInfo) return;
+
+    await logBook(completedBookInfo.id, "Finished", completionRating || undefined, completionReview);
+
+    // Reset states
+    setShowCompletionSuccess(false);
+    setCompletedBookInfo(null);
+    setCompletionRating(0);
+    setCompletionReview("");
+    setIsCompanionOpen(false);
+    
+    router.push("/diary");
+  };
+
+  const handleStartReading = async (bookId: string) => {
+    await logBook(bookId, "Currently Reading");
+    setSelectedCompanionBookId(bookId);
+    setCompanionSearch("");
+  };
+
+  const wantToReadBooks = diaryLogs
+    ? (diaryLogs
+        .filter((log) => log.userId === currentUser.id && log.status === "Want to Read")
+        .map((log) => books.find((b) => b.id === log.bookId))
+        .filter(Boolean) as Book[])
+    : [];
+
   const navItems = [
     { label: "Feed", href: "/feed" },
+    { label: "Search", href: "/search" },
+    { label: "Library", href: "/library" },
     { label: "Discover", href: "/discover" },
     { label: "Lists", href: "/lists" },
     { label: "Diary", href: "/diary" },
+    { label: "Stats", href: "/stats" },
   ];
 
   return (
@@ -235,12 +431,12 @@ export default function Header() {
                     {hasSearchResults ? (
                       <div className="max-h-[350px] overflow-y-auto">
                         {/* Books Section */}
-                        {searchResultsBooks.length > 0 && (
+                        {headerSearchResults.length > 0 && (
                           <div className="mb-2">
                             <h4 className="text-[10px] font-semibold text-charcoal-muted uppercase tracking-wider px-4 py-1">
                               Books
                             </h4>
-                            {searchResultsBooks.map((book) => (
+                            {headerSearchResults.map((book) => (
                               <button
                                 key={book.id}
                                 onClick={() => {
@@ -405,14 +601,22 @@ export default function Header() {
                         placeholder="Search title, author..."
                         value={logSearch}
                         onChange={(e) => setLogSearch(e.target.value)}
-                        className="w-full h-10 pl-10 pr-4 text-sm bg-cream-card border border-cream-border rounded-lg text-charcoal focus:outline-none focus:border-brand-muted transition-colors"
+                        className="w-full h-10 pl-10 pr-10 text-sm bg-cream-card border border-cream-border rounded-lg text-charcoal focus:outline-none focus:border-brand-muted transition-colors"
                         autoFocus
                       />
+                      {logLoading && (
+                        <div className="absolute right-3 top-3.5">
+                          <svg className="animate-spin h-3.5 w-3.5 text-brand" viewBox="0 0 24 24" fill="none">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                        </div>
+                      )}
                     </div>
 
                     {/* Filtered Log Search List */}
                     <div className="space-y-2 mt-4 max-h-[300px] overflow-y-auto">
-                      {logBookResults.map((book) => (
+                      {logSearchResults.map((book) => (
                         <button
                           key={book.id}
                           onClick={() => setSelectedBook(book)}
@@ -433,9 +637,9 @@ export default function Header() {
                           </div>
                         </button>
                       ))}
-                      {logSearch && logBookResults.length === 0 && (
+                      {logSearch && !logLoading && logSearchResults.length === 0 && (
                         <p className="text-xs text-charcoal-muted text-center py-6">
-                          No matching books found. Try searching for &ldquo;Secret&rdquo;, &ldquo;Hail&rdquo;, or &ldquo;Dune&rdquo;.
+                          No matching books found on Open Library.
                         </p>
                       )}
                       {!logSearch && (
@@ -544,6 +748,452 @@ export default function Header() {
           </div>
         )}
       </AnimatePresence>
-    </>
-  );
+  
+  {/* Floating Reading Companion Button */}
+  <div className="fixed bottom-6 right-6 z-40">
+    <button
+      onClick={() => setIsCompanionOpen(true)}
+      className="relative flex items-center justify-center w-14 h-14 bg-brand text-cream hover:bg-brand-light rounded-full shadow-2xl hover:scale-105 transition-all duration-300 group animate-bounce-subtle"
+      aria-label="Track Progress"
+    >
+      <BookOpen className="w-6 h-6 transition-transform group-hover:rotate-6" />
+      {currentlyReading.length > 0 && (
+        <span className="absolute -top-1 -right-1 bg-brand-light text-cream text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center border-2 border-cream shadow-md animate-pulse">
+          {currentlyReading.length}
+        </span>
+      )}
+    </button>
+  </div>
+  
+  {/* Reading Companion Side Drawer */}
+  <AnimatePresence>
+    {isCompanionOpen && (
+      <div className="fixed inset-0 z-50 overflow-hidden">
+        {/* Backdrop */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={() => {
+            if (!showCompletionSuccess) {
+              setIsCompanionOpen(false);
+            }
+          }}
+          className="absolute inset-0 bg-charcoal/30 backdrop-blur-xs"
+        />
+
+        {/* Drawer Container */}
+        <div className="absolute inset-y-0 right-0 max-w-full flex">
+          <motion.div
+            initial={{ x: "100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "100%" }}
+            transition={{ type: "spring", damping: 30, stiffness: 300 }}
+            className="w-screen max-w-md bg-cream border-l border-cream-border shadow-2xl flex flex-col h-full"
+          >
+            {/* Header */}
+            <div className="px-6 py-5 border-b border-cream-border flex items-center justify-between bg-cream-card">
+              <div className="flex items-center gap-2">
+                <Activity className="w-5 h-5 text-brand" />
+                <span className="font-serif text-lg font-bold text-charcoal">
+                  Reading Companion
+                </span>
+              </div>
+              <button
+                onClick={() => setIsCompanionOpen(false)}
+                className="p-1.5 hover:bg-cream-dark/50 rounded-lg text-charcoal-muted hover:text-charcoal transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {showCompletionSuccess ? (
+                /* Completion review submission form */
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="space-y-6 text-center"
+                >
+                  <div className="flex flex-col items-center justify-center gap-3 py-4">
+                    <div className="w-16 h-16 bg-brand/10 text-brand rounded-full flex items-center justify-center shadow-inner">
+                      <Award className="w-8 h-8" />
+                    </div>
+                    <h3 className="font-serif text-xl font-bold text-charcoal">
+                      You Finished a Book!
+                    </h3>
+                    <p className="text-xs text-charcoal-muted max-w-[280px]">
+                      Excellent reading! Take a moment to rate and reflect on <strong>{completedBookInfo?.title}</strong> to add it to your reading diary.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-4 p-3 bg-cream-card border border-cream-border rounded-xl text-left">
+                    <img
+                      src={completedBookInfo?.coverImage}
+                      alt={completedBookInfo?.title}
+                      className="w-12 h-18 object-cover rounded shadow"
+                    />
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-charcoal truncate">
+                        {completedBookInfo?.title}
+                      </p>
+                      <p className="text-xs text-charcoal-muted truncate font-serif italic">
+                        {completedBookInfo?.author}
+                      </p>
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleCompletionSubmit} className="space-y-5 text-left">
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-charcoal uppercase tracking-wider block">
+                        Rating
+                      </label>
+                      <StarRating value={completionRating} onChange={setCompletionRating} />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-charcoal uppercase tracking-wider block">
+                        Review (Optional)
+                      </label>
+                      <textarea
+                        rows={4}
+                        placeholder="Write a reflection or review..."
+                        value={completionReview}
+                        onChange={(e) => setCompletionReview(e.target.value)}
+                        className="w-full p-3 text-xs bg-cream-card border border-cream-border rounded-lg text-charcoal focus:outline-none focus:border-brand-muted placeholder-charcoal-muted"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="w-full py-3 bg-brand hover:bg-brand-light text-cream font-semibold text-xs rounded-lg shadow transition-all duration-300"
+                    >
+                      Publish Review & Complete
+                    </button>
+                  </form>
+                </motion.div>
+              ) : currentlyReading.length > 0 ? (
+                /* Progress Logging Form */
+                <div className="space-y-6">
+                  {/* Book Selector if multiple books */}
+                  {currentlyReading.length > 1 && (
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-charcoal-muted uppercase tracking-wider block">
+                        Switch Active Book
+                      </label>
+                      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+                        {currentlyReading.map((b) => (
+                          <button
+                            key={b.id}
+                            onClick={() => setSelectedCompanionBookId(b.id)}
+                            className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-lg border font-medium transition-all ${
+                              (selectedCompanionBookId === b.id || (!selectedCompanionBookId && currentlyReading[0].id === b.id))
+                                ? "bg-brand/10 border-brand text-brand font-semibold"
+                                : "bg-cream-card border-cream-border text-charcoal-muted hover:border-charcoal hover:text-charcoal"
+                            }`}
+                          >
+                            {b.title}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Selected Book Details & Progress */}
+                  {(() => {
+                    const activeBook = currentlyReading.find((b) => b.id === selectedCompanionBookId) || currentlyReading[0];
+                    if (!activeBook) return null;
+
+                    const progressPercent = activeBook.pages > 0 ? Math.round((activeBook.currentPage / activeBook.pages) * 100) : 0;
+                    const pagesRemaining = Math.max(0, activeBook.pages - activeBook.currentPage);
+
+                    // Find historical sessions for estimated completion rate
+                    const bookSessions = readingSessions.filter((s) => s.book_id === activeBook.id);
+                    let estimatedDays = null;
+                    if (bookSessions.length > 0 && pagesRemaining > 0) {
+                      const avgPagesPerSession = bookSessions.reduce((acc, s) => acc + s.pages_read, 0) / bookSessions.length;
+                      estimatedDays = Math.ceil(pagesRemaining / (avgPagesPerSession || 1));
+                    }
+
+                    return (
+                      <div className="space-y-6">
+                        {/* Card Details */}
+                        <div className="flex items-center gap-4 p-4 bg-cream-card border border-cream-border rounded-xl">
+                          <img
+                            src={activeBook.coverImage}
+                            alt={activeBook.title}
+                            className="w-16 h-24 object-cover rounded shadow-md border border-cream-border animate-fade-in"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-sm font-bold text-charcoal truncate">
+                              {activeBook.title}
+                            </h4>
+                            <p className="text-xs text-charcoal-muted truncate mb-2 font-serif italic">
+                              by {activeBook.author}
+                            </p>
+                            <div className="flex items-center gap-1.5 text-xs text-brand font-medium">
+                              <Bookmark className="w-3.5 h-3.5" />
+                              <span>{activeBook.currentPage} / {activeBook.pages} pages</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Progress bar */}
+                        <div className="space-y-1.5 bg-cream-card border border-cream-border rounded-xl p-4 shadow-xs">
+                          <div className="flex justify-between text-xs font-semibold text-charcoal">
+                            <span>Progress</span>
+                            <span className="text-brand font-serif italic">{progressPercent}%</span>
+                          </div>
+                          <div className="w-full bg-cream-dark h-2 rounded-full overflow-hidden">
+                            <div
+                              className="bg-brand h-full rounded-full transition-all duration-500"
+                              style={{ width: `${progressPercent}%` }}
+                            />
+                          </div>
+                          <div className="flex justify-between text-[10px] text-charcoal-muted pt-1">
+                            <span>{pagesRemaining} pages left</span>
+                            {estimatedDays !== null ? (
+                              <span>~{estimatedDays} days to finish</span>
+                            ) : (
+                              <span>Keep reading to get estimates</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Log Progress Form */}
+                        <form
+                          onSubmit={(e) => handleCompanionSubmit(e, activeBook)}
+                          className="space-y-4"
+                        >
+                          <div className="bg-cream-card border border-cream-border rounded-xl p-4 space-y-4 shadow-xs">
+                            <div className="flex items-center justify-between border-b border-cream-border pb-3">
+                              <span className="text-xs font-bold text-charcoal">Log Progress</span>
+                              <div className="flex rounded-md bg-cream-dark p-0.5">
+                                {(["increment", "absolute"] as const).map((method) => (
+                                  <button
+                                    type="button"
+                                    key={method}
+                                    onClick={() => setLogMethod(method)}
+                                    className={`px-2 py-1 text-[10px] font-semibold rounded transition-colors ${
+                                      logMethod === method
+                                        ? "bg-cream text-brand shadow-sm"
+                                        : "text-charcoal-muted hover:text-charcoal"
+                                    }`}
+                                  >
+                                    {method === "increment" ? "+ Pages" : "Page #"}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {logMethod === "increment" ? (
+                              <div className="space-y-3">
+                                <div>
+                                  <label className="text-[10px] font-bold text-charcoal-muted uppercase block mb-1">
+                                    Pages Read
+                                  </label>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    max={pagesRemaining}
+                                    placeholder="e.g. 25"
+                                    value={pagesReadInput}
+                                    onChange={(e) => setPagesReadInput(e.target.value)}
+                                    className="w-full h-10 px-3 text-sm bg-cream border border-cream-border rounded-lg text-charcoal focus:outline-none focus:border-brand-muted"
+                                    required
+                                  />
+                                </div>
+                                {/* Presets */}
+                                <div className="flex gap-2">
+                                  {[10, 25, 50, 100].map((preset) => {
+                                    const disabled = preset > pagesRemaining;
+                                    return (
+                                      <button
+                                        type="button"
+                                        key={preset}
+                                        disabled={disabled}
+                                        onClick={() => setPagesReadInput(preset.toString())}
+                                        className={`flex-1 text-center py-1.5 text-xs font-semibold rounded border transition-all ${
+                                          disabled
+                                            ? "opacity-40 cursor-not-allowed border-cream-border text-charcoal-muted"
+                                            : "bg-cream-card border-cream-border text-charcoal hover:border-brand hover:text-brand"
+                                        }`}
+                                      >
+                                        +{preset}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ) : (
+                              <div>
+                                <label className="text-[10px] font-bold text-charcoal-muted uppercase block mb-1">
+                                  Current Page
+                                </label>
+                                <input
+                                  type="number"
+                                  min={activeBook.currentPage + 1}
+                                  max={activeBook.pages}
+                                  placeholder={`Between ${activeBook.currentPage + 1} and ${activeBook.pages}`}
+                                  value={currentPageInput}
+                                  onChange={(e) => setCurrentPageInput(e.target.value)}
+                                  className="w-full h-10 px-3 text-sm bg-cream border border-cream-border rounded-lg text-charcoal focus:outline-none focus:border-brand-muted"
+                                  required
+                                />
+                              </div>
+                            )}
+
+                            {/* Reading Time */}
+                            <div>
+                              <label className="text-[10px] font-bold text-charcoal-muted uppercase block mb-1">
+                                Reading Time (Minutes)
+                              </label>
+                              <div className="relative">
+                                <Clock className="absolute left-3 top-3 h-4 w-4 text-charcoal-muted" />
+                                <input
+                                  type="number"
+                                  min="1"
+                                  placeholder="Optional, e.g. 45"
+                                  value={readingMinutesInput}
+                                  onChange={(e) => setReadingMinutesInput(e.target.value)}
+                                  className="w-full h-10 pl-9 pr-3 text-sm bg-cream border border-cream-border rounded-lg text-charcoal focus:outline-none focus:border-brand-muted"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Optional Note */}
+                            <div>
+                              <label className="text-[10px] font-bold text-charcoal-muted uppercase block mb-1">
+                                Session Note
+                              </label>
+                              <textarea
+                                rows={2}
+                                placeholder="Optional note e.g. Amazing plot twist!"
+                                value={noteInput}
+                                onChange={(e) => setNoteInput(e.target.value)}
+                                className="w-full p-3 text-xs bg-cream border border-cream-border rounded-lg text-charcoal focus:outline-none focus:border-brand-muted placeholder-charcoal-muted"
+                              />
+                            </div>
+                          </div>
+
+                          <button
+                            type="submit"
+                            className="w-full py-3 bg-brand hover:bg-brand-light text-cream font-semibold text-xs rounded-lg shadow-md transition-all duration-300"
+                          >
+                            Save Entry
+                          </button>
+                        </form>
+                      </div>
+                    );
+                  })()}
+                </div>
+              ) : (
+                /* Empty state / start new reading list */
+                <div className="space-y-6">
+                  <div className="text-center py-8">
+                    <BookIcon className="w-12 h-12 text-charcoal-muted mx-auto mb-3 opacity-60" />
+                    <h4 className="font-serif text-base font-bold text-charcoal">No Active Reads</h4>
+                    <p className="text-xs text-charcoal-muted mt-1 max-w-[250px] mx-auto">
+                      Ready for a new adventure? Search for a book or select one from your Want to Read shelf to start tracking progress.
+                    </p>
+                  </div>
+
+                  {/* Search box to start new book */}
+                  <div className="space-y-3">
+                    <label className="text-xs font-semibold text-charcoal uppercase tracking-wider block">
+                      Start Reading a New Book
+                    </label>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-3 h-4 w-4 text-charcoal-muted" />
+                      <input
+                        type="text"
+                        placeholder="Search title, author..."
+                        value={companionSearch}
+                        onChange={(e) => setCompanionSearch(e.target.value)}
+                        className="w-full h-10 pl-10 pr-3 text-sm bg-cream-card border border-cream-border rounded-lg text-charcoal focus:outline-none focus:border-brand-muted placeholder-charcoal-muted"
+                      />
+                    </div>
+
+                    {companionLoading && (
+                      <div className="text-center py-2">
+                        <span className="inline-block w-4 h-4 border-2 border-brand border-t-transparent rounded-full animate-spin" />
+                      </div>
+                    )}
+
+                    {companionSearchResults.length > 0 && (
+                      <div className="space-y-2 max-h-[200px] overflow-y-auto mt-2">
+                        {companionSearchResults.map((book) => (
+                          <div
+                            key={book.id}
+                            className="flex items-center justify-between p-2 rounded-lg bg-cream-card border border-cream-border hover:border-brand/40 transition-all"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <img
+                                src={book.coverImage}
+                                alt={book.title}
+                                className="w-8 h-12 object-cover rounded shadow-xs flex-shrink-0"
+                              />
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold text-charcoal truncate">{book.title}</p>
+                                <p className="text-[10px] text-charcoal-muted truncate font-serif italic">{book.author}</p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => handleStartReading(book.id)}
+                              className="px-2.5 py-1 text-[10px] font-semibold bg-brand text-cream rounded hover:bg-brand-light transition-all flex-shrink-0"
+                            >
+                              Start
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Display Want to Read books */}
+                  {wantToReadBooks.length > 0 && (
+                    <div className="space-y-3 pt-2">
+                      <h4 className="text-xs font-semibold text-charcoal uppercase tracking-wider">
+                        From Want to Read List
+                      </h4>
+                      <div className="space-y-2">
+                        {wantToReadBooks.slice(0, 4).map((book) => (
+                          <div
+                            key={book.id}
+                            className="flex items-center justify-between p-3 rounded-lg bg-cream-card border border-cream-border"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <img
+                                src={book.coverImage}
+                                alt={book.title}
+                                className="w-8 h-12 object-cover rounded shadow-xs flex-shrink-0"
+                              />
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold text-charcoal truncate">{book.title}</p>
+                                <p className="text-[10px] text-charcoal-muted truncate font-serif italic">{book.author}</p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => handleStartReading(book.id)}
+                              className="flex items-center gap-1 px-3 py-1.5 text-[10px] font-bold border border-brand text-brand rounded-lg hover:bg-brand hover:text-cream transition-all"
+                            >
+                              <Plus className="w-3 h-3" />
+                              <span>Start</span>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </div>
+      </div>
+    )}
+  </AnimatePresence>
+</>
+);
 }

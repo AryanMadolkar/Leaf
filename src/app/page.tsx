@@ -36,12 +36,12 @@ export default function LandingPage() {
   };
 
   const floatingCovers = [
-    { src: "/covers/secret_history.png", rotate: "-6deg", y: 20, delay: 0 },
-    { src: "/covers/hail_mary.png", rotate: "4deg", y: -10, delay: 0.2 },
-    { src: "/covers/normal_people.png", rotate: "-3deg", y: 40, delay: 0.4 },
-    { src: "/covers/dune.png", rotate: "8deg", y: -30, delay: 0.1 },
-    { src: "/covers/klara.png", rotate: "-5deg", y: 15, delay: 0.3 },
-    { src: "/covers/gatsby.png", rotate: "6deg", y: 0, delay: 0.5 },
+    { src: "https://covers.openlibrary.org/b/isbn/9780140167771-L.jpg", rotate: "-6deg", y: 20, delay: 0 },
+    { src: "https://covers.openlibrary.org/b/isbn/9780593135204-L.jpg", rotate: "4deg", y: -10, delay: 0.2 },
+    { src: "https://covers.openlibrary.org/b/isbn/9781984822178-L.jpg", rotate: "-3deg", y: 40, delay: 0.4 },
+    { src: "https://covers.openlibrary.org/b/isbn/9780441172719-L.jpg", rotate: "8deg", y: -30, delay: 0.1 },
+    { src: "https://covers.openlibrary.org/b/isbn/9780593318171-L.jpg", rotate: "-5deg", y: 15, delay: 0.3 },
+    { src: "https://covers.openlibrary.org/b/isbn/9780743273565-L.jpg", rotate: "6deg", y: 0, delay: 0.5 },
   ];
 
   const features = [
@@ -228,7 +228,7 @@ export default function LandingPage() {
                   </p>
                 </div>
                 <img
-                  src="/covers/secret_history.png"
+                  src="https://covers.openlibrary.org/b/isbn/9780140167771-L.jpg"
                   className="w-10 h-14 object-cover rounded shadow-sm flex-shrink-0"
                 />
               </div>
@@ -249,7 +249,7 @@ export default function LandingPage() {
                   <span className="text-[10px] text-charcoal-muted">15 mins ago</span>
                 </div>
                 <img
-                  src="/covers/hail_mary.png"
+                  src="https://covers.openlibrary.org/b/isbn/9780593135204-L.jpg"
                   className="w-10 h-14 object-cover rounded shadow-sm flex-shrink-0"
                 />
               </div>
@@ -270,7 +270,7 @@ export default function LandingPage() {
                   </div>
                 </div>
                 <img
-                  src="/covers/normal_people.png"
+                  src="https://covers.openlibrary.org/b/isbn/9781984822178-L.jpg"
                   className="w-10 h-14 object-cover rounded shadow-sm flex-shrink-0"
                 />
               </div>
