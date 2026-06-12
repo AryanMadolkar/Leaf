@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+@theme {
+  --font-serif: var(--font-serif), Georgia, serif;
+  --font-sans: var(--font-sans), system-ui, sans-serif;
+  
+  --color-brand: #2E4D38;
+  --color-brand-light: #416B4E;
+  --color-brand-muted: #5B7B63;
+  --color-cream: #FAF8F5;
+  --color-cream-dark: #F3ECE2;
+  --color-cream-card: #FAF9F6;
+  --color-cream-border: #E6E1D8;
+  --color-charcoal: #1C1C1A;
+  --color-charcoal-light: #2D2C29;
+  --color-charcoal-muted: #7A7873;
+}
+
+:root {
+  --background: #FAF8F5;
+  --foreground: #1C1C1A;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Glassmorphism utility */
+.glass {
+  background: rgba(250, 248, 245, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(230, 225, 216, 0.5);
+}
+
+/* Custom Scrollbar for editorial aesthetic */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #E6E1D8;
+  border-radius: 99px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #C4BEB3;
+}
+
+/* Book Cover Hover Shadow Animation */
+.book-shadow {
+  box-shadow: 
+    0 4px 6px -1px rgba(0, 0, 0, 0.05), 
+    0 2px 4px -1px rgba(0, 0, 0, 0.03),
+    0 10px 15px -3px rgba(46, 77, 56, 0.05);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.book-shadow:hover {
+  transform: translateY(-8px) rotate(1deg);
+  box-shadow: 
+    0 20px 25px -5px rgba(0, 0, 0, 0.1), 
+    0 10px 10px -5px rgba(0, 0, 0, 0.04),
+    0 25px 30px -10px rgba(46, 77, 56, 0.15);
+}

@@ -1,0 +1,117 @@
+"use client";
+
+import React from "react";
+import Header from "@/components/Header";
+import { StarDisplay } from "@/components/ReviewCard";
+import { useLeaf } from "@/context/LeafContext";
+import { Calendar, BookOpen, Trash } from "lucide-react";
+import Link from "next/link";
+
+export default function ReadingDiaryPage() {
+  const { diaryLogs, books, currentUser } = useLeaf();
+
+  // Filter finished logs of current user, sorted chronological
+  const userDiaryLogs = diaryLogs
+    .filter((log) => log.userId === currentUser.id && log.status === "Finished")
+    .sort((a, b) => new Date(b.dateLogged).getTime() - new Date(a.dateLogged).getTime());
+
+  return (
+    <div className="min-h-screen bg-cream flex flex-col">
+      <Header />
+
+      <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-10">
+        
+        {/* Title Header */}
+        <div className="space-y-1 mb-8">
+          <h1 className="font-serif text-3xl font-bold text-charcoal">
+            Reading Diary
+          </h1>
+          <p className="text-xs text-charcoal-muted">
+            A chronological timeline of the books you have read and logged on Leaf.
+          </p>
+        </div>
+
+        {/* Diary List Card Container */}
+        <div className="bg-cream-card border border-cream-border rounded-2xl overflow-hidden shadow-sm">
+          {userDiaryLogs.length > 0 ? (
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-cream-dark/50 border-b border-cream-border font-semibold text-charcoal uppercase tracking-wider text-[9px] select-none">
+                  <th className="p-4 pl-6">Read Date</th>
+                  <th className="p-4">Book details</th>
+                  <th className="p-4">Author</th>
+                  <th className="p-4">My Rating</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-cream-border/60">
+                {userDiaryLogs.map((log) => {
+                  const book = books.find((b) => b.id === log.bookId);
+                  if (!book) return null;
+
+                  return (
+                    <tr key={log.id} className="hover:bg-cream-dark/15 transition-all">
+                      {/* Date logged */}
+                      <td className="p-4 pl-6 text-charcoal-muted font-medium text-xs">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-3.5 h-3.5 text-brand" />
+                          <span>
+                            {new Date(log.dateLogged).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            })}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Cover & Title */}
+                      <td className="p-4 font-bold text-charcoal">
+                        <div className="flex items-center gap-3.5">
+                          <Link href={`/book/${book.id}`}>
+                            <div className="relative w-9 h-14 rounded overflow-hidden shadow-sm hover:scale-95 transition-transform border border-cream-border">
+                              <img
+                                src={book.coverImage}
+                                alt={book.title}
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                          </Link>
+                          <Link href={`/book/${book.id}`} className="hover:text-brand hover:underline transition-colors text-xs font-serif font-bold">
+                            {book.title}
+                          </Link>
+                        </div>
+                      </td>
+
+                      {/* Author */}
+                      <td className="p-4 text-charcoal-light font-medium">{book.author}</td>
+
+                      {/* Rating */}
+                      <td className="p-4">
+                        {log.rating !== undefined ? (
+                          <StarDisplay rating={log.rating} size={11} />
+                        ) : (
+                          <span className="text-[10px] text-charcoal-muted italic">Shelved only</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          ) : (
+            <div className="text-center py-20 px-6 space-y-4">
+              <BookOpen className="w-10 h-10 text-charcoal-muted mx-auto opacity-50" />
+              <div className="space-y-1">
+                <p className="font-serif text-lg font-bold text-charcoal">Your diary is empty</p>
+                <p className="text-xs text-charcoal-muted max-w-sm mx-auto">
+                  Start logging books you have read using the &ldquo;Log Book&rdquo; button on the navigation bar above.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+      </main>
+    </div>
+  );
+}
