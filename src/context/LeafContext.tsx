@@ -40,6 +40,11 @@ interface LeafContextType {
   createList: (title: string, description: string, coverImage: string, bookIds: string[]) => void;
   toggleFollowUser: (userId: string) => void;
   updateProfile: (name: string, bio: string, avatar: string, favoriteBookIds: string[]) => void;
+  addCachedBookToContext: (book: Book) => void;
+  readingSessions: any[];
+  userStats: any | null;
+  logReadingSession: (bookId: string, pagesRead: number, note?: string, readingMinutes?: number) => Promise<any>;
+  updateBookProgressDirectly: (bookId: string, currentPage: number) => Promise<any>;
 }
 
 const LeafContext = createContext<LeafContextType | undefined>(undefined);
@@ -53,23 +58,53 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [comments, setComments] = useState<Comment[]>(INITIAL_COMMENTS);
   const [currentUser, setCurrentUser] = useState<User>(INITIAL_USERS[4]); // Rowan Archer
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
+  const [readingSessions, setReadingSessions] = useState<any[]>([]);
+  const [userStats, setUserStats] = useState<any | null>(null);
 
-  // Load from localStorage on mount
+  // Load from database on mount
   useEffect(() => {
+    async function fetchInitialData() {
+      try {
+        const res = await fetch("/api/init");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) {
+            setBooks(data.books);
+            setDiaryLogs(data.diaryLogs);
+            setReviews(data.reviews);
+            setReadingSessions(data.sessions || []);
+            setUserStats(data.stats || null);
+            save("leaf_books", data.books);
+            save("leaf_logs", data.diaryLogs);
+            save("leaf_reviews", data.reviews);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load initial data from DB:", err);
+      }
+
+      // Fallback to local storage
+      if (typeof window !== "undefined") {
+        const storedBooks = localStorage.getItem("leaf_books");
+        const storedReviews = localStorage.getItem("leaf_reviews");
+        const storedLogs = localStorage.getItem("leaf_logs");
+        if (storedBooks) setBooks(JSON.parse(storedBooks));
+        if (storedReviews) setReviews(JSON.parse(storedReviews));
+        if (storedLogs) setDiaryLogs(JSON.parse(storedLogs));
+      }
+    }
+
+    fetchInitialData();
+
     if (typeof window !== "undefined") {
-      const storedBooks = localStorage.getItem("leaf_books");
       const storedUsers = localStorage.getItem("leaf_users");
-      const storedReviews = localStorage.getItem("leaf_reviews");
-      const storedLogs = localStorage.getItem("leaf_logs");
       const storedLists = localStorage.getItem("leaf_lists");
       const storedComments = localStorage.getItem("leaf_comments");
       const storedCurrentUser = localStorage.getItem("leaf_current_user");
       const storedAuth = localStorage.getItem("leaf_auth");
 
-      if (storedBooks) setBooks(JSON.parse(storedBooks));
       if (storedUsers) setUsers(JSON.parse(storedUsers));
-      if (storedReviews) setReviews(JSON.parse(storedReviews));
-      if (storedLogs) setDiaryLogs(JSON.parse(storedLogs));
       if (storedLists) setLists(JSON.parse(storedLists));
       if (storedComments) setComments(JSON.parse(storedComments));
       if (storedCurrentUser) setCurrentUser(JSON.parse(storedCurrentUser));
@@ -95,44 +130,39 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addReview = (bookId: string, rating: number, content: string) => {
-    const newReview: Review = {
-      id: `rev-${Date.now()}`,
-      userId: currentUser.id,
-      bookId,
-      rating,
-      content,
-      dateString: new Date().toLocaleDateString("en-US", {
-        month: "short",
-        day: "2-digit",
-        year: "numeric",
-      }),
-      likesCount: 0,
-      commentsCount: 0,
-      isLiked: false,
-    };
-
-    const updatedReviews = [newReview, ...reviews];
-    setReviews(updatedReviews);
-    save("leaf_reviews", updatedReviews);
-
-    // Also add/update reading log automatically to 'Finished' if rating is provided
-    logBook(bookId, "Finished", rating);
+    logBook(bookId, "Finished", rating, content);
   };
 
-  const toggleLikeReview = (reviewId: string) => {
+  const toggleLikeReview = async (reviewId: string) => {
+    const review = reviews.find((r) => r.id === reviewId);
+    if (!review) return;
+
+    const action = review.isLiked ? "unlike" : "like";
+
+    // Optimistic UI update
     const updatedReviews = reviews.map((r) => {
       if (r.id === reviewId) {
         const isLiked = !r.isLiked;
         return {
           ...r,
           isLiked,
-          likesCount: isLiked ? r.likesCount + 1 : r.likesCount - 1,
+          likesCount: isLiked ? r.likesCount + 1 : Math.max(0, r.likesCount - 1),
         };
       }
       return r;
     });
     setReviews(updatedReviews);
     save("leaf_reviews", updatedReviews);
+
+    try {
+      await fetch("/api/reviews", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reviewId, action }),
+      });
+    } catch (err) {
+      console.error("Failed to sync review like to database:", err);
+    }
   };
 
   const toggleLikeList = (listId: string) => {
@@ -188,69 +218,109 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     save("leaf_lists", updatedLists);
   };
 
-  const logBook = (
+  const logBook = async (
     bookId: string,
     status: "Want to Read" | "Currently Reading" | "Finished",
     rating?: number,
     reviewContent?: string
   ) => {
-    // If finished and has rating/review content, let's create a review if reviewContent is provided
-    let createdReviewId: string | undefined = undefined;
-    if (status === "Finished" && rating !== undefined && reviewContent) {
-      const revId = `rev-${Date.now()}`;
-      const newReview: Review = {
-        id: revId,
-        userId: currentUser.id,
-        bookId,
-        rating,
-        content: reviewContent,
-        dateString: new Date().toLocaleDateString("en-US", {
-          month: "short",
-          day: "2-digit",
-          year: "numeric",
+    try {
+      const res = await fetch("/api/user-books", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: currentUser.id,
+          bookId,
+          status,
+          rating,
+          review: reviewContent,
         }),
-        likesCount: 0,
-        commentsCount: 0,
-      };
-      setReviews((prev) => {
-        const next = [newReview, ...prev];
-        save("leaf_reviews", next);
-        return next;
       });
-      createdReviewId = revId;
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setDiaryLogs(data.diaryLogs);
+          setReviews(data.reviews);
+          setReadingSessions(data.sessions || []);
+          setUserStats(data.stats || null);
+          save("leaf_logs", data.diaryLogs);
+          save("leaf_reviews", data.reviews);
+
+          // Refresh books in case a new book was added
+          const initRes = await fetch("/api/init");
+          if (initRes.ok) {
+            const initData = await initRes.json();
+            if (initData.success) {
+              setBooks(initData.books);
+              save("leaf_books", initData.books);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed to sync log entry to database:", err);
     }
+  };
 
-    // Check if entry already exists for user and book
-    const existingLogIndex = diaryLogs.findIndex(
-      (log) => log.userId === currentUser.id && log.bookId === bookId && log.status === status
-    );
+  const logReadingSession = async (
+    bookId: string,
+    pagesRead: number,
+    note?: string,
+    readingMinutes?: number
+  ) => {
+    const log = diaryLogs.find((l) => l.bookId === bookId && l.userId === currentUser.id);
+    const startPage = log && log.currentPage ? log.currentPage : 0;
+    const endPage = startPage + pagesRead;
 
-    let updatedLogs = [...diaryLogs];
-    const today = new Date().toISOString().split("T")[0];
+    try {
+      const res = await fetch("/api/reading-sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: currentUser.id,
+          bookId,
+          pagesRead,
+          startPage,
+          endPage,
+          note,
+          readingMinutes,
+        }),
+      });
 
-    if (existingLogIndex >= 0) {
-      // Update existing
-      updatedLogs[existingLogIndex] = {
-        ...updatedLogs[existingLogIndex],
-        rating: rating !== undefined ? rating : updatedLogs[existingLogIndex].rating,
-        dateLogged: today,
-      };
-    } else {
-      // Add new log
-      const newLog: ReadingLog = {
-        id: `log-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-        userId: currentUser.id,
-        bookId,
-        status,
-        dateLogged: today,
-        rating,
-      };
-      // Keep finished logs chronological, putting newer logs on top or appending
-      updatedLogs = [newLog, ...updatedLogs];
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setDiaryLogs(data.diaryLogs);
+          setReviews(data.reviews);
+          setReadingSessions(data.sessions || []);
+          setUserStats(data.stats || null);
+          save("leaf_logs", data.diaryLogs);
+          save("leaf_reviews", data.reviews);
+
+          // Refresh books in case a new book was added
+          const initRes = await fetch("/api/init");
+          if (initRes.ok) {
+            const initData = await initRes.json();
+            if (initData.success) {
+              setBooks(initData.books);
+              save("leaf_books", initData.books);
+            }
+          }
+          return data;
+        }
+      }
+    } catch (err) {
+      console.error("Failed to log reading session:", err);
     }
+    return null;
+  };
 
-    setDiaryLogs(updatedLogs);
-    save("leaf_logs", updatedLogs);
+  const updateBookProgressDirectly = async (bookId: string, currentPage: number) => {
+    const log = diaryLogs.find((l) => l.bookId === bookId && l.userId === currentUser.id);
+    const startPage = log && log.currentPage ? log.currentPage : 0;
+    const pagesRead = Math.max(0, currentPage - startPage);
+    return await logReadingSession(bookId, pagesRead, undefined, undefined);
   };
 
   const createList = (title: string, description: string, coverImage: string, bookIds: string[]) => {
@@ -334,6 +404,15 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     save("leaf_users", updatedUsers);
   };
 
+  const addCachedBookToContext = (book: Book) => {
+    setBooks((prev) => {
+      if (prev.some((b) => b.id === book.id)) return prev;
+      const next = [...prev, book];
+      save("leaf_books", next);
+      return next;
+    });
+  };
+
   return (
     <LeafContext.Provider
       value={{
@@ -355,6 +434,11 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createList,
         toggleFollowUser,
         updateProfile,
+        addCachedBookToContext,
+        readingSessions,
+        userStats,
+        logReadingSession,
+        updateBookProgressDirectly,
       }}
     >
       {children}

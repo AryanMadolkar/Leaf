@@ -5,7 +5,7 @@ import Header from "@/components/Header";
 import BookCard from "@/components/BookCard";
 import ReviewCard, { StarDisplay } from "@/components/ReviewCard";
 import { useLeaf } from "@/context/LeafContext";
-import { Calendar, Layers, Heart, BookOpen, UserCheck, UserPlus, Grid } from "lucide-react";
+import { Calendar, Layers, Heart, BookOpen, UserCheck, UserPlus, Grid, Flame, ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 
 export default function ProfilePage({ params }: { params: Promise<{ username: string }> }) {
@@ -18,6 +18,7 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
     lists,
     currentUser,
     toggleFollowUser,
+    userStats,
   } = useLeaf();
 
   const [activeTab, setActiveTab] = useState<"activity" | "diary" | "lists" | "likes">("activity");
@@ -143,15 +144,57 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
           </div>
           
           {/* Quick Stats Grid */}
-          <div className="grid grid-cols-2 gap-4 bg-cream-card border border-cream-border rounded-xl p-4 w-full max-w-[280px] scale-95 md:scale-100">
-            <div className="text-center py-1.5">
-              <p className="text-[9px] font-bold text-charcoal-muted uppercase">Logged Books</p>
-              <p className="font-serif text-2xl font-bold text-charcoal mt-0.5">{totalBooksRead}</p>
+          <div className="bg-cream-card border border-cream-border rounded-2xl p-5 w-full max-w-[320px] shadow-sm space-y-4 scale-95 md:scale-100">
+            <div className="flex justify-between items-center border-b border-cream-border/60 pb-2">
+              <span className="text-[10px] font-bold text-charcoal uppercase tracking-wider">Reading Activity</span>
+              <Link href="/stats" className="text-[9px] font-bold text-brand hover:underline flex items-center gap-0.5">
+                Full Stats <ArrowUpRight className="w-3.5 h-3.5" />
+              </Link>
             </div>
-            <div className="text-center py-1.5 border-l border-cream-border/60">
-              <p className="text-[9px] font-bold text-charcoal-muted uppercase">Pages Count</p>
-              <p className="font-serif text-2xl font-bold text-charcoal mt-0.5">{totalPagesRead}</p>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="text-center py-1">
+                <p className="text-[9px] font-bold text-charcoal-muted uppercase">Completed</p>
+                <p className="font-serif text-2xl font-bold text-charcoal mt-0.5">{totalBooksRead}</p>
+              </div>
+              <div className="text-center py-1 border-l border-cream-border/60">
+                <p className="text-[9px] font-bold text-charcoal-muted uppercase">Pages</p>
+                <p className="font-serif text-2xl font-bold text-charcoal mt-0.5">{totalPagesRead}</p>
+              </div>
+              
+              {isMe && userStats && (
+                <>
+                  <div className="text-center py-1 border-t border-cream-border/60 pt-2.5">
+                    <p className="text-[9px] font-bold text-charcoal-muted uppercase">Streak</p>
+                    <p className="font-serif text-2xl font-bold text-charcoal mt-0.5 flex items-center justify-center gap-1">
+                      {userStats.current_streak} <Flame className="w-4 h-4 text-brand fill-brand/10 animate-pulse" />
+                    </p>
+                  </div>
+                  <div className="text-center py-1 border-t border-l border-cream-border/60 pt-2.5">
+                    <p className="text-[9px] font-bold text-charcoal-muted uppercase">Top Genre</p>
+                    <p className="font-sans text-xs font-bold text-charcoal mt-1.5 truncate px-1" title={userStats.favorite_genre}>
+                      {userStats.favorite_genre}
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
+
+            {/* Reading Goal Progress Bar */}
+            {isMe && userStats && (
+              <div className="space-y-1.5 pt-2 border-t border-cream-border/60">
+                <div className="flex justify-between text-[9px] font-bold text-charcoal-muted uppercase">
+                  <span>Yearly Goal</span>
+                  <span>{totalBooksRead} / 12 books</span>
+                </div>
+                <div className="w-full bg-cream-dark h-1.5 rounded-full overflow-hidden">
+                  <div
+                    className="bg-brand h-full rounded-full transition-all duration-300"
+                    style={{ width: `${Math.min(100, (totalBooksRead / 12) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </section>
 
