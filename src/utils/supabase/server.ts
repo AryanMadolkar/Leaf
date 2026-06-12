@@ -1,16 +1,16 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder-project.supabase.co";
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
 
 export function createClient(cookieStore: Awaited<ReturnType<typeof cookies>>): ReturnType<typeof createServerClient>;
 export function createClient(): Promise<ReturnType<typeof createServerClient>>;
 export function createClient(cookieStore?: any): any {
   if (cookieStore) {
     return createServerClient(
-      supabaseUrl!,
-      supabaseKey!,
+      supabaseUrl,
+      supabaseKey,
       {
         cookies: {
           getAll() {
@@ -35,8 +35,8 @@ export function createClient(cookieStore?: any): any {
   // Async fallback for existing server routes calling createClient() with no arguments
   return cookies().then((resolvedCookieStore) => {
     return createServerClient(
-      supabaseUrl!,
-      supabaseKey!,
+      supabaseUrl,
+      supabaseKey,
       {
         cookies: {
           getAll() {
