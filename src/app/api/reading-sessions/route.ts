@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { createClient } from "@/utils/supabase/server";
 import { recalculateUserStats } from "@/utils/supabaseStats";
+import { getBookById } from "@/utils/booksApi";
 
 export async function GET(request: Request) {
   try {
@@ -67,18 +68,18 @@ export async function POST(request: Request) {
 
     const today = new Date().toISOString().split("T")[0];
 
-    // 1. Get book page count
-    const { data: book, error: bookError } = await supabase
-      .from("books")
-      .select("page_count, title")
-      .eq("id", bookId)
-      .maybeSingle();
-
-    if (bookError || !book) {
-      return NextResponse.json({ success: false, error: "Book not found in database" }, { status: 404 });
+    // 1. Get book page count and ensure it is cached
+    let totalPages = 300;
+    try {
+      const book = await getBookById(bookId);
+      if (!book) {
+        return NextResponse.json({ success: false, error: "Book not found or could not be cached" }, { status: 404 });
+      }
+      totalPages = book.pages || 300;
+    } catch (err: any) {
+      console.error(`Error resolving book details for reading session:`, err);
+      return NextResponse.json({ success: false, error: "Database integration error caching book details" }, { status: 500 });
     }
-
-    const totalPages = book.page_count || 300;
 
     // 2. Insert reading session
     const sessionId = crypto.randomUUID();
