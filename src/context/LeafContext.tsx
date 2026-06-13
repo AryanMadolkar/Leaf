@@ -57,6 +57,11 @@ interface LeafContextType {
   signInAsGuest: () => void;
 }
 
+const isDeprecatedAvatar = (url: string | null | undefined): boolean => {
+  if (!url) return false;
+  return url.includes("photo-1534528741775-53994a69daeb");
+};
+
 const LeafContext = createContext<LeafContextType | undefined>(undefined);
 
 export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -88,6 +93,10 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (storedProfile) {
         const parsedProfile = JSON.parse(storedProfile);
+        if (isDeprecatedAvatar(parsedProfile.avatar)) {
+          parsedProfile.avatar = "";
+          localStorage.setItem("leaf_local_profile", JSON.stringify(parsedProfile));
+        }
         setCurrentUser(parsedProfile);
         setProfile(parsedProfile);
       } else {
@@ -95,7 +104,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
           id: "guest-user-id",
           username: "literary_wanderer",
           name: "Guest Reader",
-          avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80",
+          avatar: "",
           bio: "An avid reader exploring Leaf in guest mode.",
           followersCount: 12,
           followingCount: 18,
@@ -466,17 +475,24 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
             
             // Map profile details to the Client currentUser interface for layout compatibility
             if (data.profile) {
-              setProfile(data.profile);
-              setCurrentUser({
+              const cleanedAvatar = isDeprecatedAvatar(data.profile.avatar_url) ? "" : (data.profile.avatar_url || "");
+              const cleanedProfile = { ...data.profile, avatar_url: cleanedAvatar };
+              setProfile(cleanedProfile);
+              
+              const mappedUser = {
                 id: data.profile.id,
                 username: data.profile.username,
                 name: data.profile.display_name || "Reader",
-                avatar: data.profile.avatar_url || INITIAL_USERS[4].avatar,
+                avatar: cleanedAvatar,
                 bio: data.profile.bio || "",
                 followersCount: data.profile.followersCount || 0,
                 followingCount: data.profile.followingCount || 0,
                 favoriteBookIds: data.profile.favoriteBookIds || [],
-              });
+                email: data.profile.email || session.user.email || "",
+                created_at: data.profile.created_at || data.profile.joined_at || session.user.created_at || "",
+              };
+              setCurrentUser(mappedUser);
+              localStorage.setItem("leaf_local_profile", JSON.stringify(mappedUser));
             }
           }
         } else {
@@ -505,7 +521,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
       id: "guest-user-id",
       username: "literary_wanderer",
       name: "Guest Reader",
-      avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80",
+      avatar: "",
       bio: "An avid reader exploring Leaf in guest mode.",
       followersCount: 12,
       followingCount: 18,
@@ -844,15 +860,39 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (!error && data) {
         setProfile(data);
-        setCurrentUser((prev) => ({
-          ...prev,
-          name: data.display_name || prev.name,
-          bio: data.bio || prev.bio,
-          avatar: data.avatar_url || prev.avatar,
-        }));
+        setCurrentUser((prev) => {
+          const updated = {
+            ...prev,
+            name: data.display_name || prev.name,
+            bio: data.bio !== undefined && data.bio !== null ? data.bio : prev.bio,
+            avatar: data.avatar_url !== undefined && data.avatar_url !== null ? data.avatar_url : prev.avatar,
+          };
+          localStorage.setItem("leaf_local_profile", JSON.stringify(updated));
+          return updated;
+        });
+      } else {
+        console.warn("Supabase profile update failed, updating profile locally:", error);
+        const updatedUser = {
+          ...currentUser,
+          name,
+          bio,
+          avatar,
+        };
+        setCurrentUser(updatedUser);
+        setProfile(updatedUser);
+        localStorage.setItem("leaf_local_profile", JSON.stringify(updatedUser));
       }
     } catch (err) {
-      console.error("Failed to sync profile update to Supabase:", err);
+      console.error("Failed to sync profile update to Supabase, updating profile locally:", err);
+      const updatedUser = {
+        ...currentUser,
+        name,
+        bio,
+        avatar,
+      };
+      setCurrentUser(updatedUser);
+      setProfile(updatedUser);
+      localStorage.setItem("leaf_local_profile", JSON.stringify(updatedUser));
     }
   };
 

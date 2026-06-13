@@ -8,6 +8,7 @@ import { useLeaf } from "@/context/LeafContext";
 import { BookOpen, Sparkles, Eye, ArrowRight, Star, Heart, CheckCircle2, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
+import UserAvatar from "@/components/UserAvatar";
 
 export default function UserLibraryPage() {
   const { books, diaryLogs, currentUser, logBook } = useLeaf();
@@ -78,11 +79,7 @@ export default function UserLibraryPage() {
         {/* Profile Header */}
         <div className="flex flex-col md:flex-row items-center justify-between border-b border-cream-border/60 pb-6 gap-4">
           <div className="flex items-center gap-4 text-center md:text-left">
-            <img
-              src={currentUser.avatar}
-              alt={currentUser.name}
-              className="w-14 h-14 rounded-full object-cover border border-cream-border"
-            />
+            <UserAvatar avatarUrl={currentUser.avatar} name={currentUser.name} size={56} className="border border-cream-border shadow-sm" />
             <div>
               <h1 className="font-serif text-3xl font-bold text-charcoal">
                 {currentUser.name}&rsquo;s Library

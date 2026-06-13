@@ -23,12 +23,14 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   username TEXT UNIQUE NOT NULL,
   display_name TEXT,
+  email TEXT,
   bio TEXT,
-  avatar_url TEXT NOT NULL DEFAULT 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
+  avatar_url TEXT NOT NULL DEFAULT '',
   location TEXT,
   favorite_genres TEXT[],
   onboarding_completed BOOLEAN NOT NULL DEFAULT FALSE,
-  joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- 3. Create user_stats table for reading calculations
@@ -184,12 +186,13 @@ BEGIN
   );
 
   -- Insert profile
-  INSERT INTO public.profiles (id, username, display_name, avatar_url, onboarding_completed)
+  INSERT INTO public.profiles (id, username, display_name, email, avatar_url, onboarding_completed)
   VALUES (
     NEW.id,
     new_username,
     COALESCE(NEW.raw_user_meta_data->>'display_name', NEW.raw_user_meta_data->>'name', 'Reader'),
-    COALESCE(NEW.raw_user_meta_data->>'avatar_url', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80'),
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'avatar_url', ''),
     FALSE
   );
 

@@ -6,6 +6,7 @@ import { useLeaf } from "@/context/LeafContext";
 import { Heart, MessageSquare, CornerDownRight, ArrowRight } from "lucide-react";
 import { Review } from "@/data/mockData";
 import { motion, AnimatePresence } from "framer-motion";
+import UserAvatar from "./UserAvatar";
 
 interface ReviewCardProps {
   review: Review;
@@ -99,11 +100,7 @@ export default function ReviewCard({ review, showBookCover = true }: ReviewCardP
             <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
               <div className="flex items-center gap-2">
                 <Link href={`/profile/${authorUser.username}`}>
-                  <img
-                    src={authorUser.avatar}
-                    alt={authorUser.name}
-                    className="w-6 h-6 rounded-full object-cover border border-cream-border"
-                  />
+                  <UserAvatar avatarUrl={authorUser.avatar} name={authorUser.name} size="xs" />
                 </Link>
                 <div className="text-xs leading-tight">
                   <Link
@@ -191,10 +188,11 @@ export default function ReviewCard({ review, showBookCover = true }: ReviewCardP
                     return (
                       <div key={comment.id} className="flex gap-2 text-xs leading-normal">
                         <CornerDownRight className="w-3.5 h-3.5 text-charcoal-muted mt-1 flex-shrink-0" />
-                        <img
-                          src={commentUser.avatar}
-                          alt={commentUser.name}
-                          className="w-5.5 h-5.5 rounded-full object-cover border border-cream-border flex-shrink-0"
+                        <UserAvatar
+                          avatarUrl={commentUser.avatar}
+                          name={commentUser.name}
+                          size={22}
+                          className="flex-shrink-0"
                         />
                         <div className="flex-1 bg-cream border border-cream-border/70 rounded-lg p-2.5">
                           <div className="flex items-center justify-between mb-1">
@@ -217,10 +215,11 @@ export default function ReviewCard({ review, showBookCover = true }: ReviewCardP
 
               {/* Add Comment input */}
               <form onSubmit={handleCommentSubmit} className="flex items-center gap-2 mt-2">
-                <img
-                  src={currentUser.avatar}
-                  alt={currentUser.name}
-                  className="w-5.5 h-5.5 rounded-full object-cover border border-cream-border flex-shrink-0"
+                <UserAvatar
+                  avatarUrl={currentUser.avatar}
+                  name={currentUser.name}
+                  size={22}
+                  className="flex-shrink-0"
                 />
                 <div className="relative flex-1">
                   <input

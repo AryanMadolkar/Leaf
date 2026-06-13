@@ -20,6 +20,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { Book } from "@/data/mockData";
+import UserAvatar from "@/components/UserAvatar";
 
 export default function OnboardingPage() {
   const supabase = createClient();
@@ -388,7 +389,7 @@ export default function OnboardingPage() {
                         className="flex items-center justify-between p-3.5 bg-cream border border-cream-border rounded-2xl"
                       >
                         <div className="flex items-center gap-3 min-w-0">
-                          <img src={r.avatar} alt={r.name} className="w-9 h-9 rounded-full object-cover border border-cream-border" />
+                          <UserAvatar avatarUrl={r.avatar} name={r.name} size={36} />
                           <div className="min-w-0">
                             <p className="text-xs font-bold text-charcoal truncate leading-tight">{r.name}</p>
                             <p className="text-[9px] text-charcoal-muted truncate">@{r.username}</p>

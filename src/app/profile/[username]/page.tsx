@@ -8,6 +8,7 @@ import { useLeaf } from "@/context/LeafContext";
 import { Calendar, Layers, Heart, BookOpen, UserCheck, UserPlus, Grid, Flame, ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
+import UserAvatar from "@/components/UserAvatar";
 
 export default function ProfilePage({ params }: { params: Promise<{ username: string }> }) {
   const { username } = React.use(params);
@@ -29,6 +30,9 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
   const [userReviews, setUserReviews] = useState<any[]>([]);
   const [favoriteBooks, setFavoriteBooks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [completedCount, setCompletedCount] = useState(0);
+  const [readingCount, setReadingCount] = useState(0);
+  const [wantToReadCount, setWantToReadCount] = useState(0);
 
   useEffect(() => {
     async function loadProfileData() {
@@ -55,6 +59,8 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
               display_name: matchedMock.name,
               avatar_url: matchedMock.avatar,
               bio: matchedMock.bio,
+              email: `${matchedMock.username}@example.com`,
+              created_at: new Date(2026, 0, 1).toISOString(),
             };
             isMock = true;
           } else if (currentUser && username === currentUser.username) {
@@ -64,6 +70,8 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
               display_name: currentUser.name,
               avatar_url: currentUser.avatar,
               bio: currentUser.bio,
+              email: currentUser.email || "guest@example.com",
+              created_at: currentUser.created_at || new Date().toISOString(),
             };
             isMock = true;
           } else {
@@ -105,6 +113,13 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
               book:books(*)
             `)
             .eq("user_id", targetProf.id);
+
+          const dbCompleted = userBooks ? userBooks.filter((ub: any) => ub.status === "finished").length : 0;
+          const dbReading = userBooks ? userBooks.filter((ub: any) => ub.status === "reading").length : 0;
+          const dbWantToRead = userBooks ? userBooks.filter((ub: any) => ub.status === "want_to_read").length : 0;
+          setCompletedCount(dbCompleted);
+          setReadingCount(dbReading);
+          setWantToReadCount(dbWantToRead);
 
           // Fetch reviews
           const { data: dbReviews } = await supabase
@@ -286,20 +301,30 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
             stats = contextStats;
           }
           
+          const mockCompleted = logsToUse.filter((l) => l.status === "Finished").length;
+          const mockReading = logsToUse.filter((l) => l.status === "Currently Reading").length;
+          const mockWantToRead = logsToUse.filter((l) => l.status === "Want to Read").length;
+          setCompletedCount(mockCompleted);
+          setReadingCount(mockReading);
+          setWantToReadCount(mockWantToRead);
+
           followersCount = matchedMockUser?.followersCount || 12;
           followingCount = matchedMockUser?.followingCount || 18;
           isFollowing = matchedMockUser?.isFollowing || false;
         }
 
+        const isDepAvatar = targetProf.avatar_url && targetProf.avatar_url.includes("photo-1534528741775-53994a69daeb");
         setTargetUser({
           id: targetProf.id,
           username: targetProf.username,
           name: targetProf.display_name || "Reader",
-          avatar: targetProf.avatar_url || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80",
+          avatar: isDepAvatar ? "" : (targetProf.avatar_url || ""),
           bio: targetProf.bio || "",
           followersCount,
           followingCount,
           isFollowing,
+          email: targetProf.email || "",
+          joinedAt: targetProf.created_at || targetProf.joined_at || new Date().toISOString(),
         });
 
         setUserStats(stats);
@@ -377,13 +402,7 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
         {/* User Card Layout (Upper Section) */}
         <section className="flex flex-col md:flex-row gap-6 md:gap-10 items-center md:items-start pb-8 border-b border-cream-border/80 mb-10">
           {/* Avatar */}
-          <div className="w-24 h-24 md:w-32 md:h-32 rounded-full border-2 border-cream-border overflow-hidden shadow-md">
-            <img
-              src={targetUser.avatar}
-              alt={targetUser.name}
-              className="w-full h-full object-cover"
-            />
-          </div>
+          <UserAvatar avatarUrl={targetUser.avatar} name={targetUser.name} size="xl" className="shadow-md border-2 border-cream-border" />
 
           {/* Details */}
           <div className="flex-1 text-center md:text-left space-y-4">
@@ -425,6 +444,19 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
               {targetUser.bio}
             </p>
 
+            {/* Email & Joined Date */}
+            <div className="flex flex-wrap justify-center md:justify-start items-center gap-x-4 gap-y-1 text-[10px] text-charcoal-muted font-medium">
+              {isMe && targetUser.email && (
+                <span className="flex items-center gap-1">
+                  <span>✉️</span> <span className="underline decoration-cream-border">{targetUser.email}</span>
+                </span>
+              )}
+              <span className="flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5 text-brand-muted" />
+                <span>Joined {new Date(targetUser.joinedAt).toLocaleDateString("en-US", { month: "long", year: "numeric" })}</span>
+              </span>
+            </div>
+
             {/* Following stats */}
             <div className="flex justify-center md:justify-start gap-8 text-xs font-semibold text-charcoal">
               <div className="flex gap-1.5">
@@ -449,45 +481,54 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
               )}
             </div>
             
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-2">
               <div className="text-center py-1">
-                <p className="text-[9px] font-bold text-charcoal-muted uppercase">Completed</p>
-                <p className="font-serif text-2xl font-bold text-charcoal mt-0.5">{totalBooksRead}</p>
+                <p className="text-[9px] font-bold text-charcoal-muted uppercase leading-tight">Completed</p>
+                <p className="font-serif text-xl font-bold text-charcoal mt-1">{completedCount}</p>
               </div>
               <div className="text-center py-1 border-l border-cream-border/60">
-                <p className="text-[9px] font-bold text-charcoal-muted uppercase">Pages</p>
-                <p className="font-serif text-2xl font-bold text-charcoal mt-0.5">{totalPagesRead}</p>
+                <p className="text-[9px] font-bold text-charcoal-muted uppercase leading-tight">Reading</p>
+                <p className="font-serif text-xl font-bold text-charcoal mt-1">{readingCount}</p>
               </div>
-              
-              {userStats && (
-                <>
-                  <div className="text-center py-1 border-t border-cream-border/60 pt-2.5">
-                    <p className="text-[9px] font-bold text-charcoal-muted uppercase">Streak</p>
-                    <p className="font-serif text-2xl font-bold text-charcoal mt-0.5 flex items-center justify-center gap-1">
-                      {userStats.reading_streak || 0} <Flame className="w-4 h-4 text-brand fill-brand/10 animate-pulse" />
-                    </p>
-                  </div>
-                  <div className="text-center py-1 border-t border-l border-cream-border/60 pt-2.5">
-                    <p className="text-[9px] font-bold text-charcoal-muted uppercase">Top Genre</p>
-                    <p className="font-sans text-xs font-bold text-charcoal mt-1.5 truncate px-1" title={userStats.favorite_genre}>
-                      {userStats.favorite_genre || "Fiction"}
-                    </p>
-                  </div>
-                </>
-              )}
+              <div className="text-center py-1 border-l border-cream-border/60">
+                <p className="text-[9px] font-bold text-charcoal-muted uppercase leading-tight">To Read</p>
+                <p className="font-serif text-xl font-bold text-charcoal mt-1">{wantToReadCount}</p>
+              </div>
             </div>
+
+            <div className="border-t border-cream-border/60 pt-3 flex justify-between items-center text-xs">
+              <span className="text-[9px] font-bold text-charcoal-muted uppercase">Total Pages Read</span>
+              <span className="font-serif font-bold text-charcoal">{totalPagesRead} pages</span>
+            </div>
+              
+            {userStats && (
+              <div className="grid grid-cols-2 gap-4 border-t border-cream-border/60 pt-3">
+                <div className="text-center py-1">
+                  <p className="text-[9px] font-bold text-charcoal-muted uppercase">Streak</p>
+                  <p className="font-serif text-xl font-bold text-charcoal mt-1 flex items-center justify-center gap-1">
+                    {userStats.reading_streak || 0} <Flame className="w-4 h-4 text-brand fill-brand/10 animate-pulse" />
+                  </p>
+                </div>
+                <div className="text-center py-1 border-l border-cream-border/60">
+                  <p className="text-[9px] font-bold text-charcoal-muted uppercase">Top Genre</p>
+                  <p className="font-sans text-xs font-bold text-charcoal mt-2 truncate px-1" title={userStats.favorite_genre}>
+                    {userStats.favorite_genre || "Fiction"}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Reading Goal Progress Bar */}
             {userStats && (
               <div className="space-y-1.5 pt-2 border-t border-cream-border/60">
                 <div className="flex justify-between text-[9px] font-bold text-charcoal-muted uppercase">
                   <span>Yearly Goal</span>
-                  <span>{totalBooksRead} / 12 books</span>
+                  <span>{completedCount} / 12 books</span>
                 </div>
                 <div className="w-full bg-cream-dark h-1.5 rounded-full overflow-hidden">
                   <div
                     className="bg-brand h-full rounded-full transition-all duration-300"
-                    style={{ width: `${Math.min(100, (totalBooksRead / 12) * 100)}%` }}
+                    style={{ width: `${Math.min(100, (completedCount / 12) * 100)}%` }}
                   />
                 </div>
               </div>
