@@ -160,6 +160,37 @@ export async function POST(request: Request) {
     console.log("[DEBUG] [user-books] Current authenticated user ID:", user.id);
 
     const dbClient = getSupabaseClient(serviceRoleKey) || userClient;
+
+    // Ensure profile row exists (critical to avoid foreign key violations in user_books/user_stats)
+    const { data: existingProfile, error: profileCheckError } = await dbClient
+      .from("profiles")
+      .select("id")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (profileCheckError) {
+      console.error("[DEBUG] [user-books] Error checking profile existence:", profileCheckError);
+    }
+
+    if (!existingProfile) {
+      console.log("[DEBUG] [user-books] Profile row missing for user. Creating fallback profile row.");
+      const newProfile = {
+        id: user.id,
+        username: user.user_metadata?.username || user.email?.split("@")[0] || `user_${crypto.randomUUID().slice(0, 8)}`,
+        display_name: user.user_metadata?.display_name || user.user_metadata?.name || "Reader",
+        avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
+        onboarding_completed: false,
+      };
+
+      const { error: profileInsertError } = await dbClient
+        .from("profiles")
+        .insert(newProfile);
+
+      if (profileInsertError) {
+        console.error("[DEBUG] [user-books] Failed to create fallback profile row:", profileInsertError);
+        throw new Error(`Profile creation failed: ${profileInsertError.message}`);
+      }
+    }
     
     // 5. Schema check
     await verifyDatabaseSchema(dbClient);

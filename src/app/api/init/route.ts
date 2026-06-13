@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import crypto from "crypto";
 import { createClient } from "@/utils/supabase/server";
 import { mapDbBookToClientBook } from "@/utils/booksApi";
 
@@ -11,19 +12,73 @@ export async function GET() {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
-    // 1. Fetch User Profile
-    const { data: profile } = await supabase
+    // 1. Fetch or dynamically create User Profile
+    let profile = null;
+    const { data: existingProfile, error: profileError } = await supabase
       .from("profiles")
       .select("*")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
 
-    // 2. Fetch User Stats
-    const { data: stats } = await supabase
+    if (profileError) {
+      console.error("[DEBUG] [init] Error fetching profile:", profileError);
+    }
+
+    if (!existingProfile) {
+      console.log("[DEBUG] [init] Profile not found for authenticated user. Creating fallback profile.");
+      const fallbackProfile = {
+        id: user.id,
+        username: user.user_metadata?.username || user.email?.split("@")[0] || `user_${crypto.randomUUID().slice(0, 8)}`,
+        display_name: user.user_metadata?.display_name || user.user_metadata?.name || "Reader",
+        avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
+        onboarding_completed: false,
+      };
+
+      const { data: insertedProfile, error: insertError } = await supabase
+        .from("profiles")
+        .insert(fallbackProfile)
+        .select()
+        .maybeSingle();
+
+      if (insertError) {
+        console.error("[DEBUG] [init] Failed to insert fallback profile:", insertError);
+      } else {
+        profile = insertedProfile;
+        console.log("[DEBUG] [init] Fallback profile created successfully:", profile);
+      }
+    } else {
+      profile = existingProfile;
+    }
+
+    // 2. Fetch or dynamically create User Stats
+    let stats = null;
+    const { data: existingStats, error: statsError } = await supabase
       .from("user_stats")
       .select("*")
       .eq("user_id", user.id)
-      .single();
+      .maybeSingle();
+
+    if (statsError) {
+      console.error("[DEBUG] [init] Error fetching stats:", statsError);
+    }
+
+    if (!existingStats && profile) {
+      console.log("[DEBUG] [init] Stats row not found for user. Creating default stats row.");
+      const { data: insertedStats, error: insertStatsError } = await supabase
+        .from("user_stats")
+        .insert({ user_id: user.id })
+        .select()
+        .maybeSingle();
+
+      if (insertStatsError) {
+        console.error("[DEBUG] [init] Failed to insert default stats:", insertStatsError);
+      } else {
+        stats = insertedStats;
+        console.log("[DEBUG] [init] Default stats row created successfully:", stats);
+      }
+    } else {
+      stats = existingStats;
+    }
 
     // 3. Fetch User Library (user_books joined with cached books)
     const { data: userBooks } = await supabase
