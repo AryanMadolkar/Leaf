@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { createClient } from "@/utils/supabase/server";
 import { recalculateUserStats } from "@/utils/supabaseStats";
+import { getBookById } from "@/utils/booksApi";
 
 export async function GET(request: Request) {
   try {
@@ -57,27 +58,17 @@ export async function POST(request: Request) {
     const today = new Date().toISOString().split("T")[0];
 
     // 1. Ensure the book is cached in public.books first (critical for foreign key constraints)
-    const { data: cachedBook } = await supabase
-      .from("books")
-      .select("id, page_count")
-      .eq("id", bookId)
-      .maybeSingle();
-
-    if (!cachedBook && title) {
-      // Insert new cache record
-      await supabase
-        .from("books")
-        .insert({
-          id: bookId,
-          title: title,
-          author_name: author || null,
-          cover_url: coverImage || null,
-          page_count: 300,
-          subjects: JSON.stringify(["Fiction"]),
-        });
+    let totalPages = 300;
+    try {
+      const book = await getBookById(bookId);
+      if (!book) {
+        return NextResponse.json({ success: false, error: "Book not found or could not be cached" }, { status: 404 });
+      }
+      totalPages = book.pages || 300;
+    } catch (err: any) {
+      console.error(`Error resolving book details for shelving:`, err);
+      return NextResponse.json({ success: false, error: "Database integration error caching book details" }, { status: 500 });
     }
-
-    const totalPages = cachedBook?.page_count || 300;
 
     // 2. Check if user_book record already exists
     const { data: existingUserBook } = await supabase
