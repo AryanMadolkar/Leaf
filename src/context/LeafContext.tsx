@@ -64,8 +64,9 @@ const isDeprecatedAvatar = (url: string | null | undefined): boolean => {
 
 const LeafContext = createContext<LeafContextType | undefined>(undefined);
 
+const supabase = createClient();
+
 export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const supabase = createClient();
   const [books, setBooks] = useState<Book[]>(INITIAL_BOOKS);
   const [users, setUsers] = useState<User[]>(INITIAL_USERS);
   const [reviews, setReviews] = useState<Review[]>(INITIAL_REVIEWS);

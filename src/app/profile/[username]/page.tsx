@@ -10,6 +10,8 @@ import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
 import UserAvatar from "@/components/UserAvatar";
 
+const supabase = createClient();
+
 export default function ProfilePage({ params }: { params: Promise<{ username: string }> }) {
   const { username } = React.use(params);
   const {
@@ -21,8 +23,6 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
     books,
     userStats: contextStats,
   } = useLeaf();
-
-  const supabase = createClient();
   const [activeTab, setActiveTab] = useState<"activity" | "diary" | "lists" | "likes">("activity");
   const [targetUser, setTargetUser] = useState<any | null>(null);
   const [userStats, setUserStats] = useState<any | null>(null);
@@ -227,7 +227,7 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
         } else {
           // Handle mock profile calculations locally
           const { INITIAL_DIARY_LOGS, INITIAL_REVIEWS, INITIAL_BOOKS } = await import("@/data/mockData");
-          const isMe = targetProf.id === currentUser.id;
+          const isMe = currentUser ? targetProf.id === currentUser.id : false;
           
           let logsToUse = [];
           let reviewsToUse = [];
@@ -339,7 +339,7 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
     }
 
     loadProfileData();
-  }, [username, currentUser, supabase, diaryLogs, reviews, userStats, books]);
+  }, [username, currentUser, diaryLogs, reviews, contextStats, books]);
 
   if (loading) {
     return (
