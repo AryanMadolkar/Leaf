@@ -10,11 +10,14 @@ CREATE TABLE IF NOT EXISTS public.books (
   isbn_10 TEXT,
   isbn_13 TEXT,
   title TEXT NOT NULL,
+  subtitle TEXT,
+  description TEXT,
   author_name TEXT,
   cover_url TEXT,
   page_count INTEGER DEFAULT 0,
   subjects TEXT,
   first_publish_year INTEGER,
+  language TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
