@@ -14,14 +14,47 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, error: "Missing target userId" }, { status: 400 });
     }
 
-    // 1. Fetch main user stats row
-    const { data: stats, error: statsError } = await supabase
+    // 1. Fetch main user stats row (with self-healing fallback)
+    let stats = null;
+    const { data: existingStats, error: statsError } = await supabase
       .from("user_stats")
       .select("*")
       .eq("user_id", targetUserId)
       .maybeSingle();
 
-    if (statsError || !stats) {
+    if (statsError) {
+      console.error("[DEBUG] [stats] Error fetching user_stats:", statsError);
+    }
+
+    if (!existingStats) {
+      console.log("[DEBUG] [stats] Stats row not found for user:", targetUserId, ". Creating fallback stats.");
+      // Check if user has a profile first (to respect foreign key)
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("id", targetUserId)
+        .maybeSingle();
+
+      if (profile) {
+        const { data: insertedStats, error: insertStatsError } = await supabase
+          .from("user_stats")
+          .insert({ user_id: targetUserId })
+          .select()
+          .maybeSingle();
+
+        if (!insertStatsError) {
+          stats = insertedStats;
+        } else {
+          console.error("[DEBUG] [stats] Failed to insert stats fallback:", insertStatsError);
+        }
+      } else {
+        console.warn("[DEBUG] [stats] Cannot create stats because profile row is missing.");
+      }
+    } else {
+      stats = existingStats;
+    }
+
+    if (!stats) {
       return NextResponse.json({ success: true, stats: null });
     }
 
