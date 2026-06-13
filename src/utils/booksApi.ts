@@ -19,6 +19,15 @@ export interface NormalizedBook {
   subjects?: string[] | null;
 }
 
+export function getCanonicalBookId(book: { open_library_key?: string | null; isbn_13?: string | null; isbn_10?: string | null }): string {
+  const workKey = book.open_library_key ? book.open_library_key.replace(/^\/works\//, "") : null;
+  const canonicalId = workKey || book.isbn_13 || book.isbn_10;
+  if (!canonicalId) {
+    return crypto.randomUUID();
+  }
+  return canonicalId;
+}
+
 // Map database record + ratings to client Book structure
 export function mapDbBookToClientBook(dbBook: any, avgRating?: number): Book {
   let averageRating = avgRating;
@@ -49,8 +58,14 @@ export function mapDbBookToClientBook(dbBook: any, avgRating?: number): Book {
     }
   }
 
+  const canonicalId = getCanonicalBookId({
+    open_library_key: dbBook.open_library_key,
+    isbn_13: dbBook.isbn_13,
+    isbn_10: dbBook.isbn_10,
+  }) || dbBook.id;
+
   return {
-    id: dbBook.id,
+    id: canonicalId,
     title: dbBook.title,
     author: dbBook.author_name || "Unknown Author",
     year: dbBook.first_publish_year || 2000,
@@ -99,7 +114,7 @@ export async function saveBookToDatabase(book: Omit<NormalizedBook, "id">): Prom
   const supabase = await createClient();
   
   // Decide the ID to use: prefer open_library_key or ISBN, otherwise generate a UUID
-  const bookId = book.open_library_key || book.isbn_13 || book.isbn_10 || crypto.randomUUID();
+  const bookId = getCanonicalBookId(book);
 
   try {
     // Check if book already exists in DB
@@ -211,27 +226,43 @@ export async function searchLocalBooks(query: string): Promise<Book[]> {
 
 // Fetch and Cache Book by Open Library Key
 export async function getBookByOpenLibraryKey(key: string): Promise<Book | null> {
+  console.log(`[getBookByOpenLibraryKey] Invoked with key: "${key}"`);
   const cached = await getCachedBook(key);
-  if (cached) return cached;
+  if (cached) {
+    console.log(`[getBookByOpenLibraryKey] Cache HIT for key: "${key}"`);
+    return cached;
+  }
 
   const cleanKey = key.startsWith("/works/") ? key : `/works/${key}`;
+  const fetchUrl = `https://openlibrary.org${cleanKey}.json`;
+  console.log(`[getBookByOpenLibraryKey] Cache MISS. Fetching Open Library URL: "${fetchUrl}"`);
 
   try {
-    const res = await fetch(`https://openlibrary.org${cleanKey}.json`);
-    if (!res.ok) return null;
+    const res = await fetch(fetchUrl);
+    console.log(`[getBookByOpenLibraryKey] Fetch response status: ${res.status} ${res.statusText}`);
+    if (!res.ok) {
+      console.error(`[getBookByOpenLibraryKey] Fetch failed. Status: ${res.status}`);
+      return null;
+    }
 
     const data = await res.json();
     const title = data.title;
-    if (!title) return null;
+    console.log(`[getBookByOpenLibraryKey] Parse JSON success. Title: "${title}"`);
+    if (!title) {
+      console.warn(`[getBookByOpenLibraryKey] Title is empty in API payload`);
+      return null;
+    }
 
     // Fetch author details if available
     let authorName = "Unknown Author";
     let authorKey = null;
     if (data.authors?.[0]?.author?.key) {
       authorKey = data.authors[0].author.key;
+      console.log(`[getBookByOpenLibraryKey] Found author key: "${authorKey}". Fetching author details...`);
       const authorDetails = await getOrFetchAuthor(authorKey);
       if (authorDetails) {
         authorName = authorDetails.name;
+        console.log(`[getBookByOpenLibraryKey] Resolved author name: "${authorName}"`);
       }
     }
 
@@ -250,6 +281,7 @@ export async function getBookByOpenLibraryKey(key: string): Promise<Book | null>
 
     const subjects = data.subjects || [];
 
+    console.log(`[getBookByOpenLibraryKey] Saving book to database...`);
     // Save in DB
     const id = await saveBookToDatabase({
       open_library_key: cleanKey,
@@ -260,8 +292,29 @@ export async function getBookByOpenLibraryKey(key: string): Promise<Book | null>
       first_publish_year: firstPublishYear,
       subjects,
     });
+    console.log(`[getBookByOpenLibraryKey] Book saved in database with ID: "${id}". Fetching cached record...`);
 
-    return await getCachedBook(id);
+    const cachedRecord = await getCachedBook(id);
+    if (cachedRecord) {
+      console.log(`[getBookByOpenLibraryKey] Successfully loaded cached record for ID: "${id}"`);
+      return cachedRecord;
+    }
+
+    console.warn(`[getBookByOpenLibraryKey] Failed to retrieve cached record for ID: "${id}". Storing in-memory fallback.`);
+    return mapDbBookToClientBook({
+      id,
+      open_library_key: cleanKey,
+      title,
+      description,
+      author_name: authorName,
+      author_key: authorKey,
+      first_publish_year: firstPublishYear,
+      subjects,
+      page_count: data.number_of_pages || data.number_of_pages_median || 300,
+      cover_url: data.covers?.[0]
+        ? `https://covers.openlibrary.org/b/id/${data.covers[0]}-L.jpg`
+        : `https://covers.openlibrary.org/b/isbn/${id}-L.jpg`,
+    });
   } catch (err) {
     console.error(`Error fetching work details for ${cleanKey}:`, err);
     return null;
@@ -359,7 +412,28 @@ export async function getBookByISBN(isbn: string): Promise<Book | null> {
       subjects,
     });
 
-    return await getCachedBook(id);
+    const cachedRecord = await getCachedBook(id);
+    if (cachedRecord) {
+      return cachedRecord;
+    }
+
+    console.warn(`[getBookByISBN] Failed to retrieve cached record for ID: "${id}". Storing in-memory fallback.`);
+    return mapDbBookToClientBook({
+      id,
+      open_library_key: workKey,
+      isbn_10,
+      isbn_13,
+      title,
+      subtitle: data.subtitle,
+      description,
+      author_name: authorName,
+      author_key: authorKey,
+      first_publish_year: publishYear,
+      page_count: pageCount || 300,
+      language,
+      cover_url: coverUrl,
+      subjects,
+    });
   } catch (err) {
     console.error(`Error fetching edition details for ISBN ${isbn}:`, err);
     return null;
@@ -455,4 +529,61 @@ export async function searchOpenLibrary(query: string): Promise<Book[]> {
     console.error("Open Library search API error:", error);
     return localResults;
   }
+}
+
+// --- Server-side Helpers ---
+
+export async function getBookFromCache(id: string): Promise<Book | null> {
+  console.log(`[getBookFromCache] Checking cache for book ID: "${id}"`);
+  const book = await getCachedBook(id);
+  if (book) {
+    console.log(`[getBookFromCache] Cache HIT for book ID: "${id}"`);
+  } else {
+    console.log(`[getBookFromCache] Cache MISS for book ID: "${id}"`);
+  }
+  return book;
+}
+
+export async function fetchBookFromOpenLibrary(id: string): Promise<Book | null> {
+  console.log(`[fetchBookFromOpenLibrary] Fetching book ID from Open Library: "${id}"`);
+  const isIsbn = /^\d+$/.test(id) && (id.length === 10 || id.length === 13);
+  
+  try {
+    if (isIsbn) {
+      console.log(`[fetchBookFromOpenLibrary] Fetching by ISBN: "${id}"`);
+      return await getBookByISBN(id);
+    } else {
+      console.log(`[fetchBookFromOpenLibrary] Fetching by Open Library Work Key: "${id}"`);
+      // Strip /works/ if present to get clean work key
+      const cleanKey = id.replace(/^\/works\//, "");
+      return await getBookByOpenLibraryKey(cleanKey);
+    }
+  } catch (error) {
+    console.error(`[fetchBookFromOpenLibrary] API failure fetching book ID "${id}":`, error);
+    return null;
+  }
+}
+
+export async function getBookById(id: string): Promise<Book | null> {
+  console.log(`[getBookById] Initializing load for book ID: "${id}"`);
+  if (!id) {
+    console.error("[getBookById] Routing failure: Received empty or undefined book ID");
+    return null;
+  }
+
+  // 1. Try Cache
+  const cached = await getBookFromCache(id);
+  if (cached) {
+    return cached;
+  }
+
+  // 2. Fetch & Cache
+  const fetched = await fetchBookFromOpenLibrary(id);
+  if (fetched) {
+    console.log(`[getBookById] Successfully retrieved and cached book ID: "${id}" from Open Library`);
+    return fetched;
+  }
+
+  console.warn(`[getBookById] Book detail resolution failed for ID: "${id}"`);
+  return null;
 }

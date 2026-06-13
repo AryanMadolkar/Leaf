@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { mapDbBookToClientBook } from "@/utils/booksApi";
 
 export async function GET() {
   try {
@@ -64,17 +65,7 @@ export async function GET() {
       .from("books")
       .select("*");
 
-    const books = dbBooks ? dbBooks.map((b: any) => ({
-      id: b.id,
-      title: b.title,
-      author: b.author_name || "Unknown",
-      year: b.first_publish_year || 0,
-      description: b.description || "",
-      coverImage: b.cover_url || "",
-      averageRating: 0.0, // Calculated dynamically in layout helper if needed
-      genres: b.subjects ? JSON.parse(b.subjects) : [],
-      pages: b.page_count || 0,
-    })) : [];
+    const books = dbBooks ? dbBooks.map((b: any) => mapDbBookToClientBook(b)) : [];
 
     // 4. Fetch Community Reviews (join profiles & books)
     const { data: dbReviews } = await supabase
