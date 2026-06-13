@@ -128,7 +128,7 @@ export async function saveBookToDatabase(book: Omit<NormalizedBook, "id">): Prom
 
     if (existing) {
       // Update metadata to refresh
-      await supabase
+      const { error } = await supabase
         .from("books")
         .update({
           open_library_key: book.open_library_key || null,
@@ -143,10 +143,11 @@ export async function saveBookToDatabase(book: Omit<NormalizedBook, "id">): Prom
         })
         .eq("id", existing.id);
 
+      if (error) throw error;
       return existing.id;
     } else {
       // Insert new book
-      await supabase
+      const { error } = await supabase
         .from("books")
         .insert({
           id: bookId,
@@ -161,6 +162,7 @@ export async function saveBookToDatabase(book: Omit<NormalizedBook, "id">): Prom
           first_publish_year: book.first_publish_year || null,
         });
 
+      if (error) throw error;
       return bookId;
     }
   } catch (error) {

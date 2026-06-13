@@ -1,50 +1,144 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { createClient } from "@/utils/supabase/server";
+import { createServerClient } from "@supabase/ssr";
 import { recalculateUserStats } from "@/utils/supabaseStats";
 import { getBookById } from "@/utils/booksApi";
 
+// 1. Environment verification helper
+function verifyEnv() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url) {
+    throw new Error("Missing environment variable: NEXT_PUBLIC_SUPABASE_URL");
+  }
+  if (!anonKey) {
+    throw new Error("Missing environment variable: NEXT_PUBLIC_SUPABASE_ANON_KEY / NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY");
+  }
+
+  return { url, anonKey, serviceRoleKey };
+}
+
+// 2. Supabase Client helper based on Service Role key availability
+function getSupabaseClient(serviceRoleKey?: string) {
+  const { url, anonKey } = verifyEnv();
+  
+  if (serviceRoleKey) {
+    console.log("[DEBUG] [user-books] Initializing database client using Service Role Key (Admin Access).");
+    return createServerClient(
+      url,
+      serviceRoleKey,
+      {
+        cookies: {
+          getAll() { return []; },
+          setAll() {}
+        }
+      }
+    );
+  }
+  console.log("[DEBUG] [user-books] Initializing database client using Anon/Publishable Key (User Access).");
+  return null;
+}
+
+// 3. Database Schema verification helper
+async function verifyDatabaseSchema(supabaseClient: any) {
+  // Check books table
+  const { error: booksError } = await supabaseClient
+    .from("books")
+    .select("id, title, page_count")
+    .limit(1);
+
+  if (booksError) {
+    console.error("[DEBUG] [user-books] Table validation check failed for 'books':", booksError);
+    throw new Error(`Table 'books' validation failed: ${booksError.message} (Code: ${booksError.code})`);
+  }
+
+  // Check user_books table
+  const { error: userBooksError } = await supabaseClient
+    .from("user_books")
+    .select("id, user_id, book_id, status, rating, review, started_at, finished_at, created_at")
+    .limit(1);
+
+  if (userBooksError) {
+    console.error("[DEBUG] [user-books] Table validation check failed for 'user_books':", userBooksError);
+    throw new Error(`Table 'user_books' validation failed: ${userBooksError.message} (Code: ${userBooksError.code})`);
+  }
+
+  console.log("[DEBUG] [user-books] Schema check passed: 'books' and 'user_books' tables are present.");
+}
+
 export async function GET(request: Request) {
   try {
-    const supabase = await createClient();
+    console.log("[DEBUG] [user-books] Incoming GET request.");
+    const { url: envUrl, anonKey: envAnonKey, serviceRoleKey } = verifyEnv();
+    console.log("[DEBUG] [user-books] Env verification passed. URL:", envUrl, "Anon Key Length:", envAnonKey.length);
+
+    const userClient = await createClient();
     const { searchParams } = new URL(request.url);
     
     // Default to active user session, fallback to searchParam if querying another profile
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user }, error: authError } = await userClient.auth.getUser();
+    if (authError) {
+      console.warn("[DEBUG] [user-books] Session auth error:", authError);
+    }
     const targetUserId = searchParams.get("userId") || user?.id;
 
     if (!targetUserId) {
+      console.warn("[DEBUG] [user-books] Missing target userId parameter or session.");
       return NextResponse.json({ success: false, error: "Missing target userId" }, { status: 400 });
     }
 
-    const { data: rows, error } = await supabase
+    const dbClient = getSupabaseClient(serviceRoleKey) || userClient;
+    await verifyDatabaseSchema(dbClient);
+
+    const { data: rows, error: selectError } = await dbClient
       .from("user_books")
       .select("*")
       .eq("user_id", targetUserId);
 
-    if (error) throw error;
+    if (selectError) {
+      console.error("[DEBUG] [user-books] Error querying user_books:", selectError);
+      throw selectError;
+    }
     
+    console.log(`[DEBUG] [user-books] GET returning ${rows ? rows.length : 0} logs.`);
     return NextResponse.json({ success: true, logs: rows });
   } catch (error: any) {
-    console.error("Fetch user-books API error:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    console.error("[DEBUG] [user-books] GET API error:", error);
+    console.error(error.stack);
+    return NextResponse.json({ success: false, error: error.message || "Internal Server Error" }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    console.log("[DEBUG] [user-books] Incoming POST request.");
+    
+    // 1. Verify Env
+    const { url: envUrl, anonKey: envAnonKey, serviceRoleKey } = verifyEnv();
+    console.log("[DEBUG] [user-books] Env check: URL is set, Anon Key Length:", envAnonKey.length, "Service Role Key present:", !!serviceRoleKey);
 
-    if (authError || !user) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    // 2. Parse body
+    const body = await request.json();
+    console.log("[DEBUG] [user-books] Incoming request body:", body);
+
+    const { bookId, status, rating, review } = body;
+
+    // 3. Payload validation
+    if (!bookId || !status) {
+      console.warn("[DEBUG] [user-books] Validation failed: Missing bookId or status");
+      return NextResponse.json({ success: false, error: "Validation Error: Missing required fields 'bookId' or 'status'." }, { status: 400 });
     }
 
-    const body = await request.json();
-    const { bookId, status, rating, review, title, author, coverImage } = body;
-
-    if (!bookId || !status) {
-      return NextResponse.json({ success: false, error: "Missing required fields" }, { status: 400 });
+    const validStatuses = ["Want to Read", "Currently Reading", "Finished", "want_to_read", "reading", "finished"];
+    if (!validStatuses.includes(status)) {
+      console.warn("[DEBUG] [user-books] Validation failed: Invalid status value:", status);
+      return NextResponse.json({ 
+        success: false, 
+        error: `Validation Error: Invalid status value '${status}'. Must be one of: ${validStatuses.join(", ")}` 
+      }, { status: 400 });
     }
 
     const mappedStatus = status === "Want to Read" 
@@ -55,28 +149,55 @@ export async function POST(request: Request) {
       ? "finished"
       : status; // check if already formatted
 
+    // 4. Authenticate User
+    const userClient = await createClient();
+    const { data: { user }, error: authError } = await userClient.auth.getUser();
+
+    if (authError || !user) {
+      console.error("[DEBUG] [user-books] User authentication check failed:", authError);
+      return NextResponse.json({ success: false, error: "Unauthorized: Invalid or missing session." }, { status: 401 });
+    }
+    console.log("[DEBUG] [user-books] Current authenticated user ID:", user.id);
+
+    const dbClient = getSupabaseClient(serviceRoleKey) || userClient;
+    
+    // 5. Schema check
+    await verifyDatabaseSchema(dbClient);
+
     const today = new Date().toISOString().split("T")[0];
 
-    // 1. Ensure the book is cached in public.books first (critical for foreign key constraints)
+    // 6. Resolve / Cache book
     let totalPages = 300;
     try {
+      console.log("[DEBUG] [user-books] Resolving book metadata for bookId:", bookId);
       const book = await getBookById(bookId);
       if (!book) {
+        console.error("[DEBUG] [user-books] Book details not resolved by getBookById.");
         return NextResponse.json({ success: false, error: "Book not found or could not be cached" }, { status: 404 });
       }
       totalPages = book.pages || 300;
+      console.log(`[DEBUG] [user-books] Resolved book: "${book.title}", page count: ${totalPages}`);
     } catch (err: any) {
-      console.error(`Error resolving book details for shelving:`, err);
-      return NextResponse.json({ success: false, error: "Database integration error caching book details" }, { status: 500 });
+      console.error(`[DEBUG] [user-books] Error caching/resolving book detail:`, err);
+      console.error(err.stack);
+      return NextResponse.json({ success: false, error: `Database integration error caching book details: ${err.message}` }, { status: 500 });
     }
 
-    // 2. Check if user_book record already exists
-    const { data: existingUserBook } = await supabase
+    // 7. Check if user_book record already exists
+    console.log("[DEBUG] [user-books] Querying existing user_book record...");
+    const { data: existingUserBook, error: fetchError } = await dbClient
       .from("user_books")
       .select("id, started_at, finished_at, current_page")
       .eq("user_id", user.id)
       .eq("book_id", bookId)
       .maybeSingle();
+
+    if (fetchError) {
+      console.error("[DEBUG] [user-books] Error looking up existing user_book:", fetchError);
+      throw fetchError;
+    }
+
+    let dbResponse: any = null;
 
     if (existingUserBook) {
       // Update existing
@@ -96,12 +217,16 @@ export async function POST(request: Request) {
         updatePayload.current_page = 0;
       }
 
-      const { error } = await supabase
+      console.log("[DEBUG] [user-books] Database update payload:", updatePayload);
+      const res = await dbClient
         .from("user_books")
         .update(updatePayload)
-        .eq("id", existingUserBook.id);
+        .eq("id", existingUserBook.id)
+        .select();
 
-      if (error) throw error;
+      dbResponse = res;
+      console.log("[DEBUG] [user-books] Database update response:", dbResponse);
+      if (res.error) throw res.error;
     } else {
       // Insert new
       const insertPayload: any = {
@@ -117,50 +242,70 @@ export async function POST(request: Request) {
         current_page: mappedStatus === "finished" ? totalPages : 0,
       };
 
-      const { error } = await supabase
+      console.log("[DEBUG] [user-books] Database insert payload:", insertPayload);
+      const res = await dbClient
         .from("user_books")
-        .insert(insertPayload);
+        .insert(insertPayload)
+        .select();
 
-      if (error) throw error;
+      dbResponse = res;
+      console.log("[DEBUG] [user-books] Database insert response:", dbResponse);
+      if (res.error) throw res.error;
     }
 
-    // 3. Upsert into public reviews feed table if review is provided
+    // 8. Upsert into public reviews feed table if review is provided
     if (mappedStatus === "finished" && review !== undefined && review !== null && review !== "") {
-      const { data: existingReview } = await supabase
+      console.log("[DEBUG] [user-books] Review text is provided, upserting review feed record.");
+      const { data: existingReview, error: reviewFetchError } = await dbClient
         .from("reviews")
         .select("id")
         .eq("user_id", user.id)
         .eq("book_id", bookId)
         .maybeSingle();
 
+      if (reviewFetchError) {
+        console.error("[DEBUG] [user-books] Error checking existing review:", reviewFetchError);
+        throw reviewFetchError;
+      }
+
       if (existingReview) {
-        await supabase
+        const payload = {
+          rating: rating !== undefined ? rating : 5,
+          review_text: review,
+          created_at: new Date().toISOString(),
+        };
+        console.log("[DEBUG] [user-books] Updating existing review payload:", payload);
+        const res = await dbClient
           .from("reviews")
-          .update({
-            rating: rating !== undefined ? rating : 5,
-            review_text: review,
-            created_at: new Date().toISOString(),
-          })
-          .eq("id", existingReview.id);
+          .update(payload)
+          .eq("id", existingReview.id)
+          .select();
+        console.log("[DEBUG] [user-books] Review update response:", res);
+        if (res.error) throw res.error;
       } else {
-        await supabase
+        const payload = {
+          user_id: user.id,
+          book_id: bookId,
+          rating: rating !== undefined ? rating : 5,
+          review_text: review,
+          created_at: new Date().toISOString(),
+        };
+        console.log("[DEBUG] [user-books] Inserting new review payload:", payload);
+        const res = await dbClient
           .from("reviews")
-          .insert({
-            user_id: user.id,
-            book_id: bookId,
-            rating: rating !== undefined ? rating : 5,
-            review_text: review,
-            created_at: new Date().toISOString(),
-          });
+          .insert(payload)
+          .select();
+        console.log("[DEBUG] [user-books] Review insert response:", res);
+        if (res.error) throw res.error;
       }
     }
 
-    // 4. Recalculate stats dynamically in PostgreSQL
-    await recalculateUserStats(supabase, user.id);
+    // 9. Recalculate stats dynamically in PostgreSQL
+    console.log("[DEBUG] [user-books] Recalculating stats for user ID:", user.id);
+    await recalculateUserStats(dbClient, user.id);
 
-    // 5. Gather and return updated payload for context sync
-    // Fetch all user books
-    const { data: userBooks } = await supabase
+    // 10. Fetch updated user books
+    const { data: userBooks, error: fetchUserBooksError } = await dbClient
       .from("user_books")
       .select(`
         id,
@@ -174,6 +319,11 @@ export async function POST(request: Request) {
         book:books(*)
       `)
       .eq("user_id", user.id);
+
+    if (fetchUserBooksError) {
+      console.error("[DEBUG] [user-books] Error loading updated user library:", fetchUserBooksError);
+      throw fetchUserBooksError;
+    }
 
     const diaryLogs = userBooks ? userBooks.map((ub: any) => {
       let clientStatus: "Want to Read" | "Currently Reading" | "Finished" = "Finished";
@@ -194,8 +344,8 @@ export async function POST(request: Request) {
       };
     }) : [];
 
-    // Fetch Community Reviews (join profiles & books)
-    const { data: dbReviews } = await supabase
+    // Fetch Community Reviews
+    const { data: dbReviews, error: reviewsErr } = await dbClient
       .from("reviews")
       .select(`
         id,
@@ -210,6 +360,10 @@ export async function POST(request: Request) {
       `)
       .order("created_at", { ascending: false })
       .limit(20);
+
+    if (reviewsErr) {
+      console.warn("[DEBUG] [user-books] Warning querying community reviews feed:", reviewsErr);
+    }
 
     const reviews = dbReviews ? dbReviews.map((r: any) => {
       const dateObj = new Date(r.created_at);
@@ -229,7 +383,6 @@ export async function POST(request: Request) {
         likesCount: r.likes_count || 0,
         commentsCount: 0,
         isLiked: false,
-        
         reviewerName: r.profile?.display_name || "Reader",
         reviewerAvatar: r.profile?.avatar_url || "",
         reviewerUsername: r.profile?.username || "reader",
@@ -240,7 +393,7 @@ export async function POST(request: Request) {
     }) : [];
 
     // Fetch User Reading Sessions
-    const { data: dbSessions } = await supabase
+    const { data: dbSessions, error: sessionsErr } = await dbClient
       .from("reading_sessions")
       .select(`
         *,
@@ -248,6 +401,10 @@ export async function POST(request: Request) {
       `)
       .eq("user_id", user.id)
       .order("logged_at", { ascending: false });
+
+    if (sessionsErr) {
+      console.warn("[DEBUG] [user-books] Warning querying reading sessions:", sessionsErr);
+    }
 
     const sessions = dbSessions ? dbSessions.map((s: any) => ({
       id: s.id,
@@ -265,12 +422,17 @@ export async function POST(request: Request) {
     })) : [];
 
     // Fetch stats
-    const { data: statsRow } = await supabase
+    const { data: statsRow, error: statsErr } = await dbClient
       .from("user_stats")
       .select("*")
       .eq("user_id", user.id)
       .single();
 
+    if (statsErr) {
+      console.warn("[DEBUG] [user-books] Warning querying user stats:", statsErr);
+    }
+
+    console.log("[DEBUG] [user-books] POST completed successfully.");
     return NextResponse.json({
       success: true,
       diaryLogs,
@@ -279,17 +441,22 @@ export async function POST(request: Request) {
       stats: statsRow || null,
     });
   } catch (error: any) {
-    console.error("Save user-book API error:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    console.error("[DEBUG] [user-books] POST API error details:");
+    console.error(error);
+    console.error(error.stack);
+    return NextResponse.json({ success: false, error: error.message || "Internal Server Error" }, { status: 500 });
   }
 }
 
 export async function PUT(request: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    console.log("[DEBUG] [user-books] Incoming PUT request.");
+    const { serviceRoleKey } = verifyEnv();
+    const userClient = await createClient();
+    const { data: { user }, error: authError } = await userClient.auth.getUser();
 
     if (authError || !user) {
+      console.error("[DEBUG] [user-books] User authentication check failed:", authError);
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
@@ -297,41 +464,52 @@ export async function PUT(request: Request) {
     const followId = searchParams.get("followId");
 
     if (!followId) {
+      console.warn("[DEBUG] [user-books] Missing followId parameter.");
       return NextResponse.json({ success: false, error: "Missing followId" }, { status: 400 });
     }
 
+    const dbClient = getSupabaseClient(serviceRoleKey) || userClient;
+
     // Check if relationship already exists
-    const { data: existingFollow } = await supabase
+    const { data: existingFollow, error: followFetchError } = await dbClient
       .from("follows")
       .select("*")
       .eq("follower_id", user.id)
       .eq("following_id", followId)
       .maybeSingle();
 
+    if (followFetchError) {
+      console.error("[DEBUG] [user-books] Error looking up follow relationship:", followFetchError);
+      throw followFetchError;
+    }
+
     if (existingFollow) {
       // Unfollow
-      const { error } = await supabase
+      console.log("[DEBUG] [user-books] Deleting follow relationship:", user.id, "unfollowing", followId);
+      const { error: deleteError } = await dbClient
         .from("follows")
         .delete()
         .eq("follower_id", user.id)
         .eq("following_id", followId);
       
-      if (error) throw error;
+      if (deleteError) throw deleteError;
       return NextResponse.json({ success: true, followed: false });
     } else {
       // Follow
-      const { error } = await supabase
+      console.log("[DEBUG] [user-books] Creating follow relationship:", user.id, "following", followId);
+      const { error: insertError } = await dbClient
         .from("follows")
         .insert({
           follower_id: user.id,
           following_id: followId,
         });
 
-      if (error) throw error;
+      if (insertError) throw insertError;
       return NextResponse.json({ success: true, followed: true });
     }
   } catch (error: any) {
-    console.error("Follow/unfollow API error:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    console.error("[DEBUG] [user-books] PUT API error:", error);
+    console.error(error.stack);
+    return NextResponse.json({ success: false, error: error.message || "Internal Server Error" }, { status: 500 });
   }
 }
