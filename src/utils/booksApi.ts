@@ -448,7 +448,7 @@ export async function searchOpenLibrary(query: string): Promise<Book[]> {
 
   // 1. Search local DB first
   const localResults = await searchLocalBooks(query);
-  if (localResults.length >= 6) {
+  if (localResults.length > 0) {
     return localResults;
   }
 
