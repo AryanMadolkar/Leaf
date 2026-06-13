@@ -1,194 +1,548 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import BookCard from "@/components/BookCard";
 import { useLeaf } from "@/context/LeafContext";
-import { Search, Sparkles, BookOpen, Star, Compass } from "lucide-react";
+import { Book } from "@/data/mockData";
+import { 
+  Search, Sparkles, BookOpen, Star, Award, Compass, 
+  ChevronRight, ArrowRight, Loader2, Library, Check, Plus, MessageSquare, History
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+
+// Curated iconic books list for the Hero rotation
+const FEATURED_HERO_IDS = [
+  "OL24219356M", // The Secret History
+  "OL24218335M", // Dune
+  "OL24220023M", // 1984
+  "OL27483M",     // The Fellowship of the Ring
+  "OL24219411M", // The Great Gatsby
+  "OL26317316M"  // Harry Potter and the Sorcerer's Stone
+];
 
 export default function DiscoverPage() {
-  const { books } = useLeaf();
-  const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
-  const [localSearch, setLocalSearch] = useState("");
+  const router = useRouter();
+  const { books, diaryLogs, logBook, session } = useLeaf();
 
-  // Get all unique genres from book list
-  const allGenres = Array.from(new Set(books.flatMap((b) => b.genres)));
+  // Search state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Book[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchDebounce, setSearchDebounce] = useState("");
 
-  // Filter books by genre and search query
-  const filteredBooks = books.filter((book) => {
-    const matchesGenre = selectedGenre ? book.genres.includes(selectedGenre) : true;
-    const matchesSearch = localSearch
-      ? book.title.toLowerCase().includes(localSearch.toLowerCase()) ||
-        book.author.toLowerCase().includes(localSearch.toLowerCase()) ||
-        book.description.toLowerCase().includes(localSearch.toLowerCase())
-      : true;
-    return matchesGenre && matchesSearch;
-  });
+  // Hero featured book
+  const [heroBook, setHeroBook] = useState<Book | null>(null);
 
-  // Editorial Categorization
-  const trendingBooks = [...books].sort((a, b) => b.averageRating - a.averageRating).slice(0, 3);
-  const hiddenGems = books.filter((b) => b.averageRating > 4.0 && b.year < 2000).slice(0, 2);
+  // Quick Action Shelf Drawer/Log Modal state
+  const [logModalBook, setLogModalBook] = useState<Book | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState<"Want to Read" | "Currently Reading" | "Finished">("Want to Read");
+  const [selectedRating, setSelectedRating] = useState<number>(0);
+  const [logReview, setLogReview] = useState("");
+  const [isLogging, setIsLogging] = useState(false);
+
+  // Debounce search input
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setSearchDebounce(searchQuery);
+    }, 350);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
+
+  // Execute Search
+  useEffect(() => {
+    async function performSearch() {
+      if (!searchDebounce || searchDebounce.trim().length < 2) {
+        setSearchResults([]);
+        return;
+      }
+      setSearchLoading(true);
+      try {
+        const res = await fetch(`/api/books/search?q=${encodeURIComponent(searchDebounce)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) {
+            setSearchResults(data.books || []);
+          }
+        }
+      } catch (err) {
+        console.error("Discover search error:", err);
+      } finally {
+        setSearchLoading(false);
+      }
+    }
+    performSearch();
+  }, [searchDebounce]);
+
+  // Set Hero Featured Book (stable based on day of year, or random fallback)
+  useEffect(() => {
+    if (books.length === 0) return;
+
+    // Pick featured ID
+    const dayOfYear = Math.floor((new Date().getTime() - new Date(new Date().getFullYear(), 0, 1).getTime()) / 86400000);
+    const heroId = FEATURED_HERO_IDS[dayOfYear % FEATURED_HERO_IDS.length];
+    
+    // Attempt local match
+    let found = books.find((b) => b.id === heroId || b.id.includes(heroId));
+    if (!found) {
+      // Fallback: search by title keyword or take the first book with rating >= 4.5
+      found = books.find((b) => b.averageRating >= 4.4) || books[0];
+    }
+    setHeroBook(found || null);
+  }, [books]);
+
+  // Curate Book Shelves from local catalog
+  const allTimeGreats = [...books].sort((a, b) => b.averageRating - a.averageRating).slice(0, 15);
+  const trendingThisWeek = books.filter((b) => b.genres.includes("Popular") || b.averageRating >= 4.2).slice(0, 12);
+  const mostAdded = books.filter((b) => b.genres.includes("Bestseller") || b.pages > 400).slice(0, 12);
+  const bookTokFavorites = books.filter((b) => b.genres.includes("BookTok") || b.genres.includes("Contemporary")).slice(0, 12);
+  const awardWinners = books.filter((b) => b.genres.includes("Classics") || b.genres.includes("High Fantasy")).slice(0, 12);
+  const modernClassics = books.filter((b) => b.genres.includes("Classics") && b.year > 1900).slice(0, 12);
+  const sciFiEssentials = books.filter((b) => b.genres.includes("Sci-Fi") || b.genres.includes("Space Opera")).slice(0, 12);
+  const fantasyEssentials = books.filter((b) => b.genres.includes("Fantasy") || b.genres.includes("Magic")).slice(0, 12);
+  const literaryFiction = books.filter((b) => b.genres.includes("Literary Fiction") || b.genres.includes("Drama")).slice(0, 12);
+  const mysteryThriller = books.filter((b) => b.genres.includes("Thriller") || b.genres.includes("Mystery")).slice(0, 12);
+
+  // Community Leaderboard (Top 25)
+  const leaderboard = [...books].sort((a, b) => b.averageRating - a.averageRating).slice(0, 25);
+
+  // Personalized shelves logic
+  const lastLoggedBook = diaryLogs.length > 0 ? books.find((b) => b.id === diaryLogs[diaryLogs.length - 1].bookId) : null;
+  const favoriteGenre = lastLoggedBook?.genres?.[0] || "Fiction";
+  const userGenres = Array.from(new Set(diaryLogs.flatMap((log) => {
+    const b = books.find((x) => x.id === log.bookId);
+    return b ? b.genres : [];
+  })));
+
+  const becauseYouLiked = lastLoggedBook
+    ? books.filter((b) => b.id !== lastLoggedBook.id && b.genres.some((g) => lastLoggedBook.genres.includes(g))).slice(0, 12)
+    : [];
+
+  const basedOnGenres = userGenres.length > 0
+    ? books.filter((b) => b.genres.some((g) => userGenres.includes(g))).slice(0, 12)
+    : books.filter((b) => b.genres.includes(favoriteGenre)).slice(0, 12);
+
+  // Quick log execution
+  const handleQuickLog = async () => {
+    if (!logModalBook) return;
+    setIsLogging(true);
+    try {
+      await logBook(logModalBook.id, selectedStatus, selectedRating || undefined, logReview || undefined);
+      setLogModalBook(null);
+      setSelectedRating(0);
+      setLogReview("");
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLogging(false);
+    }
+  };
+
+  // Curated shelf custom horizontal scroller helper
+  const Shelf = ({ title, description, booksList, icon: Icon }: { title: string; description: string; booksList: Book[]; icon: any }) => {
+    if (booksList.length === 0) return null;
+    return (
+      <section className="space-y-4">
+        <div className="flex items-end justify-between border-b border-cream-border/60 pb-2">
+          <div className="space-y-1">
+            <h3 className="font-serif text-xl font-bold text-charcoal flex items-center gap-2">
+              <Icon className="w-5 h-5 text-brand" />
+              {title}
+            </h3>
+            <p className="text-[10px] text-charcoal-muted font-sans font-medium uppercase tracking-wider">{description}</p>
+          </div>
+        </div>
+
+        <div className="flex gap-5 overflow-x-auto pb-4 pt-1 snap-x scrollbar-thin scrollbar-thumb-brand-muted/20 hover:scrollbar-thumb-brand-muted/40">
+          {booksList.map((book) => (
+            <div key={book.id} className="snap-start flex-shrink-0 w-28 sm:w-32 flex flex-col space-y-2 group">
+              <BookCard book={book} size="sm" />
+              <div className="text-center px-1">
+                <p className="text-[11px] font-bold text-charcoal line-clamp-1 group-hover:text-brand transition-colors cursor-pointer" onClick={() => router.push(`/book/${book.id}`)}>
+                  {book.title}
+                </p>
+                <p className="text-[9px] text-charcoal-muted truncate">
+                  {book.author}
+                </p>
+                <div className="flex items-center justify-center gap-0.5 mt-0.5 text-yellow-500">
+                  <Star className="w-2.5 h-2.5 fill-current" />
+                  <span className="text-[9px] font-bold text-charcoal-light">
+                    {book.averageRating.toFixed(1)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  };
 
   return (
-    <div className="min-h-screen bg-cream flex flex-col">
+    <div className="min-h-screen bg-cream flex flex-col font-sans select-none">
       <Header />
 
-      <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-10 space-y-12">
+      <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-8 space-y-14">
         
-        {/* Banner Section */}
-        <section className="bg-cream-card border border-cream-border rounded-2xl p-6 md:p-8 flex flex-col md:flex-row items-center gap-6 shadow-sm">
-          <div className="p-4 bg-brand/10 rounded-2xl text-brand flex-shrink-0">
-            <Compass className="w-8 h-8" />
-          </div>
-          <div className="space-y-2 text-center md:text-left">
-            <h1 className="font-serif text-3xl font-bold text-charcoal">
-              Discover Your Next Chapter
-            </h1>
-            <p className="text-xs text-charcoal-muted max-w-lg leading-relaxed">
-              Browse the library by genre, search titles, or explore recommendations curated by fellow readers.
-            </p>
-          </div>
-        </section>
-
-        {/* Dynamic Search & Genre Filters Section */}
-        <section className="space-y-6">
-          <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4 justify-between">
-            {/* Search Input */}
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-charcoal-muted" />
+        {/* Global Premium Search Bar */}
+        <section className="max-w-2xl mx-auto space-y-2 text-center">
+          <div className="relative group">
+            <div className="absolute inset-0 bg-brand/5 rounded-2xl blur-xl group-hover:bg-brand/10 transition-all duration-300 pointer-events-none" />
+            <div className="relative flex items-center bg-cream-card border border-cream-border rounded-xl shadow-sm overflow-hidden focus-within:border-brand transition-all duration-300">
+              <Search className="w-5 h-5 text-charcoal-muted ml-4 flex-shrink-0" />
               <input
                 type="text"
-                placeholder="Search by title, author, or keywords..."
-                value={localSearch}
-                onChange={(e) => setLocalSearch(e.target.value)}
-                className="w-full h-10 pl-10 pr-4 text-xs bg-cream-card border border-cream-border rounded-lg text-charcoal placeholder-charcoal-muted focus:outline-none focus:border-brand-muted"
+                placeholder="Search by title, author, or ISBN in local catalog..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full py-3.5 pl-3 pr-12 text-xs bg-transparent text-charcoal placeholder-charcoal-muted focus:outline-none"
               />
+              {searchLoading && (
+                <Loader2 className="absolute right-4 w-4 h-4 text-brand animate-spin" />
+              )}
             </div>
-
-            {/* Clear Filters indicator */}
-            {selectedGenre && (
-              <button
-                onClick={() => setSelectedGenre(null)}
-                className="text-[10px] font-bold text-brand hover:underline"
-              >
-                Clear Genre Filter ({selectedGenre})
-              </button>
-            )}
           </div>
+        </section>
 
-          {/* Genre Tags Scroll */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-            <button
-              onClick={() => setSelectedGenre(null)}
-              className={`px-3 py-1.5 rounded-lg border text-[10px] font-semibold transition-all flex-shrink-0 ${
-                selectedGenre === null
-                  ? "bg-brand border-brand text-cream shadow-sm"
-                  : "bg-cream-card border-cream-border text-charcoal hover:border-charcoal"
-              }`}
+        {/* Search Results Active Overlay */}
+        <AnimatePresence>
+          {searchQuery.trim().length >= 2 && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              className="bg-cream-card border border-cream-border rounded-2xl p-6 space-y-6 shadow-md"
             >
-              All Genres
-            </button>
-            {allGenres.map((genre) => {
-              const isActive = selectedGenre === genre;
-              return (
-                <button
-                  key={genre}
-                  onClick={() => setSelectedGenre(genre)}
-                  className={`px-3 py-1.5 rounded-lg border text-[10px] font-semibold transition-all flex-shrink-0 ${
-                    isActive
-                      ? "bg-brand border-brand text-cream shadow-sm"
-                      : "bg-cream-card border-cream-border text-charcoal hover:border-charcoal"
-                  }`}
+              <div className="flex items-center justify-between border-b border-cream-border pb-3">
+                <h2 className="font-serif text-lg font-bold text-charcoal">
+                  Search Results for &ldquo;{searchQuery}&rdquo; ({searchResults.length})
+                </h2>
+                <button 
+                  onClick={() => setSearchQuery("")}
+                  className="text-[10px] font-bold text-brand hover:underline"
                 >
-                  {genre}
+                  Clear Search
                 </button>
-              );
-            })}
-          </div>
-        </section>
+              </div>
 
-        {/* Grid Catalog */}
-        <section className="space-y-6">
-          <h3 className="font-serif text-xl font-bold text-charcoal">
-            {selectedGenre ? `${selectedGenre} Books` : "Library Catalog"} ({filteredBooks.length})
-          </h3>
-
-          {filteredBooks.length > 0 ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
-              {filteredBooks.map((book) => (
-                <div key={book.id} className="space-y-3">
-                  <BookCard book={book} size="md" />
-                  <div className="text-center max-w-[130px] mx-auto">
-                    <p className="text-xs font-semibold text-charcoal truncate">
-                      {book.title}
-                    </p>
-                    <p className="text-[10px] text-charcoal-muted truncate">
-                      {book.author}
-                    </p>
-                  </div>
+              {searchLoading ? (
+                <div className="flex flex-col items-center justify-center py-12 space-y-3">
+                  <Loader2 className="w-8 h-8 text-brand animate-spin" />
+                  <p className="text-xs text-charcoal-muted">Searching volumes...</p>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-20 bg-cream-card border border-cream-border rounded-xl">
-              <p className="text-sm text-charcoal-muted">No books match your criteria.</p>
-              <p className="text-xs text-charcoal-muted/70 mt-1">Try clearing your search filters.</p>
-            </div>
-          )}
-        </section>
-
-        {/* Editorial Split Panels (Trending & Hidden Gems) */}
-        <section className="grid grid-cols-1 lg:grid-cols-2 gap-8 pt-8 border-t border-cream-border">
-          
-          {/* Trending Panel */}
-          <div className="space-y-6 bg-cream-card border border-cream-border rounded-2xl p-6 shadow-sm">
-            <h4 className="font-serif text-lg font-bold text-charcoal flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-brand" />
-              Highly Rated Community Favorites
-            </h4>
-            <div className="grid grid-cols-3 gap-4">
-              {trendingBooks.map((book) => (
-                <div key={book.id} className="space-y-2 text-center">
-                  <BookCard book={book} size="sm" />
-                  <div className="max-w-[90px] mx-auto">
-                    <p className="text-[10px] font-bold text-charcoal truncate">{book.title}</p>
-                    <div className="flex items-center gap-0.5 justify-center text-yellow-500 mt-0.5">
-                      <Star className="w-2.5 h-2.5 fill-current" />
-                      <span className="text-[9px] font-bold text-charcoal-light">
-                        {book.averageRating.toFixed(1)}
-                      </span>
+              ) : searchResults.length > 0 ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6 justify-items-center">
+                  {searchResults.map((book) => (
+                    <div key={book.id} className="space-y-2 text-center w-28 sm:w-32 group">
+                      <BookCard book={book} size="sm" />
+                      <div>
+                        <p className="text-[11px] font-bold text-charcoal line-clamp-1 group-hover:text-brand cursor-pointer" onClick={() => router.push(`/book/${book.id}`)}>
+                          {book.title}
+                        </p>
+                        <p className="text-[9px] text-charcoal-muted truncate">{book.author}</p>
+                      </div>
                     </div>
-                  </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
+              ) : (
+                <div className="text-center py-12">
+                  <p className="text-xs text-charcoal-muted">No books found in the local catalog matching that search query.</p>
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-          {/* Hidden Gems Panel */}
-          <div className="space-y-6 bg-cream-card border border-cream-border rounded-2xl p-6 shadow-sm">
-            <h4 className="font-serif text-lg font-bold text-charcoal flex items-center gap-2">
-              <BookOpen className="w-4 h-4 text-brand" />
-              Hidden Classics & Gems
-            </h4>
-            <div className="grid grid-cols-2 gap-6 items-center">
-              {hiddenGems.map((book) => (
-                <div key={book.id} className="flex gap-3 items-start">
-                  <BookCard book={book} size="sm" />
-                  <div className="min-w-0">
-                    <h5 className="font-serif text-xs font-bold text-charcoal line-clamp-2">{book.title}</h5>
-                    <p className="text-[9px] text-charcoal-muted mt-0.5">{book.author} ({book.year})</p>
-                    <p className="text-[9px] text-charcoal-light line-clamp-3 mt-1 leading-normal font-sans">
-                      {book.description}
+        {/* Default Curated Editorial View (only shown when search query is empty) */}
+        {searchQuery.trim().length < 2 && (
+          <>
+            {/* Featured Daily Hero Banner */}
+            {heroBook && (
+              <section className="relative overflow-hidden bg-cream-card border border-cream-border rounded-2xl p-6 md:p-8 flex flex-col md:flex-row items-center gap-8 shadow-sm">
+                {/* Decorative background glow */}
+                <div className="absolute top-0 right-0 w-80 h-80 bg-brand/5 rounded-full blur-3xl -z-10" />
+
+                {/* Cover container */}
+                <div className="relative w-40 h-56 rounded-lg overflow-hidden book-shadow bg-cream-dark flex-shrink-0">
+                  <div className="absolute top-0 bottom-0 left-0 w-[4px] bg-gradient-to-r from-charcoal/20 to-transparent z-10" />
+                  <img
+                    src={heroBook.coverImage}
+                    alt={heroBook.title}
+                    className="w-full h-full object-cover select-none"
+                    loading="eager"
+                  />
+                </div>
+
+                {/* Metadata details */}
+                <div className="flex-1 space-y-4 text-center md:text-left">
+                  <div className="space-y-2">
+                    <span className="px-2.5 py-1 bg-brand/10 border border-brand/20 text-brand rounded-full text-[9px] font-bold tracking-wider uppercase">
+                      Featured Volume of the Day
+                    </span>
+                    <h2 className="font-serif text-3xl font-bold text-charcoal leading-tight">
+                      {heroBook.title}
+                    </h2>
+                    <p className="text-xs text-charcoal-muted font-semibold">
+                      by {heroBook.author} &bull; {heroBook.year}
                     </p>
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
 
-        </section>
+                  <p className="text-xs text-charcoal-light leading-relaxed max-w-xl line-clamp-4">
+                    {heroBook.description}
+                  </p>
+
+                  <div className="flex items-center justify-center md:justify-start gap-4">
+                    <div className="flex items-center gap-1 text-yellow-500 text-xs font-bold">
+                      <Star className="w-4 h-4 fill-current" />
+                      <span>{heroBook.averageRating.toFixed(1)}</span>
+                    </div>
+                    <span className="w-1.5 h-1.5 rounded-full bg-cream-border" />
+                    <span className="text-[10px] bg-cream border border-cream-border px-2.5 py-0.5 rounded-md font-semibold text-charcoal-muted">
+                      {heroBook.genres[0]}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 pt-2">
+                    <button
+                      onClick={() => router.push(`/book/${heroBook.id}`)}
+                      className="px-5 py-2 bg-charcoal text-cream rounded-lg text-xs font-bold hover:bg-charcoal/90 transition-colors shadow-sm flex items-center gap-1.5"
+                    >
+                      View Book <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setLogModalBook(heroBook)}
+                      className="px-5 py-2 bg-cream-card border border-cream-border text-charcoal rounded-lg text-xs font-bold hover:bg-cream-dark transition-colors flex items-center gap-1.5"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Add to Library
+                    </button>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* Personalized Recommendations Section */}
+            {diaryLogs.length > 0 && (
+              <div className="space-y-12 py-4 border-t border-b border-cream-border/40">
+                {lastLoggedBook && (
+                  <Shelf 
+                    title={`Because you liked ${lastLoggedBook.title}`} 
+                    description="Personalized based on subjects of your latest activity" 
+                    booksList={becauseYouLiked} 
+                    icon={History} 
+                  />
+                )}
+                <Shelf 
+                  title="Curated For Your Taste" 
+                  description={`Popular books matching your reading profile (${favoriteGenre})`} 
+                  booksList={basedOnGenres} 
+                  icon={Sparkles} 
+                />
+              </div>
+            )}
+
+            {/* Curated Editorial Shelves */}
+            <div className="space-y-12">
+              <Shelf title="All-Time Greats" description="The highest rated and most influential works ever written" booksList={allTimeGreats} icon={Star} />
+              <Shelf title="Trending This Week" description="Volumes currently popular among the community" booksList={trendingThisWeek} icon={Compass} />
+              <Shelf title="Most Added This Month" description="Titles currently filling up reader libraries" booksList={mostAdded} icon={Library} />
+              <Shelf title="BookTok Favorites" description="Modern romance and viral favorites" booksList={bookTokFavorites} icon={MessageSquare} />
+              <Shelf title="Award Winners" description="Pulitzer, Booker, Hugo, and Nebula prize laureates" booksList={awardWinners} icon={Award} />
+              <Shelf title="Modern Classics" description="Post-20th century masterpieces everyone should read" booksList={modernClassics} icon={BookOpen} />
+            </div>
+
+            {/* Two-Column: Sci-Fi & Fantasy essentials */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 border-t border-cream-border/60 pt-10">
+              <Shelf title="Sci-Fi Essentials" description="Curated science fiction masterpieces" booksList={sciFiEssentials} icon={Sparkles} />
+              <Shelf title="Fantasy Essentials" description="Epic high-fantasy novels and series" booksList={fantasyEssentials} icon={Award} />
+            </div>
+
+            {/* Two-Column: Literary Fiction & Mystery */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 border-t border-cream-border/60 pt-10">
+              <Shelf title="Literary Fiction" description="Beautifully written classic and modern works" booksList={literaryFiction} icon={BookOpen} />
+              <Shelf title="Mystery & Thriller" description="Acclaimed suspense, crime, and detective fiction" booksList={mysteryThriller} icon={Compass} />
+            </div>
+
+            {/* Community Rankings Leaderboard */}
+            <section className="bg-cream-card border border-cream-border rounded-2xl p-6 md:p-8 space-y-6 shadow-sm border-t border-cream-border/60 pt-10">
+              <div className="border-b border-cream-border pb-3 flex items-center justify-between">
+                <div className="space-y-1">
+                  <h3 className="font-serif text-2xl font-bold text-charcoal flex items-center gap-2">
+                    <Award className="w-6 h-6 text-brand" />
+                    Top 25 Books on Leaf
+                  </h3>
+                  <p className="text-[10px] text-charcoal-muted uppercase tracking-wider font-semibold">Community Rating Leaderboard</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                {/* Left Column (Ranks 1-13) */}
+                <div className="space-y-4">
+                  {leaderboard.slice(0, 13).map((book, idx) => (
+                    <div 
+                      key={book.id} 
+                      onClick={() => router.push(`/book/${book.id}`)}
+                      className="flex items-center gap-4 p-2 hover:bg-cream border border-transparent hover:border-cream-border rounded-xl cursor-pointer transition-all duration-300"
+                    >
+                      <span className="font-serif text-lg font-bold text-brand-muted/70 w-6 text-center">
+                        {idx + 1}
+                      </span>
+                      <img 
+                        src={book.coverImage} 
+                        alt={book.title} 
+                        className="w-10 h-14 object-cover rounded-md book-shadow bg-cream-dark flex-shrink-0"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-bold text-charcoal truncate">{book.title}</p>
+                        <p className="text-[10px] text-charcoal-muted truncate">{book.author}</p>
+                      </div>
+                      <div className="flex items-center gap-1 text-yellow-500 font-bold text-[10px]">
+                        <Star className="w-3.5 h-3.5 fill-current" />
+                        <span>{book.averageRating.toFixed(1)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Right Column (Ranks 14-25) */}
+                <div className="space-y-4">
+                  {leaderboard.slice(13, 25).map((book, idx) => (
+                    <div 
+                      key={book.id} 
+                      onClick={() => router.push(`/book/${book.id}`)}
+                      className="flex items-center gap-4 p-2 hover:bg-cream border border-transparent hover:border-cream-border rounded-xl cursor-pointer transition-all duration-300"
+                    >
+                      <span className="font-serif text-lg font-bold text-brand-muted/70 w-6 text-center">
+                        {idx + 14}
+                      </span>
+                      <img 
+                        src={book.coverImage} 
+                        alt={book.title} 
+                        className="w-10 h-14 object-cover rounded-md book-shadow bg-cream-dark flex-shrink-0"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-bold text-charcoal truncate">{book.title}</p>
+                        <p className="text-[10px] text-charcoal-muted truncate">{book.author}</p>
+                      </div>
+                      <div className="flex items-center gap-1 text-yellow-500 font-bold text-[10px]">
+                        <Star className="w-3.5 h-3.5 fill-current" />
+                        <span>{book.averageRating.toFixed(1)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+          </>
+        )}
 
       </main>
+
+      {/* Quick Add Log Drawer / Modal */}
+      <AnimatePresence>
+        {logModalBook && (
+          <div className="fixed inset-0 bg-charcoal/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-cream border border-cream-border rounded-2xl max-w-md w-full p-6 space-y-6 shadow-xl relative text-left"
+            >
+              <div className="space-y-2">
+                <h3 className="font-serif text-xl font-bold text-charcoal">
+                  Add to Library
+                </h3>
+                <p className="text-xs text-charcoal-muted">
+                  Log &ldquo;{logModalBook.title}&rdquo; to your reading list.
+                </p>
+              </div>
+
+              {/* Status Radio Buttons */}
+              <div className="space-y-2">
+                <label className="text-[10px] uppercase font-bold tracking-wider text-charcoal-muted">
+                  Status
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["Want to Read", "Currently Reading", "Finished"] as const).map((status) => (
+                    <button
+                      key={status}
+                      onClick={() => {
+                        setSelectedStatus(status);
+                        if (status !== "Finished") setSelectedRating(0);
+                      }}
+                      className={`py-2 rounded-lg border text-[10px] font-bold text-center transition-all ${
+                        selectedStatus === status
+                          ? "bg-brand border-brand text-cream shadow-sm"
+                          : "bg-cream-card border-cream-border text-charcoal hover:border-charcoal"
+                      }`}
+                    >
+                      {status}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Review/Rating Section (Shown only if status is Finished) */}
+              {selectedStatus === "Finished" && (
+                <div className="space-y-4 animate-fadeIn">
+                  {/* Rating selection */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] uppercase font-bold tracking-wider text-charcoal-muted">
+                      Your Rating
+                    </label>
+                    <div className="flex gap-1.5 text-yellow-500">
+                      {[1, 2, 3, 4, 5].map((star) => {
+                        const isSelected = selectedRating >= star;
+                        return (
+                          <button
+                            key={star}
+                            onClick={() => setSelectedRating(star)}
+                            className="focus:outline-none transition-transform hover:scale-110"
+                          >
+                            <Star className={`w-6 h-6 ${isSelected ? "fill-current" : "text-cream-border"}`} />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Review input */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] uppercase font-bold tracking-wider text-charcoal-muted">
+                      Write a Review (Optional)
+                    </label>
+                    <textarea
+                      placeholder="Share your thoughts on this volume..."
+                      value={logReview}
+                      onChange={(e) => setLogReview(e.target.value)}
+                      rows={3}
+                      className="w-full p-3 text-xs bg-cream-card border border-cream-border rounded-xl text-charcoal focus:outline-none focus:border-brand-muted"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  onClick={() => setLogModalBook(null)}
+                  className="px-4 py-2 border border-cream-border text-charcoal-muted hover:text-charcoal rounded-lg text-xs font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleQuickLog}
+                  disabled={isLogging}
+                  className="px-5 py-2 bg-brand text-cream font-bold rounded-lg text-xs hover:bg-brand/90 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                >
+                  {isLogging && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  Save to Library
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
