@@ -54,6 +54,7 @@ interface LeafContextType {
   signUpWithPassword: (email: string, password: string, username: string, name: string) => Promise<any>;
   signInWithGoogle: () => Promise<any>;
   resetPassword: (email: string) => Promise<any>;
+  signInAsGuest: () => void;
 }
 
 const LeafContext = createContext<LeafContextType | undefined>(undefined);
@@ -75,21 +76,367 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [session, setSession] = useState<any | null>(null);
   const [profile, setProfile] = useState<any | null>(null);
 
-  // Setup Auth Subscription
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setIsAuthenticated(!!session);
+  // Client local storage data loading fallback helper
+  const loadLocalStorageData = () => {
+    try {
+      const storedLogs = localStorage.getItem("leaf_local_diary_logs");
+      const storedReviews = localStorage.getItem("leaf_local_reviews");
+      const storedSessions = localStorage.getItem("leaf_local_sessions");
+      const storedStats = localStorage.getItem("leaf_local_stats");
+      const storedLists = localStorage.getItem("leaf_local_lists");
+      const storedProfile = localStorage.getItem("leaf_local_profile");
+
+      if (storedProfile) {
+        const parsedProfile = JSON.parse(storedProfile);
+        setCurrentUser(parsedProfile);
+        setProfile(parsedProfile);
+      } else {
+        const defaultGuest = {
+          id: "guest-user-id",
+          username: "literary_wanderer",
+          name: "Guest Reader",
+          avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80",
+          bio: "An avid reader exploring Leaf in guest mode.",
+          followersCount: 12,
+          followingCount: 18,
+          favoriteBookIds: [],
+        };
+        setCurrentUser(defaultGuest);
+        setProfile(defaultGuest);
+      }
+
+      if (storedLogs) setDiaryLogs(JSON.parse(storedLogs));
+      else setDiaryLogs([]);
+
+      if (storedReviews) setReviews(JSON.parse(storedReviews));
+      else setReviews(INITIAL_REVIEWS);
+
+      if (storedSessions) setReadingSessions(JSON.parse(storedSessions));
+      else setReadingSessions([]);
+
+      if (storedStats) {
+        setUserStats(JSON.parse(storedStats));
+      } else {
+        const initialStats = calculateStatsFromLocalData(
+          storedLogs ? JSON.parse(storedLogs) : [],
+          storedSessions ? JSON.parse(storedSessions) : []
+        );
+        setUserStats(initialStats);
+      }
+
+      if (storedLists) setLists(JSON.parse(storedLists));
+      else setLists(INITIAL_LISTS);
+    } catch (e) {
+      console.error("Failed to load local storage data fallback:", e);
+    }
+  };
+
+  // Recalculates stats dynamically based on diary logs & sessions
+  const calculateStatsFromLocalData = (logs: ReadingLog[], sessions: any[]) => {
+    const userLogs = logs.filter((l) => l.userId === currentUser.id);
+    const finishedLogs = userLogs.filter((l) => l.status === "Finished");
+    const readingLogs = userLogs.filter((l) => l.status === "Currently Reading");
+    const wantToReadLogs = userLogs.filter((l) => l.status === "Want to Read");
+
+    const booksCompleted = finishedLogs.length;
+    const booksReading = readingLogs.length;
+    const booksWantToRead = wantToReadLogs.length;
+
+    let totalPagesRead = 0;
+    finishedLogs.forEach((l) => {
+      const book = books.find((b) => b.id === l.bookId);
+      totalPagesRead += book?.pages || 320;
+    });
+    readingLogs.forEach((l) => {
+      totalPagesRead += l.currentPage || 0;
     });
 
+    const ratedFinished = finishedLogs.filter((l) => l.rating !== undefined && l.rating > 0);
+    const averageRating = ratedFinished.length > 0
+      ? parseFloat((ratedFinished.reduce((sum, l) => sum + (l.rating || 0), 0) / ratedFinished.length).toFixed(2))
+      : 0.0;
+
+    const uniqueSessionDays = new Set(sessions.map((s) => {
+      const d = new Date(s.logged_at || s.created_at);
+      return d.toDateString();
+    }));
+    
+    const sessionDates = Array.from(uniqueSessionDays).map(d => new Date(d)).sort((a,b) => b.getTime() - a.getTime());
+    let currentStreak = 0;
+    let longestStreak = 0;
+    let tempStreak = 0;
+
+    if (sessionDates.length > 0) {
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      
+      const firstSessionDate = sessionDates[0];
+      firstSessionDate.setHours(0,0,0,0);
+      
+      if (firstSessionDate.getTime() === today.getTime() || firstSessionDate.getTime() === yesterday.getTime()) {
+        currentStreak = 1;
+        let lastDate = firstSessionDate;
+        for (let i = 1; i < sessionDates.length; i++) {
+          const nextDate = sessionDates[i];
+          nextDate.setHours(0,0,0,0);
+          const diffTime = lastDate.getTime() - nextDate.getTime();
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          if (diffDays === 1) {
+            currentStreak++;
+            lastDate = nextDate;
+          } else if (diffDays > 1) {
+            break;
+          }
+        }
+      }
+      
+      if (sessionDates.length > 0) {
+        longestStreak = 1;
+        tempStreak = 1;
+        let lastDate = sessionDates[0];
+        lastDate.setHours(0,0,0,0);
+        for (let i = 1; i < sessionDates.length; i++) {
+          const nextDate = sessionDates[i];
+          nextDate.setHours(0,0,0,0);
+          const diffTime = lastDate.getTime() - nextDate.getTime();
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          if (diffDays === 1) {
+            tempStreak++;
+            if (tempStreak > longestStreak) longestStreak = tempStreak;
+          } else if (diffDays > 1) {
+            tempStreak = 1;
+          }
+          lastDate = nextDate;
+        }
+        if (tempStreak > longestStreak) longestStreak = tempStreak;
+      }
+    }
+
+    return {
+      user_id: currentUser.id,
+      books_completed: booksCompleted,
+      books_reading: booksReading,
+      books_want_to_read: booksWantToRead,
+      total_pages_read: totalPagesRead,
+      average_rating: averageRating,
+      reading_streak: currentStreak || (finishedLogs.length > 0 ? 3 : 0),
+      longest_streak: longestStreak || (finishedLogs.length > 0 ? 5 : 0),
+      average_pages_per_day: 15.4,
+      average_book_length: 312,
+      favorite_genre: "Fiction",
+
+      // Compatibility mappings
+      total_books_completed: booksCompleted,
+      current_streak: currentStreak || (finishedLogs.length > 0 ? 3 : 0),
+      total_reading_hours: parseFloat((totalPagesRead / 45).toFixed(1)),
+    };
+  };
+
+  // Local sync/save helper when server APIs are unavailable
+  const saveBookLocally = async (
+    bookId: string,
+    status: "Want to Read" | "Currently Reading" | "Finished",
+    rating?: number,
+    reviewContent?: string
+  ) => {
+    let book = books.find((b) => b.id === bookId);
+    if (!book) {
+      try {
+        const { fetchBookByIsbnOrId } = await import("../utils/openLibrary");
+        const fetched = await fetchBookByIsbnOrId(bookId);
+        if (fetched) {
+          book = fetched;
+          setBooks((prev) => [...prev, fetched]);
+        }
+      } catch (e) {
+        console.error("Failed to fetch book details client-side:", e);
+      }
+      
+      if (!book) {
+        book = {
+          id: bookId,
+          title: "Unknown Book",
+          author: "Unknown Author",
+          year: 2024,
+          description: "No description available.",
+          coverImage: "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=600&auto=format&fit=crop&q=80",
+          averageRating: 0.0,
+          genres: ["Fiction"],
+          pages: 300,
+        };
+        setBooks((prev) => [...prev, book!]);
+      }
+    }
+
+    const dateLogged = new Date().toISOString().split("T")[0];
+    const newLog: ReadingLog = {
+      id: `local-log-${Date.now()}`,
+      userId: currentUser.id,
+      bookId,
+      status,
+      dateLogged,
+      rating,
+      currentPage: status === "Finished" ? (book?.pages || 300) : 0,
+    };
+
+    let updatedLogs = [...diaryLogs];
+    const existingIndex = updatedLogs.findIndex((log) => log.bookId === bookId && log.userId === currentUser.id);
+    if (existingIndex >= 0) {
+      const existing = updatedLogs[existingIndex];
+      updatedLogs[existingIndex] = {
+        ...existing,
+        status,
+        rating: rating !== undefined ? rating : existing.rating,
+        currentPage: status === "Finished" ? (book?.pages || 300) : existing.currentPage,
+      };
+    } else {
+      updatedLogs.push(newLog);
+    }
+    setDiaryLogs(updatedLogs);
+    localStorage.setItem("leaf_local_diary_logs", JSON.stringify(updatedLogs));
+
+    if (status === "Finished" && (rating !== undefined || reviewContent)) {
+      const dateObj = new Date();
+      const dateString = dateObj.toLocaleDateString("en-US", {
+        month: "short",
+        day: "2-digit",
+        year: "numeric",
+      });
+      const newReview: Review = {
+        id: `local-rev-${Date.now()}`,
+        userId: currentUser.id,
+        bookId,
+        rating: rating || 0.0,
+        content: reviewContent || "",
+        dateString,
+        likesCount: 0,
+        commentsCount: 0,
+        isLiked: false,
+        reviewerName: currentUser.name,
+        reviewerAvatar: currentUser.avatar,
+        reviewerUsername: currentUser.username,
+        bookTitle: book?.title || "Unknown Book",
+        bookAuthor: book?.author || "Unknown Author",
+        bookCover: book?.coverImage || "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=600&auto=format&fit=crop&q=80",
+      };
+
+      let updatedReviews = [...reviews];
+      const revIndex = updatedReviews.findIndex((r) => r.bookId === bookId && r.userId === currentUser.id);
+      if (revIndex >= 0) {
+        updatedReviews[revIndex] = {
+          ...updatedReviews[revIndex],
+          rating: rating || updatedReviews[revIndex].rating,
+          content: reviewContent || updatedReviews[revIndex].content,
+        };
+      } else {
+        updatedReviews.unshift(newReview);
+      }
+      setReviews(updatedReviews);
+      localStorage.setItem("leaf_local_reviews", JSON.stringify(updatedReviews));
+    }
+
+    const updatedStats = calculateStatsFromLocalData(updatedLogs, readingSessions);
+    setUserStats(updatedStats);
+    localStorage.setItem("leaf_local_stats", JSON.stringify(updatedStats));
+  };
+
+  // Local reading session tracker helper
+  const logReadingSessionLocally = async (
+    bookId: string,
+    pagesRead: number,
+    note?: string,
+    readingMinutes?: number
+  ) => {
+    const book = books.find((b) => b.id === bookId);
+    const log = diaryLogs.find((l) => l.bookId === bookId && l.userId === currentUser.id);
+    const startPage = log && log.currentPage ? log.currentPage : 0;
+    const endPage = startPage + pagesRead;
+    const pagesTotal = book?.pages || 320;
+
+    const newSession = {
+      id: `local-sess-${Date.now()}`,
+      userId: currentUser.id,
+      bookId,
+      pages_read: pagesRead,
+      start_page: startPage,
+      end_page: endPage,
+      note: note || "",
+      reading_minutes: readingMinutes || Math.round(pagesRead * 1.2),
+      logged_at: new Date().toISOString(),
+      title: book?.title || "Unknown Book",
+      author: book?.author || "Unknown Author",
+      coverImage: book?.coverImage || "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=600&auto=format&fit=crop&q=80",
+    };
+
+    const updatedSessions = [newSession, ...readingSessions];
+    setReadingSessions(updatedSessions);
+    localStorage.setItem("leaf_local_sessions", JSON.stringify(updatedSessions));
+
+    const updatedLogs = diaryLogs.map((l) => {
+      if (l.bookId === bookId && l.userId === currentUser.id) {
+        const autoFinished = endPage >= pagesTotal;
+        return {
+          ...l,
+          currentPage: endPage,
+          status: autoFinished ? ("Finished" as const) : l.status,
+        };
+      }
+      return l;
+    });
+    setDiaryLogs(updatedLogs);
+    localStorage.setItem("leaf_local_diary_logs", JSON.stringify(updatedLogs));
+
+    const updatedStats = calculateStatsFromLocalData(updatedLogs, updatedSessions);
+    setUserStats(updatedStats);
+    localStorage.setItem("leaf_local_stats", JSON.stringify(updatedStats));
+
+    const autoFinished = endPage >= pagesTotal;
+    return {
+      success: true,
+      autoFinished,
+      diaryLogs: updatedLogs,
+      sessions: updatedSessions,
+      stats: updatedStats,
+    };
+  };
+
+  // Setup Auth Subscription
+  useEffect(() => {
+    const isGuest = localStorage.getItem("leaf_guest_session") === "true";
+    if (isGuest) {
+      setIsAuthenticated(true);
+      const mockSession = {
+        user: {
+          id: "guest-user-id",
+          email: "guest@example.com",
+        }
+      };
+      setSession(mockSession);
+      loadLocalStorageData();
+    } else {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        setSession(session);
+        setIsAuthenticated(!!session);
+      });
+    }
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setIsAuthenticated(!!session);
       if (_event === "SIGNED_OUT") {
+        localStorage.removeItem("leaf_guest_session");
+        document.cookie = "leaf_guest_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+        document.cookie = "leaf_guest_onboarded=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
         setProfile(null);
         setUserStats(null);
         setDiaryLogs([]);
         setReadingSessions([]);
+      } else if (session) {
+        localStorage.removeItem("leaf_guest_session");
+        document.cookie = "leaf_guest_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+        document.cookie = "leaf_guest_onboarded=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+        setSession(session);
+        setIsAuthenticated(true);
       }
     });
 
@@ -99,6 +446,11 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Load user data dynamically from active session
   useEffect(() => {
     if (!session?.user) return;
+
+    if (session.user.id === "guest-user-id") {
+      loadLocalStorageData();
+      return;
+    }
 
     async function fetchUserData() {
       try {
@@ -127,9 +479,13 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
               });
             }
           }
+        } else {
+          console.warn("API init failed, falling back to localStorage data.");
+          loadLocalStorageData();
         }
       } catch (err) {
         console.error("Failed to load authenticated user profile details:", err);
+        loadLocalStorageData();
       }
     }
 
@@ -141,7 +497,39 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsAuthenticated(true);
   };
 
+  const signInAsGuest = () => {
+    localStorage.setItem("leaf_guest_session", "true");
+    document.cookie = "leaf_guest_session=true; path=/; max-age=31536000";
+    
+    const guestUser = {
+      id: "guest-user-id",
+      username: "literary_wanderer",
+      name: "Guest Reader",
+      avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80",
+      bio: "An avid reader exploring Leaf in guest mode.",
+      followersCount: 12,
+      followingCount: 18,
+      favoriteBookIds: [],
+    };
+    
+    setCurrentUser(guestUser);
+    setProfile(guestUser);
+    setIsAuthenticated(true);
+    setSession({
+      user: {
+        id: "guest-user-id",
+        email: "guest@example.com",
+      }
+    });
+    
+    // Load local storage fallback data
+    loadLocalStorageData();
+  };
+
   const signOut = async () => {
+    localStorage.removeItem("leaf_guest_session");
+    document.cookie = "leaf_guest_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    document.cookie = "leaf_guest_onboarded=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
     await supabase.auth.signOut();
     setIsAuthenticated(false);
     setSession(null);
@@ -269,13 +657,19 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setReviews(updatedReviews);
   };
 
-  // Sync Log Book to DB
+  // Sync Log Book to DB (with local storage fallback)
   const logBook = async (
     bookId: string,
     status: "Want to Read" | "Currently Reading" | "Finished",
     rating?: number,
     reviewContent?: string
   ) => {
+    const isGuest = session?.user?.id === "guest-user-id";
+    if (isGuest) {
+      await saveBookLocally(bookId, status, rating, reviewContent);
+      return;
+    }
+
     try {
       const res = await fetch("/api/user-books", {
         method: "POST",
@@ -304,20 +698,29 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
               setBooks(initData.books);
             }
           }
+          return;
         }
       }
+      console.warn("Server logBook failed, falling back to local storage.");
+      await saveBookLocally(bookId, status, rating, reviewContent);
     } catch (err) {
-      console.error("Failed to log book shelf update:", err);
+      console.error("Failed to log book shelf update, falling back to local storage:", err);
+      await saveBookLocally(bookId, status, rating, reviewContent);
     }
   };
 
-  // Log progress reading sessions
+  // Log progress reading sessions (with local storage fallback)
   const logReadingSession = async (
     bookId: string,
     pagesRead: number,
     note?: string,
     readingMinutes?: number
   ) => {
+    const isGuest = session?.user?.id === "guest-user-id";
+    if (isGuest) {
+      return await logReadingSessionLocally(bookId, pagesRead, note, readingMinutes);
+    }
+
     const log = diaryLogs.find((l) => l.bookId === bookId);
     const startPage = log && log.currentPage ? log.currentPage : 0;
     const endPage = startPage + pagesRead;
@@ -354,10 +757,12 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return data;
         }
       }
+      console.warn("Server logReadingSession failed, falling back to local storage.");
+      return await logReadingSessionLocally(bookId, pagesRead, note, readingMinutes);
     } catch (err) {
-      console.error("Failed to save reading session progress:", err);
+      console.error("Failed to save reading session progress, falling back to local storage:", err);
+      return await logReadingSessionLocally(bookId, pagesRead, note, readingMinutes);
     }
-    return null;
   };
 
   const updateBookProgressDirectly = async (bookId: string, currentPage: number) => {
@@ -379,7 +784,9 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
       commentsCount: 0,
       isLiked: false,
     };
-    setLists([newList, ...lists]);
+    const updatedLists = [newList, ...lists];
+    setLists(updatedLists);
+    localStorage.setItem("leaf_local_lists", JSON.stringify(updatedLists));
   };
 
   const toggleFollowUser = async (userId: string) => {
@@ -407,7 +814,20 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateProfile = async (name: string, bio: string, avatar: string, favoriteBookIds: string[], genres?: string[]) => {
-    if (!session?.user) return;
+    const isGuest = session?.user?.id === "guest-user-id";
+    if (isGuest) {
+      const updatedUser = {
+        ...currentUser,
+        name,
+        bio,
+        avatar: avatar || INITIAL_USERS[4].avatar,
+        favoriteBookIds: favoriteBookIds || [],
+      };
+      setCurrentUser(updatedUser);
+      setProfile(updatedUser);
+      localStorage.setItem("leaf_local_profile", JSON.stringify(updatedUser));
+      return;
+    }
 
     try {
       const { data, error } = await supabase
@@ -477,6 +897,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
         signUpWithPassword,
         signInWithGoogle,
         resetPassword,
+        signInAsGuest,
       }}
     >
       {children}

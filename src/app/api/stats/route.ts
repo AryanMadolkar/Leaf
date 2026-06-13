@@ -365,9 +365,21 @@ export async function GET(request: Request) {
       `Your current reading streak is a stellar ${stats.reading_streak} days, with a record of ${stats.longest_streak} days.`
     ];
 
+    const mappedStats = {
+      ...stats,
+      total_books_completed: stats.books_completed,
+      total_pages_read: stats.total_pages_read,
+      current_streak: stats.reading_streak,
+      longest_streak: stats.longest_streak,
+      total_reading_hours: parseFloat((stats.total_pages_read / 45).toFixed(1)),
+      average_pages_per_day: stats.average_pages_per_day,
+      average_book_length: stats.average_book_length,
+      favorite_genre: stats.favorite_genre,
+    };
+
     return NextResponse.json({
       success: true,
-      stats,
+      stats: mappedStats,
       heatmap: heatmapRows,
       charts: {
         last7Days,

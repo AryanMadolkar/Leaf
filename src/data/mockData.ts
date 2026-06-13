@@ -32,6 +32,12 @@ export interface Review {
   likesCount: number;
   commentsCount: number;
   isLiked?: boolean;
+  reviewerName?: string;
+  reviewerAvatar?: string;
+  reviewerUsername?: string;
+  bookTitle?: string;
+  bookAuthor?: string;
+  bookCover?: string;
 }
 
 export interface ReadingLog {

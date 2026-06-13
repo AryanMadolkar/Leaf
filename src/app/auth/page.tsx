@@ -8,7 +8,7 @@ import { BookOpen, ArrowRight, AlertCircle, Sparkles } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function AuthPage() {
-  const { signInWithPassword, signUpWithPassword, signInWithGoogle, resetPassword } = useLeaf();
+  const { signInWithPassword, signUpWithPassword, signInWithGoogle, resetPassword, signInAsGuest } = useLeaf();
   const router = useRouter();
   
   const [isSignUp, setIsSignUp] = useState(false);
@@ -63,6 +63,11 @@ export default function AuthPage() {
       setErrorMsg(err.message || "OAuth login failed.");
       setLoading(false);
     }
+  };
+
+  const handleGuestLogin = () => {
+    signInAsGuest();
+    router.push("/feed");
   };
 
   return (
@@ -253,6 +258,17 @@ export default function AuthPage() {
                   />
                 </svg>
                 <span>Continue with Google</span>
+              </button>
+
+              {/* Demo Guest Login */}
+              <button
+                onClick={handleGuestLogin}
+                type="button"
+                disabled={loading}
+                className="w-full h-10 bg-cream border border-brand/35 hover:bg-brand/10 text-brand font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer mt-2"
+              >
+                <span>Continue as Guest (Offline Mode)</span>
+                <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </>
           )}

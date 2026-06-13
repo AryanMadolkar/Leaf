@@ -70,6 +70,9 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  const isGuestSession = request.cookies.get("leaf_guest_session")?.value === "true";
+  const userObj = user || (isGuestSession ? { id: "guest-user-id", email: "guest@example.com" } : null);
+
   const path = request.nextUrl.pathname;
   const protectedRoutes = ["/feed", "/profile", "/library", "/stats", "/lists", "/settings", "/onboarding"];
   const isProtected = protectedRoutes.some((route) => path === route || path.startsWith(route + "/"));
@@ -77,25 +80,34 @@ export async function updateSession(request: NextRequest) {
   // Check public profiles at /u/... which do not need redirecting to auth
   const isPublicProfile = path.startsWith("/u/");
 
-  if (!user && isProtected && !isPublicProfile) {
+  if (!userObj && isProtected && !isPublicProfile) {
     const url = request.nextUrl.clone();
     url.pathname = "/auth";
     return NextResponse.redirect(url);
   }
 
-  if (user && path === "/auth") {
-    // Check onboarding status
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("onboarding_completed")
-      .eq("id", user.id)
-      .single();
-
+  if (userObj && path === "/auth") {
     const url = request.nextUrl.clone();
-    if (profile && !profile.onboarding_completed) {
-      url.pathname = "/onboarding";
+    if (isGuestSession) {
+      const isGuestOnboarded = request.cookies.get("leaf_guest_onboarded")?.value === "true";
+      if (!isGuestOnboarded) {
+        url.pathname = "/onboarding";
+      } else {
+        url.pathname = "/feed";
+      }
     } else {
-      url.pathname = "/feed";
+      // Check onboarding status
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("onboarding_completed")
+        .eq("id", userObj.id)
+        .single();
+
+      if (profile && !profile.onboarding_completed) {
+        url.pathname = "/onboarding";
+      } else {
+        url.pathname = "/feed";
+      }
     }
     return NextResponse.redirect(url);
   }
