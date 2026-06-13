@@ -135,11 +135,14 @@ export async function saveBookToDatabase(book: Omit<NormalizedBook, "id">): Prom
           isbn_10: book.isbn_10 || null,
           isbn_13: book.isbn_13 || null,
           title: book.title,
+          subtitle: book.subtitle || null,
+          description: book.description || null,
           author_name: book.author_name || null,
           cover_url: book.cover_url || null,
           page_count: book.page_count || 0,
           subjects: subjectsStr,
           first_publish_year: book.first_publish_year || null,
+          language: book.language || null,
         })
         .eq("id", existing.id);
 
@@ -155,11 +158,14 @@ export async function saveBookToDatabase(book: Omit<NormalizedBook, "id">): Prom
           isbn_10: book.isbn_10 || null,
           isbn_13: book.isbn_13 || null,
           title: book.title,
+          subtitle: book.subtitle || null,
+          description: book.description || null,
           author_name: book.author_name || null,
           cover_url: book.cover_url || null,
           page_count: book.page_count || 0,
           subjects: subjectsStr,
           first_publish_year: book.first_publish_year || null,
+          language: book.language || null,
         });
 
       if (error) throw error;
