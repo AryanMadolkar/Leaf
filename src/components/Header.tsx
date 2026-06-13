@@ -5,8 +5,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useLeaf } from "@/context/LeafContext";
 import { Book } from "@/data/mockData";
-import { Search, Plus, BookOpen, Star, LogOut, Check, X, Calendar, Clock, Book as BookIcon, Activity, CheckCircle, ChevronRight, Award, Bookmark, User } from "lucide-react";
+import { Search, Plus, BookOpen, Star, LogOut, Check, X, Calendar, Clock, Book as BookIcon, Activity, CheckCircle, ChevronRight, Award, Bookmark, User, Settings } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
+import UserAvatar from "@/components/UserAvatar";
 
 // Star Rating helper
 export const StarRating = ({
@@ -113,6 +114,34 @@ export default function Header() {
   const [headerSearchResults, setHeaderSearchResults] = useState<Book[]>([]);
   const [headerLoading, setHeaderLoading] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
+
+  // Account dropdown state
+  const [showAccountDropdown, setShowAccountDropdown] = useState(false);
+  const accountDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close account dropdown when clicking outside or pressing Escape
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        accountDropdownRef.current &&
+        !accountDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowAccountDropdown(false);
+      }
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setShowAccountDropdown(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
 
   // Log Modal state
   const [isLogOpen, setIsLogOpen] = useState(false);
@@ -480,11 +509,7 @@ export default function Header() {
                                 }}
                                 className="w-full flex items-center gap-3 px-4 py-2 hover:bg-cream-dark/50 transition-colors duration-200 text-left"
                               >
-                                <img
-                                  src={user.avatar}
-                                  alt={user.name}
-                                  className="w-7 h-7 rounded-full object-cover shadow-sm flex-shrink-0"
-                                />
+                                <UserAvatar avatarUrl={user.avatar} name={user.name} size={28} className="flex-shrink-0 shadow-sm" />
                                 <div className="min-w-0">
                                   <p className="text-xs font-semibold text-charcoal truncate">
                                     {user.name}
@@ -519,26 +544,105 @@ export default function Header() {
               <span>Log Book</span>
             </button>
 
-            {/* Profile Avatar / Auth */}
-            <Link
-              href={`/profile/${currentUser.username}`}
-              className="w-8 h-8 rounded-full border border-cream-border flex items-center justify-center bg-cream-dark/50 hover:bg-cream-dark text-charcoal hover:scale-105 transition-all duration-300"
-              title="View Profile Details"
-            >
-              <User className="w-4.5 h-4.5" />
-            </Link>
+            {/* Account Panel Dropdown */}
+            <div className="relative flex items-center" ref={accountDropdownRef}>
+              <button
+                onClick={() => setShowAccountDropdown(!showAccountDropdown)}
+                className="w-8 h-8 rounded-full border border-cream-border flex items-center justify-center bg-cream-dark/50 hover:bg-cream-dark hover:scale-105 transition-all duration-300 focus:outline-none cursor-pointer"
+                title="Account Menu"
+                aria-expanded={showAccountDropdown}
+                aria-haspopup="true"
+              >
+                <UserAvatar avatarUrl={currentUser.avatar} name={currentUser.name} size={30} className="border-0 bg-transparent" />
+              </button>
 
-            {/* Sign Out Link */}
-            <button
-              onClick={() => {
-                signOut();
-                router.push("/auth");
-              }}
-              className="p-1.5 hover:bg-cream-dark/50 rounded-lg text-charcoal-muted hover:text-charcoal transition-colors duration-200"
-              title="Sign Out"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
+              <AnimatePresence>
+                {showAccountDropdown && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: 8 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: 8 }}
+                    transition={{ duration: 0.15, ease: "easeOut" }}
+                    className="absolute right-0 top-10 w-64 bg-cream border border-cream-border rounded-xl shadow-xl overflow-hidden z-50 text-xs text-charcoal font-sans"
+                  >
+                    {/* Top user section */}
+                    <div className="p-4 bg-cream-card border-b border-cream-border flex items-center gap-3">
+                      <UserAvatar avatarUrl={currentUser.avatar} name={currentUser.name} size={44} />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-charcoal truncate text-sm" title={currentUser.name}>
+                          {currentUser.name}
+                        </p>
+                        <p className="text-[10px] text-charcoal-muted truncate font-medium">
+                          @{currentUser.username}
+                        </p>
+                        <p className="text-[9px] text-charcoal-light truncate font-mono mt-0.5" title={currentUser.email}>
+                          {currentUser.email || "guest@example.com"}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Navigation list */}
+                    <div className="p-1.5 space-y-0.5">
+                      <Link
+                        href="/library"
+                        onClick={() => setShowAccountDropdown(false)}
+                        className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-cream-dark/50 transition-colors"
+                      >
+                        <BookIcon className="w-4 h-4 text-brand-muted" />
+                        <span className="font-semibold text-charcoal-light">My Library</span>
+                      </Link>
+                      <Link
+                        href="/diary"
+                        onClick={() => setShowAccountDropdown(false)}
+                        className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-cream-dark/50 transition-colors"
+                      >
+                        <Calendar className="w-4 h-4 text-brand-muted" />
+                        <span className="font-semibold text-charcoal-light">Reading Diary</span>
+                      </Link>
+                      <Link
+                        href="/stats"
+                        onClick={() => setShowAccountDropdown(false)}
+                        className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-cream-dark/50 transition-colors"
+                      >
+                        <Activity className="w-4 h-4 text-brand-muted" />
+                        <span className="font-semibold text-charcoal-light">Reading Stats</span>
+                      </Link>
+                      <Link
+                        href={`/profile/${currentUser.username}`}
+                        onClick={() => setShowAccountDropdown(false)}
+                        className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-cream-dark/50 transition-colors"
+                      >
+                        <User className="w-4 h-4 text-brand-muted" />
+                        <span className="font-semibold text-charcoal-light">View Profile</span>
+                      </Link>
+                      <Link
+                        href="/settings"
+                        onClick={() => setShowAccountDropdown(false)}
+                        className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-cream-dark/50 transition-colors"
+                      >
+                        <Settings className="w-4 h-4 text-brand-muted" />
+                        <span className="font-semibold text-charcoal-light">Account Settings</span>
+                      </Link>
+                    </div>
+
+                    {/* Footer / Sign Out */}
+                    <div className="border-t border-cream-border p-1.5 bg-cream-card/50">
+                      <button
+                        onClick={() => {
+                          setShowAccountDropdown(false);
+                          signOut();
+                          router.push("/auth");
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors text-left cursor-pointer"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        <span className="font-bold">Sign Out</span>
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
         </div>
       </header>

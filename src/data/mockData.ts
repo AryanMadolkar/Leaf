@@ -20,6 +20,8 @@ export interface User {
   followingCount: number;
   isFollowing?: boolean;
   favoriteBookIds: string[];
+  email?: string;
+  created_at?: string;
 }
 
 export interface Review {
@@ -184,7 +186,7 @@ export const INITIAL_USERS: User[] = [
     id: "currentUser",
     username: "literary_wanderer",
     name: "Rowan Archer",
-    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+    avatar: "",
     bio: "Building a personal archive of thoughts, margins, and paperbacks. Leafing through life.",
     followersCount: 320,
     followingCount: 145,

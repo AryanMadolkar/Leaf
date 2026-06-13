@@ -30,7 +30,7 @@ export async function GET() {
         id: user.id,
         username: user.user_metadata?.username || user.email?.split("@")[0] || `user_${crypto.randomUUID().slice(0, 8)}`,
         display_name: user.user_metadata?.display_name || user.user_metadata?.name || "Reader",
-        avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
+        avatar_url: '',
         onboarding_completed: false,
       };
 
@@ -48,6 +48,11 @@ export async function GET() {
       }
     } else {
       profile = existingProfile;
+    }
+
+    if (profile) {
+      profile.email = user.email || (profile as any).email || "";
+      profile.created_at = (profile as any).created_at || (profile as any).joined_at || user.created_at || new Date().toISOString();
     }
 
     // 2. Fetch or dynamically create User Stats

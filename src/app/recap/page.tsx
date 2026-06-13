@@ -22,6 +22,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import UserAvatar from "@/components/UserAvatar";
 
 export default function RecapPage() {
   const { currentUser, books, diaryLogs } = useLeaf();
@@ -552,7 +553,7 @@ export default function RecapPage() {
 
                     {/* Footer Avatar */}
                     <div className="flex items-center gap-3 border-t border-white/15 pt-3 mt-4">
-                      <img src={currentUser.avatar} className="w-8 h-8 rounded-full border border-white/20 object-cover" />
+                      <UserAvatar avatarUrl={currentUser.avatar} name={currentUser.name} size={32} className="border border-white/20" />
                       <div className="min-w-0">
                         <p className="text-xs font-bold truncate leading-none">{currentUser.name}</p>
                         <p className="text-[9px] text-cream-dark truncate mt-0.5">@{currentUser.username}</p>

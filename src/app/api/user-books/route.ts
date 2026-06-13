@@ -178,7 +178,7 @@ export async function POST(request: Request) {
         id: user.id,
         username: user.user_metadata?.username || user.email?.split("@")[0] || `user_${crypto.randomUUID().slice(0, 8)}`,
         display_name: user.user_metadata?.display_name || user.user_metadata?.name || "Reader",
-        avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
+        avatar_url: '',
         onboarding_completed: false,
       };
 

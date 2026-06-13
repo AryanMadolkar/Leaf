@@ -8,6 +8,7 @@ import { useLeaf } from "@/context/LeafContext";
 import { Book } from "@/data/mockData";
 import { BookOpen, Calendar, Check, Heart, Plus, Star, Users, Award } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import UserAvatar from "@/components/UserAvatar";
 
 interface BookDetailClientProps {
   book: Book;
@@ -542,10 +543,10 @@ export default function BookDetailClient({ book: initialBook }: BookDetailClient
                   {friendsRead.map((logItem, i) => (
                     <div key={i} className="flex items-center justify-between gap-2 text-xs">
                       <div className="flex items-center gap-2">
-                        <img
-                          src={logItem.user?.avatar}
-                          alt={logItem.user?.name}
-                          className="w-5.5 h-5.5 rounded-full object-cover border border-cream-border"
+                        <UserAvatar
+                          avatarUrl={logItem.user?.avatar}
+                          name={logItem.user?.name}
+                          size={22}
                         />
                         <span className="font-semibold text-charcoal">
                           {logItem.user?.name}
