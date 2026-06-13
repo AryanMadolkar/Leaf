@@ -16,6 +16,9 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
     toggleFollowUser,
     lists,
     reviews,
+    diaryLogs,
+    books,
+    userStats: contextStats,
   } = useLeaf();
 
   const supabase = createClient();
@@ -38,146 +41,264 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
           .eq("username", username)
           .maybeSingle();
 
+        let targetProf = prof;
+        let isMock = false;
+
         if (profError || !prof) {
-          setTargetUser(null);
-          setLoading(false);
-          return;
+          // Check if we can fallback to mock/local data
+          const { INITIAL_USERS } = await import("@/data/mockData");
+          const matchedMock = INITIAL_USERS.find((u) => u.username === username);
+          if (matchedMock) {
+            targetProf = {
+              id: matchedMock.id,
+              username: matchedMock.username,
+              display_name: matchedMock.name,
+              avatar_url: matchedMock.avatar,
+              bio: matchedMock.bio,
+            };
+            isMock = true;
+          } else if (currentUser && username === currentUser.username) {
+            targetProf = {
+              id: currentUser.id,
+              username: currentUser.username,
+              display_name: currentUser.name,
+              avatar_url: currentUser.avatar,
+              bio: currentUser.bio,
+            };
+            isMock = true;
+          } else {
+            setTargetUser(null);
+            setLoading(false);
+            return;
+          }
         }
 
-        // Fetch stats
-        const { data: stats } = await supabase
-          .from("user_stats")
-          .select("*")
-          .eq("user_id", prof.id)
-          .maybeSingle();
-
-        // Fetch user books
-        const { data: userBooks } = await supabase
-          .from("user_books")
-          .select(`
-            id,
-            status,
-            rating,
-            review,
-            current_page,
-            started_at,
-            finished_at,
-            created_at,
-            book:books(*)
-          `)
-          .eq("user_id", prof.id);
-
-        // Fetch reviews
-        const { data: dbReviews } = await supabase
-          .from("reviews")
-          .select(`
-            id,
-            user_id,
-            book_id,
-            rating,
-            review_text,
-            likes_count,
-            created_at,
-            profile:profiles(display_name, avatar_url, username),
-            book:books(title, author_name, cover_url)
-          `)
-          .eq("user_id", prof.id)
-          .order("created_at", { ascending: false });
-
-        // Fetch social follower/following counts
-        const { count: followersCount } = await supabase
-          .from("follows")
-          .select("follower_id", { count: "exact", head: true })
-          .eq("following_id", prof.id);
-
-        const { count: followingCount } = await supabase
-          .from("follows")
-          .select("following_id", { count: "exact", head: true })
-          .eq("follower_id", prof.id);
-
-        // Check if current user is following target user
+        let stats = null;
+        let mappedFinished: any[] = [];
+        let mappedReviews: any[] = [];
+        let mappedFavorites: any[] = [];
+        let followersCount = 12;
+        let followingCount = 18;
         let isFollowing = false;
-        if (currentUser?.id) {
-          const { data: followRel } = await supabase
-            .from("follows")
-            .select("*")
-            .eq("follower_id", currentUser.id)
-            .eq("following_id", prof.id)
-            .maybeSingle();
-          isFollowing = !!followRel;
-        }
 
-        // Map finished logs
-        const mappedFinished = userBooks ? userBooks
-          .filter((ub: any) => ub.status === "finished")
-          .map((ub: any) => {
-            const dateStr = ub.finished_at || ub.created_at || new Date().toISOString();
-            const dateLogged = dateStr.includes("T") ? dateStr.split("T")[0] : dateStr;
+        if (!isMock && targetProf) {
+          // Fetch from Supabase
+          const { data: dbStats } = await supabase
+            .from("user_stats")
+            .select("*")
+            .eq("user_id", targetProf.id)
+            .maybeSingle();
+          stats = dbStats;
+
+          // Fetch user books
+          const { data: userBooks } = await supabase
+            .from("user_books")
+            .select(`
+              id,
+              status,
+              rating,
+              review,
+              current_page,
+              started_at,
+              finished_at,
+              created_at,
+              book:books(*)
+            `)
+            .eq("user_id", targetProf.id);
+
+          // Fetch reviews
+          const { data: dbReviews } = await supabase
+            .from("reviews")
+            .select(`
+              id,
+              user_id,
+              book_id,
+              rating,
+              review_text,
+              likes_count,
+              created_at,
+              profile:profiles(display_name, avatar_url, username),
+              book:books(title, author_name, cover_url)
+            `)
+            .eq("user_id", targetProf.id)
+            .order("created_at", { ascending: false });
+
+          // Fetch social follower/following counts
+          const { count: followersCountDb } = await supabase
+            .from("follows")
+            .select("follower_id", { count: "exact", head: true })
+            .eq("following_id", targetProf.id);
+          followersCount = followersCountDb || 0;
+
+          const { count: followingCountDb } = await supabase
+            .from("follows")
+            .select("following_id", { count: "exact", head: true })
+            .eq("follower_id", targetProf.id);
+          followingCount = followingCountDb || 0;
+
+          // Check if current user is following target user
+          if (currentUser?.id) {
+            const { data: followRel } = await supabase
+              .from("follows")
+              .select("*")
+              .eq("follower_id", currentUser.id)
+              .eq("following_id", targetProf.id)
+              .maybeSingle();
+            isFollowing = !!followRel;
+          }
+
+          // Map finished logs
+          mappedFinished = userBooks ? userBooks
+            .filter((ub: any) => ub.status === "finished")
+            .map((ub: any) => {
+              const dateStr = ub.finished_at || ub.created_at || new Date().toISOString();
+              const dateLogged = dateStr.includes("T") ? dateStr.split("T")[0] : dateStr;
+
+              return {
+                id: ub.id,
+                userId: targetProf.id,
+                bookId: ub.book?.id || "",
+                status: "Finished" as const,
+                dateLogged,
+                rating: ub.rating !== null ? ub.rating : undefined,
+                currentPage: ub.current_page || 0,
+                bookTitle: ub.book?.title || "Unknown Book",
+                bookAuthor: ub.book?.author_name || "Unknown Author",
+                bookCover: ub.book?.cover_url || "",
+              };
+            }) : [];
+
+          // Map reviews
+          mappedReviews = dbReviews ? dbReviews.map((r: any) => {
+            const dateObj = new Date(r.created_at);
+            const dateString = dateObj.toLocaleDateString("en-US", {
+              month: "short",
+              day: "2-digit",
+              year: "numeric",
+            });
 
             return {
-              id: ub.id,
-              userId: prof.id,
-              bookId: ub.book?.id || "",
-              status: "Finished" as const,
-              dateLogged,
-              rating: ub.rating !== null ? ub.rating : undefined,
-              currentPage: ub.current_page || 0,
-              bookTitle: ub.book?.title || "Unknown Book",
-              bookAuthor: ub.book?.author_name || "Unknown Author",
-              bookCover: ub.book?.cover_url || "",
+              id: r.id,
+              userId: r.user_id,
+              bookId: r.book_id,
+              rating: r.rating || 0.0,
+              content: r.review_text,
+              dateString,
+              likesCount: r.likes_count || 0,
+              commentsCount: 0,
+              isLiked: false,
+              reviewerName: r.profile?.display_name || targetProf.display_name || "Reader",
+              reviewerAvatar: r.profile?.avatar_url || targetProf.avatar_url || "",
+              reviewerUsername: r.profile?.username || targetProf.username || "reader",
+              bookTitle: r.book?.title || "",
+              bookAuthor: r.book?.author_name || "",
+              bookCover: r.book?.cover_url || "",
             };
           }) : [];
 
-        // Map reviews
-        const mappedReviews = dbReviews ? dbReviews.map((r: any) => {
-          const dateObj = new Date(r.created_at);
-          const dateString = dateObj.toLocaleDateString("en-US", {
-            month: "short",
-            day: "2-digit",
-            year: "numeric",
+          // Map favorite books (rating = 5)
+          mappedFavorites = userBooks ? userBooks
+            .filter((ub: any) => ub.status === "finished" && ub.rating === 5)
+            .map((ub: any) => ({
+              id: ub.book?.id || "",
+              title: ub.book?.title || "",
+              author: ub.book?.author_name || "Unknown Author",
+              coverImage: ub.book?.cover_url || "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=600&auto=format&fit=crop&q=80",
+              pages: ub.book?.page_count || 300,
+              averageRating: ub.rating || 5.0,
+              genres: ub.book?.subjects ? JSON.parse(ub.book.subjects) : [],
+              description: ub.book?.description || "",
+            })) : [];
+        } else {
+          // Handle mock profile calculations locally
+          const { INITIAL_DIARY_LOGS, INITIAL_REVIEWS, INITIAL_BOOKS } = await import("@/data/mockData");
+          const isMe = targetProf.id === currentUser.id;
+          
+          let logsToUse = [];
+          let reviewsToUse = [];
+          if (isMe) {
+            logsToUse = diaryLogs;
+            reviewsToUse = reviews;
+          } else {
+            logsToUse = INITIAL_DIARY_LOGS.filter((l) => l.userId === targetProf.id);
+            reviewsToUse = INITIAL_REVIEWS.filter((r) => r.userId === targetProf.id);
+          }
+
+          // Map finished logs
+          mappedFinished = logsToUse
+            .filter((log) => log.status === "Finished")
+            .map((log) => {
+              const book = books.find((b) => b.id === log.bookId) || INITIAL_BOOKS.find((b) => b.id === log.bookId);
+              return {
+                id: log.id,
+                userId: targetProf.id,
+                bookId: log.bookId,
+                status: "Finished" as const,
+                dateLogged: log.dateLogged,
+                rating: log.rating,
+                currentPage: book?.pages || 300,
+                bookTitle: book?.title || "Unknown Book",
+                bookAuthor: book?.author || "Unknown Author",
+                bookCover: book?.coverImage || "",
+              };
+            });
+
+          // Map reviews
+          mappedReviews = reviewsToUse.map((r) => {
+            const book = books.find((b) => b.id === r.bookId) || INITIAL_BOOKS.find((b) => b.id === r.bookId);
+            return {
+              id: r.id,
+              userId: r.userId,
+              bookId: r.bookId,
+              rating: r.rating || 0.0,
+              content: r.content,
+              dateString: r.dateString,
+              likesCount: r.likesCount || 0,
+              commentsCount: 0,
+              isLiked: r.isLiked || false,
+              reviewerName: targetProf.display_name || "Reader",
+              reviewerAvatar: targetProf.avatar_url || "",
+              reviewerUsername: targetProf.username || "reader",
+              bookTitle: book?.title || r.bookTitle || "",
+              bookAuthor: book?.author || r.bookAuthor || "",
+              bookCover: book?.coverImage || r.bookCover || "",
+            };
           });
 
-          return {
-            id: r.id,
-            userId: r.user_id,
-            bookId: r.book_id,
-            rating: r.rating || 0.0,
-            content: r.review_text,
-            dateString,
-            likesCount: r.likes_count || 0,
-            commentsCount: 0,
-            isLiked: false,
-            reviewerName: r.profile?.display_name || prof.display_name || "Reader",
-            reviewerAvatar: r.profile?.avatar_url || prof.avatar_url || "",
-            reviewerUsername: r.profile?.username || prof.username || "reader",
-            bookTitle: r.book?.title || "",
-            bookAuthor: r.book?.author_name || "",
-            bookCover: r.book?.cover_url || "",
-          };
-        }) : [];
+          // Pinned Favorites from mock matching
+          const { INITIAL_USERS: usersList } = await import("@/data/mockData");
+          const matchedMockUser = usersList.find((u) => u.id === targetProf.id);
+          const favoriteBookIds = matchedMockUser ? matchedMockUser.favoriteBookIds : [];
+          mappedFavorites = books
+              .filter((b) => favoriteBookIds.includes(b.id))
+              .map((b) => ({
+                ...b,
+                coverImage: b.coverImage || "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=600&auto=format&fit=crop&q=80",
+              }));
 
-        // Map favorite books (rating = 5)
-        const mappedFavorites = userBooks ? userBooks
-          .filter((ub: any) => ub.status === "finished" && ub.rating === 5)
-          .map((ub: any) => ({
-            id: ub.book?.id || "",
-            title: ub.book?.title || "",
-            author: ub.book?.author_name || "Unknown Author",
-            coverImage: ub.book?.cover_url || "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=600&auto=format&fit=crop&q=80",
-            pages: ub.book?.page_count || 300,
-            averageRating: ub.rating || 5.0,
-            genres: ub.book?.subjects ? JSON.parse(ub.book.subjects) : [],
-            description: ub.book?.description || "",
-          })) : [];
+          // Mock user stats
+          stats = {
+            reading_streak: 3,
+            favorite_genre: "Fiction",
+          };
+          
+          if (isMe && contextStats) {
+            stats = contextStats;
+          }
+          
+          followersCount = matchedMockUser?.followersCount || 12;
+          followingCount = matchedMockUser?.followingCount || 18;
+          isFollowing = matchedMockUser?.isFollowing || false;
+        }
 
         setTargetUser({
-          id: prof.id,
-          username: prof.username,
-          name: prof.display_name || "Reader",
-          avatar: prof.avatar_url || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80",
-          bio: prof.bio || "",
-          followersCount: followersCount || 0,
-          followingCount: followingCount || 0,
+          id: targetProf.id,
+          username: targetProf.username,
+          name: targetProf.display_name || "Reader",
+          avatar: targetProf.avatar_url || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80",
+          bio: targetProf.bio || "",
+          followersCount,
+          followingCount,
           isFollowing,
         });
 
@@ -193,7 +314,7 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
     }
 
     loadProfileData();
-  }, [username, currentUser, supabase]);
+  }, [username, currentUser, supabase, diaryLogs, reviews, userStats, books]);
 
   if (loading) {
     return (

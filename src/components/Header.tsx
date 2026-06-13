@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useLeaf } from "@/context/LeafContext";
 import { Book } from "@/data/mockData";
-import { Search, Plus, BookOpen, Star, LogOut, Check, X, Calendar, Clock, Book as BookIcon, Activity, CheckCircle, ChevronRight, Award, Bookmark } from "lucide-react";
+import { Search, Plus, BookOpen, Star, LogOut, Check, X, Calendar, Clock, Book as BookIcon, Activity, CheckCircle, ChevronRight, Award, Bookmark, User } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 
 // Star Rating helper
@@ -522,13 +522,10 @@ export default function Header() {
             {/* Profile Avatar / Auth */}
             <Link
               href={`/profile/${currentUser.username}`}
-              className="w-8 h-8 rounded-full border border-cream-border overflow-hidden hover:scale-105 transition-transform duration-300"
+              className="w-8 h-8 rounded-full border border-cream-border flex items-center justify-center bg-cream-dark/50 hover:bg-cream-dark text-charcoal hover:scale-105 transition-all duration-300"
+              title="View Profile Details"
             >
-              <img
-                src={currentUser.avatar}
-                alt={currentUser.name}
-                className="w-full h-full object-cover"
-              />
+              <User className="w-4.5 h-4.5" />
             </Link>
 
             {/* Sign Out Link */}

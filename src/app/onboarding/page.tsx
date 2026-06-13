@@ -108,6 +108,32 @@ export default function OnboardingPage() {
     if (!session?.user) return;
     setSaving(true);
 
+    const isGuest = session?.user?.id === "guest-user-id";
+    if (isGuest) {
+      try {
+        // 1. Update Profile in Local Storage
+        const updatedProfile = {
+          ...profile,
+          favorite_genres: selectedGenres,
+          onboarding_completed: true,
+        };
+        localStorage.setItem("leaf_local_profile", JSON.stringify(updatedProfile));
+        document.cookie = "leaf_guest_onboarded=true; path=/; max-age=31536000";
+
+        // 2. Add Pinned Favorites to Local Storage
+        for (const favBook of favoriteBooks) {
+          await logBook(favBook.id, "Finished", 5, "Pinned as a favorite during onboarding.");
+        }
+
+        router.push("/feed");
+      } catch (err) {
+        console.error("Failed to complete guest onboarding:", err);
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
     try {
       // 1. Update Profile in Supabase
       const { error } = await supabase
