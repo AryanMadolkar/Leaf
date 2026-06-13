@@ -109,6 +109,30 @@ export async function getOrFetchAuthor(authorKey: string): Promise<{ name: strin
   }
 }
 
+let supportedColumnsCache: Set<string> | null = null;
+
+async function getSupportedColumns(supabaseClient: any): Promise<Set<string>> {
+  if (supportedColumnsCache) return supportedColumnsCache;
+
+  const defaultCols = ["id", "open_library_key", "isbn_10", "isbn_13", "title", "author_name", "cover_url", "page_count", "subjects", "first_publish_year", "created_at"];
+  const cols = new Set(defaultCols);
+  
+  const probeCols = ["description", "subtitle", "language"];
+  for (const col of probeCols) {
+    try {
+      const { error } = await supabaseClient.from("books").select(col).limit(1);
+      if (!error || error.code !== "42703") {
+        cols.add(col);
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+  
+  supportedColumnsCache = cols;
+  return cols;
+}
+
 // Save a normalized book record to Supabase
 export async function saveBookToDatabase(book: Omit<NormalizedBook, "id">): Promise<string> {
   const supabase = await createClient();
@@ -117,6 +141,8 @@ export async function saveBookToDatabase(book: Omit<NormalizedBook, "id">): Prom
   const bookId = getCanonicalBookId(book);
 
   try {
+    const supportedCols = await getSupportedColumns(supabase);
+
     // Check if book already exists in DB
     const { data: existing } = await supabase
       .from("books")
@@ -126,47 +152,37 @@ export async function saveBookToDatabase(book: Omit<NormalizedBook, "id">): Prom
 
     const subjectsStr = JSON.stringify(book.subjects || []);
 
+    const payload: any = {
+      open_library_key: book.open_library_key || null,
+      isbn_10: book.isbn_10 || null,
+      isbn_13: book.isbn_13 || null,
+      title: book.title,
+      author_name: book.author_name || null,
+      cover_url: book.cover_url || null,
+      page_count: book.page_count || 0,
+      subjects: subjectsStr,
+      first_publish_year: book.first_publish_year || null,
+    };
+
+    if (supportedCols.has("subtitle")) payload.subtitle = book.subtitle || null;
+    if (supportedCols.has("description")) payload.description = book.description || null;
+    if (supportedCols.has("language")) payload.language = book.language || null;
+
     if (existing) {
       // Update metadata to refresh
       const { error } = await supabase
         .from("books")
-        .update({
-          open_library_key: book.open_library_key || null,
-          isbn_10: book.isbn_10 || null,
-          isbn_13: book.isbn_13 || null,
-          title: book.title,
-          subtitle: book.subtitle || null,
-          description: book.description || null,
-          author_name: book.author_name || null,
-          cover_url: book.cover_url || null,
-          page_count: book.page_count || 0,
-          subjects: subjectsStr,
-          first_publish_year: book.first_publish_year || null,
-          language: book.language || null,
-        })
+        .update(payload)
         .eq("id", existing.id);
 
       if (error) throw error;
       return existing.id;
     } else {
       // Insert new book
+      payload.id = bookId;
       const { error } = await supabase
         .from("books")
-        .insert({
-          id: bookId,
-          open_library_key: book.open_library_key || null,
-          isbn_10: book.isbn_10 || null,
-          isbn_13: book.isbn_13 || null,
-          title: book.title,
-          subtitle: book.subtitle || null,
-          description: book.description || null,
-          author_name: book.author_name || null,
-          cover_url: book.cover_url || null,
-          page_count: book.page_count || 0,
-          subjects: subjectsStr,
-          first_publish_year: book.first_publish_year || null,
-          language: book.language || null,
-        });
+        .insert(payload);
 
       if (error) throw error;
       return bookId;

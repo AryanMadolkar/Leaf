@@ -718,6 +718,24 @@ async function seedCatalog() {
   
   console.log("Catalog compilation complete. Total records:", finalCatalog.length);
   
+  // Probe columns dynamically to see what is supported in Supabase
+  const supportedColumns = new Set(["id", "open_library_key", "isbn_10", "isbn_13", "title", "author_name", "cover_url", "page_count", "subjects", "first_publish_year", "created_at"]);
+  const columnsToProbe = ["description", "subtitle", "language"];
+  
+  console.log("Probing database table columns...");
+  for (const col of columnsToProbe) {
+    try {
+      const { error } = await supabase.from("books").select(col).limit(1);
+      if (!error || error.code !== "42703") {
+        supportedColumns.add(col);
+      } else {
+        console.log(`Column '${col}' is not supported by the remote database table 'books'. Skipping this field in seeding...`);
+      }
+    } catch (e) {
+      console.log(`Failed to probe column '${col}':`, e);
+    }
+  }
+
   // Batch inserts into Supabase in blocks of 50 to ensure high-performance upload
   const BATCH_SIZE = 50;
   let successCount = 0;
@@ -731,20 +749,30 @@ async function seedCatalog() {
       const workKey = b.open_library_key;
       const canonicalId = workKey || b.isbn_13;
       
-      return {
+      const record = {
         id: canonicalId,
         open_library_key: b.open_library_key,
         isbn_10: b.isbn_10 || null,
         isbn_13: b.isbn_13,
         title: b.title,
-        description: b.description,
         author_name: b.author,
         first_publish_year: b.first_publish_year,
         page_count: b.page_count,
         cover_url: b.cover_url,
         subjects: JSON.stringify(b.genres),
-        language: "eng"
       };
+
+      if (supportedColumns.has("description")) {
+        record.description = b.description;
+      }
+      if (supportedColumns.has("subtitle")) {
+        record.subtitle = b.subtitle || null;
+      }
+      if (supportedColumns.has("language")) {
+        record.language = "eng";
+      }
+
+      return record;
     });
     
     try {
