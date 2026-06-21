@@ -1,5 +1,6 @@
 # dependencies
-/node_modules
+node_modules/
+frontend/node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -12,9 +13,11 @@
 /coverage
 
 # next.js build output
-/.next/
-/out/
-/build
+.next/
+frontend/.next/
+out/
+frontend/out/
+build/
 
 # vercel
 .vercel/
@@ -27,12 +30,19 @@
 .env.development.local
 .env.test.local
 .env.production.local
+frontend/.env.local
+frontend/.env.*
 
 # database files (local SQLite caches)
 *.db
 *.sqlite
 *.sqlite3
+backend/leaf.db
+backend/leaf.db-journal
+backend/leaf.db-wal
 leaf.db
+leaf.db-journal
+leaf.db-wal
 
 # log files
 *.log
@@ -54,4 +64,3 @@ Thumbs.db
 next-env.d.ts
 .idea/
 .vscode/
-

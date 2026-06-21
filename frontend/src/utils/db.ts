@@ -4,7 +4,15 @@ import crypto from "crypto";
 import { INITIAL_BOOKS, INITIAL_REVIEWS, INITIAL_DIARY_LOGS } from "@/data/mockData";
 
 // Path to SQLite database file
-const DB_PATH = path.resolve(process.cwd(), "leaf.db");
+let DB_PATH = process.env.DATABASE_PATH;
+if (!DB_PATH) {
+  const cwd = process.cwd();
+  if (cwd.endsWith("frontend")) {
+    DB_PATH = path.resolve(cwd, "..", "backend", "leaf.db");
+  } else {
+    DB_PATH = path.resolve(cwd, "backend", "leaf.db");
+  }
+}
 
 let dbInstance: Database.Database | null = null;
 
