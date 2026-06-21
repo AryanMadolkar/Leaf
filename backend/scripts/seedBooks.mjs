@@ -5,7 +5,13 @@ import path from "path";
 // 1. Read .env.local manually
 let env = {};
 try {
-  const envPath = path.resolve(process.cwd(), ".env.local");
+  const envPaths = [
+    path.resolve(process.cwd(), ".env.local"),
+    path.resolve(process.cwd(), "frontend", ".env.local"),
+    path.resolve(process.cwd(), "..", "frontend", ".env.local"),
+    path.resolve(process.cwd(), "backend", ".env.local")
+  ];
+  const envPath = envPaths.find((p) => fs.existsSync(p)) || envPaths[0];
   if (fs.existsSync(envPath)) {
     const envContent = fs.readFileSync(envPath, "utf8");
     envContent.split("\n").forEach((line) => {

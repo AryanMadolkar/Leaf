@@ -72,74 +72,9 @@ export interface Comment {
   dateString: string;
 }
 
-export const INITIAL_BOOKS: Book[] = [
-  {
-    id: "9780140167771", // The Secret History ISBN
-    title: "The Secret History",
-    author: "Donna Tartt",
-    year: 1992,
-    description: "Under the influence of their charismatic classics professor, a group of clever, eccentric misfits at an elite New England college discover a way of thinking and living that is a world away from the humdrum existence of their contemporaries. But when they go beyond the boundaries of normal morality, their lives are changed profoundly and forever.",
-    coverImage: "https://covers.openlibrary.org/b/isbn/9780140167771-L.jpg",
-    averageRating: 4.6,
-    genres: ["Dark Academia", "Fiction", "Mystery", "Psychological"],
-    pages: 559,
-  },
-  {
-    id: "9780593135204", // Project Hail Mary ISBN
-    title: "Project Hail Mary",
-    author: "Andy Weir",
-    year: 2021,
-    description: "Ryland Grace is the sole survivor on a desperate, last-chance mission to save humanity from an extinction-level event. Only right now, he doesn't know that. He can't even remember his own name, let alone the nature of his assignment or how to complete it. All he knows is that he's been asleep for a very, very long time. And he's just been awakened to find himself millions of miles from home, with nothing but two corpses for company.",
-    coverImage: "https://covers.openlibrary.org/b/isbn/9780593135204-L.jpg",
-    averageRating: 4.7,
-    genres: ["Sci-Fi", "Fiction", "Space", "Adventure"],
-    pages: 476,
-  },
-  {
-    id: "9781984822178", // Normal People ISBN
-    title: "Normal People",
-    author: "Sally Rooney",
-    year: 2018,
-    description: "Connell and Marianne grow up in the same small town in the west of Ireland, but the similarities end there. In school, Connell is popular and well-liked, while Marianne is a loner. But when the two strike up a conversation—awkward but electrifying—something life-changing begins. Normal People is the story of mutual fascination, friendship and love.",
-    coverImage: "https://covers.openlibrary.org/b/isbn/9781984822178-L.jpg",
-    averageRating: 3.9,
-    genres: ["Contemporary Fiction", "Romance", "Drama", "Irish Lit"],
-    pages: 273,
-  },
-  {
-    id: "9780441172719", // Dune ISBN
-    title: "Dune",
-    author: "Frank Herbert",
-    year: 1965,
-    description: "Set on the desert planet Arrakis, Dune is the story of the boy Paul Atreides, heir to a noble family tasked with ruling an inhospitable world where the only thing of value is the 'spice' melange, a drug capable of extending life and enhancing consciousness. Coveted across the known universe, melange is a prize worth killing for...",
-    coverImage: "https://covers.openlibrary.org/b/isbn/9780441172719-L.jpg",
-    averageRating: 4.5,
-    genres: ["Sci-Fi", "Classics", "Fantasy", "Epic"],
-    pages: 604,
-  },
-  {
-    id: "9780593318171", // Klara and the Sun ISBN
-    title: "Klara and the Sun",
-    author: "Kazuo Ishiguro",
-    year: 2021,
-    description: "Klara and the Sun offers a look at our changing world through the eyes of an unforgettable narrator, and explores the fundamental question: what does it mean to love? Klara is an Artificial Friend with outstanding observational qualities, who, from her place in the store, watches carefully the behavior of those who come in to browse, and of those who pass on the street outside.",
-    coverImage: "https://covers.openlibrary.org/b/isbn/9780593318171-L.jpg",
-    averageRating: 4.1,
-    genres: ["Sci-Fi", "Fiction", "Speculative", "Philosophical"],
-    pages: 307,
-  },
-  {
-    id: "9780743273565", // The Great Gatsby ISBN
-    title: "The Great Gatsby",
-    author: "F. Scott Fitzgerald",
-    year: 1925,
-    description: "The Great Gatsby, F. Scott Fitzgerald's third book, stands as the supreme achievement of his career. This exemplary novel of the Jazz Age has been acclaimed by generations of readers. The story of the fabulously wealthy Jay Gatsby and his love for the beautiful Daisy Buchanan is an exquisitely crafted tale of America in the 1920s.",
-    coverImage: "https://covers.openlibrary.org/b/isbn/9780743273565-L.jpg",
-    averageRating: 4.3,
-    genres: ["Classics", "Fiction", "Historical", "Literature"],
-    pages: 180,
-  },
-];
+import { GENERATED_BOOKS } from "./mockBooksGenerated";
+export const INITIAL_BOOKS: Book[] = GENERATED_BOOKS;
+
 
 export const INITIAL_USERS: User[] = [
   {
@@ -312,35 +247,85 @@ export const INITIAL_DIARY_LOGS: ReadingLog[] = [
 
 export const INITIAL_LISTS: CuratedList[] = [
   {
-    id: "list-1",
+    id: "list-fantasy",
+    userId: "user-julian",
+    title: "Epic Fantasy Masterpieces",
+    description: "Journey across breathtaking landscapes, intricate magic systems, and ancient conflicts. Curated for the ultimate fantasy reader.",
+    coverImage: "https://images.unsplash.com/photo-1514894780887-121968d00567?w=600&auto=format&fit=crop&q=80",
+    bookIds: ["9780007117116", "9780261103573", "9780553103540", "9780765311788", "9780756404079", "9780765326355"],
+    likesCount: 312,
+    commentsCount: 48,
+  },
+  {
+    id: "list-scifi",
+    userId: "user-alex",
+    title: "Sci-Fi & Cyberpunk Visions",
+    description: "From neon-drenched streets to the far reaches of the cosmos. These essential sci-fi works question our technology, humanity, and future.",
+    coverImage: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&auto=format&fit=crop&q=80",
+    bookIds: ["9780441172719", "9780441569595", "9780553293357", "9780593135204"],
+    likesCount: 245,
+    commentsCount: 31,
+  },
+  {
+    id: "list-dark-academia",
     userId: "user-emma",
     title: "Dark Academia Essentials",
-    description: "Rainy college towns, dusty libraries, ancient greek tragedies, and secrets that should have stayed buried. Books that feel like wool coats and old paper.",
-    coverImage: "https://images.unsplash.com/photo-1506880018603-83d5b814b5a6?w=600&auto=format&fit=crop&q=80",
-    bookIds: ["9780140167771", "9780743273565"],
-    likesCount: 142,
-    commentsCount: 23,
+    description: "Whispered secrets in leather-bound libraries, ancient languages, and the thrill of forbidden knowledge. These stories carry a haunting, aesthetic weight.",
+    coverImage: "https://images.unsplash.com/photo-1507842217343-583bb7270b66?w=600&auto=format&fit=crop&q=80",
+    bookIds: ["9780679783689", "9780743273565", "9780141439570"],
+    likesCount: 198,
+    commentsCount: 15,
   },
   {
-    id: "list-2",
-    userId: "user-alex",
-    title: "Sci-Fi Essentials",
-    description: "Hard science, galactic scale, and first-contact puzzles that tickle the logical brain. Books that look up at the stars and ask what if.",
-    coverImage: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&auto=format&fit=crop&q=80",
-    bookIds: ["9780593135204", "9780441172719", "9780593318171"],
-    likesCount: 98,
-    commentsCount: 12,
+    id: "list-booktok",
+    userId: "user-sophia",
+    title: "Viral BookTok Sensations",
+    description: "The books that captured millions of hearts, spawned viral trends, and took over the reading community by storm. Emotional, romance-driven, and highly addictive.",
+    coverImage: "https://images.unsplash.com/photo-1512820790803-83ca734da794?w=600&auto=format&fit=crop&q=80",
+    bookIds: ["9781501110368", "9781984806758", "9781984806734", "9780593336823"],
+    likesCount: 420,
+    commentsCount: 64,
   },
   {
-    id: "list-3",
-    userId: "currentUser",
-    title: "Books That Changed My Life",
-    description: "A small selection of stories that altered my perspective, rearranged my bookshelf, and left an permanent imprint on how I view the world.",
+    id: "list-mystery",
+    userId: "user-julian",
+    title: "Gothic & Thrilling Mystery",
+    description: "Uncover buried secrets, unreliable narrators, and dark, atmospheric environments that keep you guessing until the final sentence.",
+    coverImage: "https://images.unsplash.com/photo-1509248961158-e54f6934749c?w=600&auto=format&fit=crop&q=80",
+    bookIds: ["9780307588371", "9781250301697", "9780062073488", "9780385504201", "9780307269751"],
+    likesCount: 285,
+    commentsCount: 29,
+  },
+  {
+    id: "list-nonfiction",
+    userId: "user-sophia",
+    title: "Mind-Expanding Non-Fiction",
+    description: "Deep-dives into history, human habits, cognitive biases, and ideas that will completely change how you view yourself and the world around you.",
     coverImage: "https://images.unsplash.com/photo-1544947950-fa07a98d237f?w=600&auto=format&fit=crop&q=80",
-    bookIds: ["9780140167771", "9780593318171", "9780743273565"],
-    likesCount: 45,
-    commentsCount: 6,
+    bookIds: ["9780062316097", "9780735211292", "9780374275631", "9780307352149"],
+    likesCount: 154,
+    commentsCount: 19,
   },
+  {
+    id: "list-memoirs",
+    userId: "user-emma",
+    title: "Unforgettable Memoirs",
+    description: "Real human lives written with raw honesty, covering struggles, triumphs, and the complicated path to personal and artistic freedom.",
+    coverImage: "https://images.unsplash.com/photo-1495640388908-05fa85288e61?w=600&auto=format&fit=crop&q=80",
+    bookIds: ["9780399590504", "9781982185824", "9781524763138", "9781451648539"],
+    likesCount: 182,
+    commentsCount: 11,
+  },
+  {
+    id: "list-historical",
+    userId: "user-alex",
+    title: "Immersive Historical Sagas",
+    description: "Multi-generational stories and epic historical accounts that recreate past eras, conflicts, and the persistent strength of families.",
+    coverImage: "https://images.unsplash.com/photo-1461360370896-922624d12aa1?w=600&auto=format&fit=crop&q=80",
+    bookIds: ["9780375831003", "9781476746586", "9781501161933", "9785531032398"],
+    likesCount: 214,
+    commentsCount: 22,
+  }
 ];
 
 export const INITIAL_COMMENTS: Comment[] = [

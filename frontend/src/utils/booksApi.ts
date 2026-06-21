@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { createClient } from "@/utils/supabase/server";
-import { Book } from "@/data/mockData";
+import { Book, INITIAL_BOOKS } from "@/data/mockData";
 
 export interface NormalizedBook {
   id: string;
@@ -195,6 +195,14 @@ export async function saveBookToDatabase(book: Omit<NormalizedBook, "id">): Prom
 
 // Get Cached Book by various keys (using single query or filter)
 export async function getCachedBook(query: string): Promise<Book | null> {
+  // 1. Try local INITIAL_BOOKS first
+  const queryClean = query.toLowerCase().replace(/^\/works\//, "");
+  const localMatch = INITIAL_BOOKS.find((b: Book) => {
+    const bookId = b.id.toLowerCase();
+    return bookId === queryClean || bookId === query.toLowerCase();
+  });
+  if (localMatch) return localMatch;
+
   const supabase = await createClient();
   const cleanKey = query.startsWith("/works/") ? query : `/works/${query}`;
 
@@ -230,6 +238,12 @@ export async function getCachedBook(query: string): Promise<Book | null> {
 
 // Search local database
 export async function searchLocalBooks(query: string): Promise<Book[]> {
+  const queryLower = query.toLowerCase();
+  const localResults = INITIAL_BOOKS.filter((b: Book) => 
+    b.title.toLowerCase().includes(queryLower) || 
+    b.author.toLowerCase().includes(queryLower)
+  );
+
   const supabase = await createClient();
 
   try {
@@ -239,12 +253,23 @@ export async function searchLocalBooks(query: string): Promise<Book[]> {
       .or(`title.ilike.%${query}%,author_name.ilike.%${query}%`)
       .limit(20);
 
-    if (error || !records) return [];
+    if (error || !records) return localResults.slice(0, 20);
 
-    return records.map((r: any) => mapDbBookToClientBook(r));
+    const dbResults = records.map((r: any) => mapDbBookToClientBook(r));
+    
+    // Merge them
+    const seen = new Set(localResults.map(r => r.id));
+    const combined = [...localResults];
+    for (const b of dbResults) {
+      if (!seen.has(b.id)) {
+        seen.add(b.id);
+        combined.push(b);
+      }
+    }
+    return combined.slice(0, 20);
   } catch (error) {
     console.error("Error doing local search in Supabase:", error);
-    return [];
+    return localResults.slice(0, 20);
   }
 }
 

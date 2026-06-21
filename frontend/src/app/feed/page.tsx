@@ -6,10 +6,10 @@ import ReviewCard, { StarDisplay } from "@/components/ReviewCard";
 import BookCard from "@/components/BookCard";
 import { useLeaf } from "@/context/LeafContext";
 import Link from "next/link";
-import { TrendingUp, Layers, BookOpen, Star, Plus } from "lucide-react";
+import { TrendingUp, Layers, BookOpen, Star, Plus, Sparkles } from "lucide-react";
 
 export default function HomeFeed() {
-  const { reviews, books, lists } = useLeaf();
+  const { reviews, books, lists, diaryLogs } = useLeaf();
 
   // Recently finished books for horizontal carousel
   const recentlyFinished = books.slice(0, 4);
@@ -19,6 +19,45 @@ export default function HomeFeed() {
 
   // Popular community lists
   const communityLists = lists.slice(0, 2);
+
+  // New Reads You'll Like recommendation logic
+  const loggedBookIds = new Set(diaryLogs.map((log) => log.bookId));
+  
+  // Find genres of books the user has interacted with
+  const userInteractedBooks = diaryLogs
+    .map((log) => books.find((b) => b.id === log.bookId))
+    .filter((b) => !!b);
+  
+  const userFavoriteGenres = Array.from(
+    new Set(userInteractedBooks.flatMap((b) => b.genres))
+  );
+
+  // Filter books not in user's library
+  let recommendations = books.filter((b) => !loggedBookIds.has(b.id));
+
+  // Filter by user's favorite genres if available
+  if (userFavoriteGenres.length > 0) {
+    recommendations = recommendations.filter((b) =>
+      b.genres.some((g) => userFavoriteGenres.includes(g))
+    );
+  }
+
+  // Sort by average rating and slice
+  let recommendedReads = recommendations
+    .sort((a, b) => b.averageRating - a.averageRating)
+    .slice(0, 4);
+
+  // Fallback to top rated books not in user's library if not enough recommendations
+  if (recommendedReads.length < 4) {
+    const fallbackRecs = books
+      .filter((b) => !loggedBookIds.has(b.id))
+      .sort((a, b) => b.averageRating - a.averageRating)
+      .slice(0, 4);
+    
+    // Merge and deduplicate
+    const merged = Array.from(new Set([...recommendedReads, ...fallbackRecs])).slice(0, 4);
+    recommendedReads = merged;
+  }
 
   return (
     <div className="min-h-screen bg-cream flex flex-col">
@@ -123,6 +162,47 @@ export default function HomeFeed() {
                       <div className="flex items-center gap-1 mt-1 text-yellow-500">
                         <Star className="w-2.5 h-2.5 fill-current" />
                         <span className="text-[9px] font-bold text-charcoal-light">
+                          {book.averageRating.toFixed(1)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* New Reads You'll Like */}
+            <div className="bg-cream-card border border-cream-border rounded-xl p-5 shadow-sm space-y-4">
+              <div className="flex items-center gap-2 text-charcoal">
+                <Sparkles className="w-4 h-4 text-brand" />
+                <h4 className="font-serif text-base font-bold">New Reads for You</h4>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                {recommendedReads.map((book) => (
+                  <div key={book.id} className="space-y-1.5 flex flex-col items-center text-center group">
+                    <Link href={`/book/${book.id}`} className="relative block w-20 h-28 rounded overflow-hidden shadow border border-cream-border hover:-translate-y-1 transition-transform duration-300 flex-shrink-0 bg-cream-dark">
+                      <div className="absolute top-0 bottom-0 left-0 w-[2px] bg-gradient-to-r from-charcoal/20 to-transparent z-10" />
+                      <img
+                        src={book.coverImage}
+                        alt={book.title}
+                        className="w-full h-full object-cover select-none"
+                      />
+                    </Link>
+                    <div className="min-w-0 max-w-[90px]">
+                      <Link
+                        href={`/book/${book.id}`}
+                        className="text-[10px] font-bold text-charcoal hover:text-brand truncate block"
+                        title={book.title}
+                      >
+                        {book.title}
+                      </Link>
+                      <p className="text-[8px] text-charcoal-muted truncate">
+                        {book.author}
+                      </p>
+                      <div className="flex items-center justify-center gap-0.5 mt-0.5 text-yellow-500">
+                        <Star className="w-2.5 h-2.5 fill-current" />
+                        <span className="text-[8px] font-bold text-charcoal-light">
                           {book.averageRating.toFixed(1)}
                         </span>
                       </div>

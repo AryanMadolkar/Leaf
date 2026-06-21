@@ -94,15 +94,20 @@ export default function DiscoverPage() {
 
   // Curate Book Shelves from local catalog
   const allTimeGreats = [...books].sort((a, b) => b.averageRating - a.averageRating).slice(0, 15);
-  const trendingThisWeek = books.filter((b) => b.genres.includes("Popular") || b.averageRating >= 4.2).slice(0, 12);
-  const mostAdded = books.filter((b) => b.genres.includes("Bestseller") || b.pages > 400).slice(0, 12);
-  const bookTokFavorites = books.filter((b) => b.genres.includes("BookTok") || b.genres.includes("Contemporary")).slice(0, 12);
-  const awardWinners = books.filter((b) => b.genres.includes("Classics") || b.genres.includes("High Fantasy")).slice(0, 12);
-  const modernClassics = books.filter((b) => b.genres.includes("Classics") && b.year > 1900).slice(0, 12);
-  const sciFiEssentials = books.filter((b) => b.genres.includes("Sci-Fi") || b.genres.includes("Space Opera")).slice(0, 12);
-  const fantasyEssentials = books.filter((b) => b.genres.includes("Fantasy") || b.genres.includes("Magic")).slice(0, 12);
-  const literaryFiction = books.filter((b) => b.genres.includes("Literary Fiction") || b.genres.includes("Drama")).slice(0, 12);
-  const mysteryThriller = books.filter((b) => b.genres.includes("Thriller") || b.genres.includes("Mystery")).slice(0, 12);
+  const trendingThisWeek = books.filter((b) => b.genres.some(g => g.toLowerCase().includes("popular")) || b.averageRating >= 4.4).slice(0, 12);
+  const mostAdded = books.filter((b) => b.genres.some(g => g.toLowerCase().includes("bestseller")) || b.pages > 450).slice(0, 12);
+  const bookTokFavorites = books.filter((b) => b.genres.some(g => g.toLowerCase().includes("booktok"))).slice(0, 12);
+  const awardWinners = books.filter((b) => b.genres.some(g => g.toLowerCase().includes("classic")) || b.genres.some(g => g.toLowerCase().includes("high"))).slice(0, 12);
+  const modernClassics = books.filter((b) => b.genres.some(g => g.toLowerCase().includes("classic")) && b.year > 1950).slice(0, 12);
+  
+  const sciFiEssentials = books.filter((b) => b.genres.some(g => g.toLowerCase().includes("sci-fi")) || b.genres.some(g => g.toLowerCase().includes("space"))).slice(0, 12);
+  const fantasyEssentials = books.filter((b) => b.genres.some(g => g.toLowerCase().includes("fantasy")) || b.genres.some(g => g.toLowerCase().includes("magic"))).slice(0, 12);
+  const literaryFiction = books.filter((b) => b.genres.some(g => g.toLowerCase().includes("literary")) || b.genres.some(g => g.toLowerCase().includes("drama"))).slice(0, 12);
+  const mysteryThriller = books.filter((b) => b.genres.some(g => g.toLowerCase().includes("thriller")) || b.genres.some(g => g.toLowerCase().includes("mystery")) || b.genres.some(g => g.toLowerCase().includes("crime"))).slice(0, 12);
+  const romancePillars = books.filter((b) => b.genres.some(g => g.toLowerCase().includes("romance")) || b.genres.some(g => g.toLowerCase().includes("contemporary"))).slice(0, 12);
+  const historicalFiction = books.filter((b) => b.genres.some(g => g.toLowerCase().includes("historical")) || b.genres.some(g => g.toLowerCase().includes("war"))).slice(0, 12);
+  const biographyMemoir = books.filter((b) => b.genres.some(g => g.toLowerCase().includes("biography")) || b.genres.some(g => g.toLowerCase().includes("memoir"))).slice(0, 12);
+  const nonFiction = books.filter((b) => b.genres.some(g => g.toLowerCase().includes("non-fiction")) || b.genres.some(g => g.toLowerCase().includes("psychology")) || b.genres.some(g => g.toLowerCase().includes("science"))).slice(0, 12);
 
   // Community Leaderboard (Top 25)
   const leaderboard = [...books].sort((a, b) => b.averageRating - a.averageRating).slice(0, 25);
@@ -361,6 +366,18 @@ export default function DiscoverPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 border-t border-cream-border/60 pt-10">
               <Shelf title="Literary Fiction" description="Beautifully written classic and modern works" booksList={literaryFiction} icon={BookOpen} />
               <Shelf title="Mystery & Thriller" description="Acclaimed suspense, crime, and detective fiction" booksList={mysteryThriller} icon={Compass} />
+            </div>
+
+            {/* Two-Column: Romance & Historical Fiction */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 border-t border-cream-border/60 pt-10">
+              <Shelf title="Romance Pillars" description="Acclaimed love stories, historical and contemporary" booksList={romancePillars} icon={Sparkles} />
+              <Shelf title="Historical Fiction" description="Immersive journeys through the corridors of time" booksList={historicalFiction} icon={BookOpen} />
+            </div>
+
+            {/* Two-Column: Biography/Memoir & Non-Fiction */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 border-t border-cream-border/60 pt-10">
+              <Shelf title="Biography & Memoir" description="Memorable human stories and definitive chronicles" booksList={biographyMemoir} icon={Award} />
+              <Shelf title="Non-Fiction Bestsellers" description="Ideas, habits, history, and science shaping our minds" booksList={nonFiction} icon={Compass} />
             </div>
 
             {/* Community Rankings Leaderboard */}

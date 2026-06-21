@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { createClient } from "@/utils/supabase/server";
 import { mapDbBookToClientBook } from "@/utils/booksApi";
+import { INITIAL_BOOKS } from "@/data/mockData";
 
 export async function GET() {
   try {
@@ -125,7 +126,17 @@ export async function GET() {
       .from("books")
       .select("*");
 
-    const books = dbBooks ? dbBooks.map((b: any) => mapDbBookToClientBook(b)) : [];
+    const dbBooksMapped = dbBooks ? dbBooks.map((b: any) => mapDbBookToClientBook(b)) : [];
+
+    // Merge database books with INITIAL_BOOKS to ensure all 500 books are available
+    const booksMap = new Map<string, any>();
+    INITIAL_BOOKS.forEach((b: any) => {
+      booksMap.set(b.id, b);
+    });
+    dbBooksMapped.forEach((b: any) => {
+      booksMap.set(b.id, b);
+    });
+    const books = Array.from(booksMap.values());
 
     // 4. Fetch Community Reviews (join profiles & books)
     const { data: dbReviews } = await supabase
