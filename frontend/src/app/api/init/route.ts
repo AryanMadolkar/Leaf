@@ -121,20 +121,29 @@ export async function GET() {
       };
     }) : [];
 
-    // Gather list of cached books in system
-    const { data: dbBooks } = await supabase
-      .from("books")
-      .select("*");
+    // Gather only books referenced in the user's library (not the full catalog)
+    const userBookIds = diaryLogs.map((log: { bookId: string }) => log.bookId).filter(Boolean);
+    let userLibraryBooks: any[] = [];
 
-    const dbBooksMapped = dbBooks ? dbBooks.map((b: any) => mapDbBookToClientBook(b)) : [];
+    if (userBookIds.length > 0) {
+      const { data: libraryBooks } = await supabase
+        .from("books")
+        .select("*")
+        .in("id", userBookIds);
 
-    // Merge database books with INITIAL_BOOKS to ensure all 500 books are available
+      userLibraryBooks = libraryBooks
+        ? libraryBooks.map((b: any) => mapDbBookToClientBook(b))
+        : [];
+    }
+
+    // Merge user library books with INITIAL_BOOKS bootstrap for any missing refs
     const booksMap = new Map<string, any>();
-    INITIAL_BOOKS.forEach((b: any) => {
-      booksMap.set(b.id, b);
-    });
-    dbBooksMapped.forEach((b: any) => {
-      booksMap.set(b.id, b);
+    userLibraryBooks.forEach((b: any) => booksMap.set(b.id, b));
+    userBookIds.forEach((bookId: string) => {
+      if (!booksMap.has(bookId)) {
+        const local = INITIAL_BOOKS.find((b) => b.id === bookId);
+        if (local) booksMap.set(bookId, local);
+      }
     });
     const books = Array.from(booksMap.values());
 

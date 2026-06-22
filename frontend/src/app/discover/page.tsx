@@ -1,26 +1,43 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import BookCard from "@/components/BookCard";
 import { useLeaf } from "@/context/LeafContext";
 import { Book } from "@/data/mockData";
+import type { CatalogShelf } from "@/utils/bookCatalog";
 import { 
   Search, Sparkles, BookOpen, Star, Award, Compass, 
-  ChevronRight, ArrowRight, Loader2, Library, Check, Plus, MessageSquare, History
+  ChevronRight, Loader2, Library, Plus, MessageSquare, History
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
-// Curated iconic books list for the Hero rotation
-const FEATURED_HERO_IDS = [
-  "OL24219356M", // The Secret History
-  "OL24218335M", // Dune
-  "OL24220023M", // 1984
-  "OL27483M",     // The Fellowship of the Ring
-  "OL24219411M", // The Great Gatsby
-  "OL26317316M"  // Harry Potter and the Sorcerer's Stone
+type ShelfConfig = { key: CatalogShelf; title: string; description: string; icon: React.ElementType };
+
+const CURATED_SHELVES: ShelfConfig[] = [
+  { key: "all-time-greats", title: "All-Time Greats", description: "The highest rated and most influential works ever written", icon: Star },
+  { key: "trending", title: "Trending This Week", description: "Volumes currently popular among the community", icon: Compass },
+  { key: "most-added", title: "Most Added This Month", description: "Titles currently filling up reader libraries", icon: Library },
+  { key: "booktok", title: "BookTok Favorites", description: "Modern romance and viral favorites", icon: MessageSquare },
+  { key: "award-winners", title: "Award Winners", description: "Pulitzer, Booker, Hugo, and Nebula prize laureates", icon: Award },
+  { key: "modern-classics", title: "Modern Classics", description: "Post-20th century masterpieces everyone should read", icon: BookOpen },
+  { key: "scifi", title: "Sci-Fi Essentials", description: "Curated science fiction masterpieces", icon: Sparkles },
+  { key: "fantasy", title: "Fantasy Essentials", description: "Epic high-fantasy novels and series", icon: Award },
+  { key: "literary", title: "Literary Fiction", description: "Beautifully written classic and modern works", icon: BookOpen },
+  { key: "mystery", title: "Mystery & Thriller", description: "Acclaimed suspense, crime, and detective fiction", icon: Compass },
+  { key: "romance", title: "Romance Pillars", description: "Acclaimed love stories, historical and contemporary", icon: Sparkles },
+  { key: "historical", title: "Historical Fiction", description: "Immersive journeys through the corridors of time", icon: BookOpen },
+  { key: "biography", title: "Biography & Memoir", description: "Memorable human stories and definitive chronicles", icon: Award },
+  { key: "nonfiction", title: "Non-Fiction Bestsellers", description: "Ideas, habits, history, and science shaping our minds", icon: Compass },
 ];
+
+async function fetchShelf(shelf: CatalogShelf, limit = 12): Promise<Book[]> {
+  const res = await fetch(`/api/books/catalog?shelf=${shelf}&limit=${limit}`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.success ? data.books : [];
+}
 
 export default function DiscoverPage() {
   const router = useRouter();
@@ -32,8 +49,14 @@ export default function DiscoverPage() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchDebounce, setSearchDebounce] = useState("");
 
-  // Hero featured book
+  // Hero featured book (server-cached, rotates daily)
   const [heroBook, setHeroBook] = useState<Book | null>(null);
+  const [heroLoading, setHeroLoading] = useState(true);
+
+  // Cached catalog shelves
+  const [shelfData, setShelfData] = useState<Record<string, Book[]>>({});
+  const [leaderboard, setLeaderboard] = useState<Book[]>([]);
+  const [shelvesLoading, setShelvesLoading] = useState(true);
 
   // Quick Action Shelf Drawer/Log Modal state
   const [logModalBook, setLogModalBook] = useState<Book | null>(null);
@@ -75,42 +98,49 @@ export default function DiscoverPage() {
     performSearch();
   }, [searchDebounce]);
 
-  // Set Hero Featured Book (stable based on day of year, or random fallback)
+  // Fetch daily featured volume from cached API
   useEffect(() => {
-    if (books.length === 0) return;
-
-    // Pick featured ID
-    const dayOfYear = Math.floor((new Date().getTime() - new Date(new Date().getFullYear(), 0, 1).getTime()) / 86400000);
-    const heroId = FEATURED_HERO_IDS[dayOfYear % FEATURED_HERO_IDS.length];
-    
-    // Attempt local match
-    let found = books.find((b) => b.id === heroId || b.id.includes(heroId));
-    if (!found) {
-      // Fallback: search by title keyword or take the first book with rating >= 4.5
-      found = books.find((b) => b.averageRating >= 4.4) || books[0];
+    async function loadFeatured() {
+      setHeroLoading(true);
+      try {
+        const res = await fetch("/api/books/featured");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.book) {
+            setHeroBook(data.book);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load featured book:", err);
+      } finally {
+        setHeroLoading(false);
+      }
     }
-    setHeroBook(found || null);
-  }, [books]);
+    loadFeatured();
+  }, []);
 
-  // Curate Book Shelves from local catalog
-  const allTimeGreats = [...books].sort((a, b) => b.averageRating - a.averageRating).slice(0, 15);
-  const trendingThisWeek = books.filter((b) => b.genres.some(g => g.toLowerCase().includes("popular")) || b.averageRating >= 4.4).slice(0, 12);
-  const mostAdded = books.filter((b) => b.genres.some(g => g.toLowerCase().includes("bestseller")) || b.pages > 450).slice(0, 12);
-  const bookTokFavorites = books.filter((b) => b.genres.some(g => g.toLowerCase().includes("booktok"))).slice(0, 12);
-  const awardWinners = books.filter((b) => b.genres.some(g => g.toLowerCase().includes("classic")) || b.genres.some(g => g.toLowerCase().includes("high"))).slice(0, 12);
-  const modernClassics = books.filter((b) => b.genres.some(g => g.toLowerCase().includes("classic")) && b.year > 1950).slice(0, 12);
-  
-  const sciFiEssentials = books.filter((b) => b.genres.some(g => g.toLowerCase().includes("sci-fi")) || b.genres.some(g => g.toLowerCase().includes("space"))).slice(0, 12);
-  const fantasyEssentials = books.filter((b) => b.genres.some(g => g.toLowerCase().includes("fantasy")) || b.genres.some(g => g.toLowerCase().includes("magic"))).slice(0, 12);
-  const literaryFiction = books.filter((b) => b.genres.some(g => g.toLowerCase().includes("literary")) || b.genres.some(g => g.toLowerCase().includes("drama"))).slice(0, 12);
-  const mysteryThriller = books.filter((b) => b.genres.some(g => g.toLowerCase().includes("thriller")) || b.genres.some(g => g.toLowerCase().includes("mystery")) || b.genres.some(g => g.toLowerCase().includes("crime"))).slice(0, 12);
-  const romancePillars = books.filter((b) => b.genres.some(g => g.toLowerCase().includes("romance")) || b.genres.some(g => g.toLowerCase().includes("contemporary"))).slice(0, 12);
-  const historicalFiction = books.filter((b) => b.genres.some(g => g.toLowerCase().includes("historical")) || b.genres.some(g => g.toLowerCase().includes("war"))).slice(0, 12);
-  const biographyMemoir = books.filter((b) => b.genres.some(g => g.toLowerCase().includes("biography")) || b.genres.some(g => g.toLowerCase().includes("memoir"))).slice(0, 12);
-  const nonFiction = books.filter((b) => b.genres.some(g => g.toLowerCase().includes("non-fiction")) || b.genres.some(g => g.toLowerCase().includes("psychology")) || b.genres.some(g => g.toLowerCase().includes("science"))).slice(0, 12);
+  // Load catalog shelves from cached API
+  useEffect(() => {
+    async function loadShelves() {
+      setShelvesLoading(true);
+      try {
+        const results = await Promise.all(
+          CURATED_SHELVES.map(async (s) => ({ key: s.key, books: await fetchShelf(s.key, 12) }))
+        );
+        const map: Record<string, Book[]> = {};
+        results.forEach((r) => { map[r.key] = r.books; });
+        setShelfData(map);
 
-  // Community Leaderboard (Top 25)
-  const leaderboard = [...books].sort((a, b) => b.averageRating - a.averageRating).slice(0, 25);
+        const lb = await fetchShelf("leaderboard", 25);
+        setLeaderboard(lb);
+      } catch (err) {
+        console.error("Failed to load catalog shelves:", err);
+      } finally {
+        setShelvesLoading(false);
+      }
+    }
+    loadShelves();
+  }, []);
 
   // Personalized shelves logic
   const lastLoggedBook = diaryLogs.length > 0 ? books.find((b) => b.id === diaryLogs[diaryLogs.length - 1].bookId) : null;
@@ -263,7 +293,11 @@ export default function DiscoverPage() {
         {searchQuery.trim().length < 2 && (
           <>
             {/* Featured Daily Hero Banner */}
-            {heroBook && (
+            {heroLoading ? (
+              <div className="flex items-center justify-center py-16">
+                <Loader2 className="w-8 h-8 text-brand animate-spin" />
+              </div>
+            ) : heroBook && (
               <section className="relative overflow-hidden bg-cream-card border border-cream-border rounded-2xl p-6 md:p-8 flex flex-col md:flex-row items-center gap-8 shadow-sm">
                 {/* Decorative background glow */}
                 <div className="absolute top-0 right-0 w-80 h-80 bg-brand/5 rounded-full blur-3xl -z-10" />
@@ -346,39 +380,50 @@ export default function DiscoverPage() {
               </div>
             )}
 
-            {/* Curated Editorial Shelves */}
-            <div className="space-y-12">
-              <Shelf title="All-Time Greats" description="The highest rated and most influential works ever written" booksList={allTimeGreats} icon={Star} />
-              <Shelf title="Trending This Week" description="Volumes currently popular among the community" booksList={trendingThisWeek} icon={Compass} />
-              <Shelf title="Most Added This Month" description="Titles currently filling up reader libraries" booksList={mostAdded} icon={Library} />
-              <Shelf title="BookTok Favorites" description="Modern romance and viral favorites" booksList={bookTokFavorites} icon={MessageSquare} />
-              <Shelf title="Award Winners" description="Pulitzer, Booker, Hugo, and Nebula prize laureates" booksList={awardWinners} icon={Award} />
-              <Shelf title="Modern Classics" description="Post-20th century masterpieces everyone should read" booksList={modernClassics} icon={BookOpen} />
-            </div>
+            {/* Curated Editorial Shelves (cached API) */}
+            {shelvesLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-6 h-6 text-brand animate-spin" />
+              </div>
+            ) : (
+              <div className="space-y-12">
+                {CURATED_SHELVES.slice(0, 6).map((s) => (
+                  <Shelf key={s.key} title={s.title} description={s.description} booksList={shelfData[s.key] || []} icon={s.icon} />
+                ))}
+              </div>
+            )}
 
             {/* Two-Column: Sci-Fi & Fantasy essentials */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 border-t border-cream-border/60 pt-10">
-              <Shelf title="Sci-Fi Essentials" description="Curated science fiction masterpieces" booksList={sciFiEssentials} icon={Sparkles} />
-              <Shelf title="Fantasy Essentials" description="Epic high-fantasy novels and series" booksList={fantasyEssentials} icon={Award} />
-            </div>
+            {!shelvesLoading && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 border-t border-cream-border/60 pt-10">
+                <Shelf title="Sci-Fi Essentials" description="Curated science fiction masterpieces" booksList={shelfData["scifi"] || []} icon={Sparkles} />
+                <Shelf title="Fantasy Essentials" description="Epic high-fantasy novels and series" booksList={shelfData["fantasy"] || []} icon={Award} />
+              </div>
+            )}
 
             {/* Two-Column: Literary Fiction & Mystery */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 border-t border-cream-border/60 pt-10">
-              <Shelf title="Literary Fiction" description="Beautifully written classic and modern works" booksList={literaryFiction} icon={BookOpen} />
-              <Shelf title="Mystery & Thriller" description="Acclaimed suspense, crime, and detective fiction" booksList={mysteryThriller} icon={Compass} />
-            </div>
+            {!shelvesLoading && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 border-t border-cream-border/60 pt-10">
+                <Shelf title="Literary Fiction" description="Beautifully written classic and modern works" booksList={shelfData["literary"] || []} icon={BookOpen} />
+                <Shelf title="Mystery & Thriller" description="Acclaimed suspense, crime, and detective fiction" booksList={shelfData["mystery"] || []} icon={Compass} />
+              </div>
+            )}
 
             {/* Two-Column: Romance & Historical Fiction */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 border-t border-cream-border/60 pt-10">
-              <Shelf title="Romance Pillars" description="Acclaimed love stories, historical and contemporary" booksList={romancePillars} icon={Sparkles} />
-              <Shelf title="Historical Fiction" description="Immersive journeys through the corridors of time" booksList={historicalFiction} icon={BookOpen} />
-            </div>
+            {!shelvesLoading && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 border-t border-cream-border/60 pt-10">
+                <Shelf title="Romance Pillars" description="Acclaimed love stories, historical and contemporary" booksList={shelfData["romance"] || []} icon={Sparkles} />
+                <Shelf title="Historical Fiction" description="Immersive journeys through the corridors of time" booksList={shelfData["historical"] || []} icon={BookOpen} />
+              </div>
+            )}
 
             {/* Two-Column: Biography/Memoir & Non-Fiction */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 border-t border-cream-border/60 pt-10">
-              <Shelf title="Biography & Memoir" description="Memorable human stories and definitive chronicles" booksList={biographyMemoir} icon={Award} />
-              <Shelf title="Non-Fiction Bestsellers" description="Ideas, habits, history, and science shaping our minds" booksList={nonFiction} icon={Compass} />
-            </div>
+            {!shelvesLoading && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 border-t border-cream-border/60 pt-10">
+                <Shelf title="Biography & Memoir" description="Memorable human stories and definitive chronicles" booksList={shelfData["biography"] || []} icon={Award} />
+                <Shelf title="Non-Fiction Bestsellers" description="Ideas, habits, history, and science shaping our minds" booksList={shelfData["nonfiction"] || []} icon={Compass} />
+              </div>
+            )}
 
             {/* Community Rankings Leaderboard */}
             <section className="bg-cream-card border border-cream-border rounded-2xl p-6 md:p-8 space-y-6 shadow-sm border-t border-cream-border/60 pt-10">

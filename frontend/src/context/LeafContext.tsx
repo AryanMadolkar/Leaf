@@ -468,7 +468,14 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (res.ok) {
           const data = await res.json();
           if (data.success) {
-            setBooks(data.books);
+            // Merge user library books into the full catalog instead of replacing it
+            if (data.books?.length) {
+              setBooks((prev) => {
+                const merged = new Map(prev.map((b) => [b.id, b]));
+                data.books.forEach((b: Book) => merged.set(b.id, b));
+                return Array.from(merged.values());
+              });
+            }
             setDiaryLogs(data.diaryLogs);
             setReviews(data.reviews);
             setReadingSessions(data.sessions || []);
@@ -711,8 +718,12 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const initRes = await fetch("/api/init");
           if (initRes.ok) {
             const initData = await initRes.json();
-            if (initData.success) {
-              setBooks(initData.books);
+            if (initData.success && initData.books?.length) {
+              setBooks((prev) => {
+                const merged = new Map(prev.map((b) => [b.id, b]));
+                initData.books.forEach((b: Book) => merged.set(b.id, b));
+                return Array.from(merged.values());
+              });
             }
           }
           return;
@@ -767,8 +778,12 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const initRes = await fetch("/api/init");
           if (initRes.ok) {
             const initData = await initRes.json();
-            if (initData.success) {
-              setBooks(initData.books);
+            if (initData.success && initData.books?.length) {
+              setBooks((prev) => {
+                const merged = new Map(prev.map((b) => [b.id, b]));
+                initData.books.forEach((b: Book) => merged.set(b.id, b));
+                return Array.from(merged.values());
+              });
             }
           }
           return data;
