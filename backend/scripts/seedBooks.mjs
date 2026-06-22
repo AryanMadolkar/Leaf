@@ -712,10 +712,10 @@ function generateBook(index) {
 
 // 4. Seeding loop
 async function seedCatalog() {
-  console.log("Compiling initial catalog of 1,000 popular books...");
+  console.log("Compiling initial catalog of 5,000 popular books...");
   const finalCatalog = [...curatedBooks];
   
-  const needed = 1000 - finalCatalog.length;
+  const needed = 5000 - finalCatalog.length;
   console.log(`Seeding with ${finalCatalog.length} curated bestseller records and generating ${needed} high-fidelity records.`);
   
   for (let i = 0; i < needed; i++) {
@@ -811,7 +811,7 @@ async function seedCatalog() {
     }
   }
   
-  console.log(`Database seeding finished. Successfully upserted ${successCount} out of 1000 books.`);
+  console.log(`Database seeding finished. Successfully upserted ${successCount} out of 5000 books.`);
 }
 
 seedCatalog()
