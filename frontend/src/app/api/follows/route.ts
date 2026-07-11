@@ -1,6 +1,16 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 
+type FollowOutgoing = { following_id: string };
+type FollowIncoming = { follower_id: string };
+type ProfileRow = {
+  id: string;
+  username: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  bio: string | null;
+};
+
 /** List followers or following for a user, or toggle follow. */
 export async function GET(request: Request) {
   try {
@@ -23,14 +33,14 @@ export async function GET(request: Request) {
         .select("following_id")
         .eq("follower_id", userId);
       if (error) throw error;
-      profileIds = (data || []).map((r) => r.following_id);
+      profileIds = ((data || []) as FollowOutgoing[]).map((r) => r.following_id);
     } else {
       const { data, error } = await supabase
         .from("follows")
         .select("follower_id")
         .eq("following_id", userId);
       if (error) throw error;
-      profileIds = (data || []).map((r) => r.follower_id);
+      profileIds = ((data || []) as FollowIncoming[]).map((r) => r.follower_id);
     }
 
     if (profileIds.length === 0) {
@@ -51,10 +61,10 @@ export async function GET(request: Request) {
         .select("following_id")
         .eq("follower_id", user.id)
         .in("following_id", profileIds);
-      (myFollows || []).forEach((f: any) => followingSet.add(f.following_id));
+      ((myFollows || []) as FollowOutgoing[]).forEach((f) => followingSet.add(f.following_id));
     }
 
-    const users = (profiles || []).map((p) => ({
+    const users = ((profiles || []) as ProfileRow[]).map((p) => ({
       id: p.id,
       username: p.username,
       name: p.display_name || "Reader",
@@ -64,9 +74,10 @@ export async function GET(request: Request) {
     }));
 
     return NextResponse.json({ success: true, users });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("Follows list API error:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
 
@@ -112,8 +123,9 @@ export async function POST(request: Request) {
     if (error) throw error;
 
     return NextResponse.json({ success: true, followed: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("Follows toggle API error:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
