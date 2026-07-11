@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useLeaf } from "@/context/LeafContext";
 import { Book } from "@/data/mockData";
-import { Search, Plus, BookOpen, Star, LogOut, Check, X, Calendar, Clock, Book as BookIcon, Activity, CheckCircle, ChevronRight, Award, Bookmark, User, Settings } from "lucide-react";
+import { Search, Plus, BookOpen, Star, LogOut, Check, X, Calendar, Clock, Book as BookIcon, Activity, CheckCircle, ChevronRight, Award, Bookmark, User, Settings, UserPlus, UserCheck } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import UserAvatar from "@/components/UserAvatar";
 
@@ -97,7 +97,6 @@ export default function Header() {
   const router = useRouter();
   const { 
     books, 
-    users, 
     currentUser, 
     logBook, 
     signOut, 
@@ -105,7 +104,8 @@ export default function Header() {
     diaryLogs,
     readingSessions,
     logReadingSession,
-    updateBookProgressDirectly
+    updateBookProgressDirectly,
+    toggleFollowUser,
   } = useLeaf();
 
   // Search state
@@ -113,6 +113,9 @@ export default function Header() {
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [headerSearchResults, setHeaderSearchResults] = useState<Book[]>([]);
   const [headerLoading, setHeaderLoading] = useState(false);
+  const [searchResultsUsers, setSearchResultsUsers] = useState<any[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [followBusyId, setFollowBusyId] = useState<string | null>(null);
   const searchRef = useRef<HTMLDivElement>(null);
 
   // Account dropdown state
@@ -214,6 +217,33 @@ export default function Header() {
     return () => clearTimeout(handler);
   }, [searchQuery, addCachedBookToContext]);
 
+  // Debounced reader search from Supabase profiles
+  useEffect(() => {
+    if (!searchQuery || searchQuery.trim().length < 1) {
+      setSearchResultsUsers([]);
+      return;
+    }
+
+    setUsersLoading(true);
+    const handler = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/users/search?q=${encodeURIComponent(searchQuery.trim())}&limit=8`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) {
+            setSearchResultsUsers(data.users || []);
+          }
+        }
+      } catch (err) {
+        console.error("Header user search failed:", err);
+      } finally {
+        setUsersLoading(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
+
   // Log Modal Search Debounced Fetch
   useEffect(() => {
     if (!logSearch || logSearch.trim().length < 2) {
@@ -274,16 +304,38 @@ export default function Header() {
     return () => clearTimeout(handler);
   }, [companionSearch, addCachedBookToContext]);
 
-  // Filter users locally for header search
-  const searchResultsUsers = searchQuery
-    ? users.filter(
-        (u) =>
-          u.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          u.name.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : [];
+  const hasSearchResults =
+    headerSearchResults.length > 0 || searchResultsUsers.length > 0 || headerLoading || usersLoading;
 
-  const hasSearchResults = headerSearchResults.length > 0 || searchResultsUsers.length > 0;
+  const handleFollowFromSearch = async (e: React.MouseEvent, userId: string) => {
+    e.stopPropagation();
+    if (!currentUser?.id || currentUser.id === "guest-user-id") {
+      router.push("/auth");
+      return;
+    }
+    setFollowBusyId(userId);
+    const prev = searchResultsUsers;
+    setSearchResultsUsers((list) =>
+      list.map((u) =>
+        u.id === userId
+          ? {
+              ...u,
+              isFollowing: !u.isFollowing,
+              followersCount: u.isFollowing
+                ? Math.max(0, (u.followersCount || 0) - 1)
+                : (u.followersCount || 0) + 1,
+            }
+          : u
+      )
+    );
+    try {
+      await toggleFollowUser(userId);
+    } catch {
+      setSearchResultsUsers(prev);
+    } finally {
+      setFollowBusyId(null);
+    }
+  };
 
   const handleLogSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -500,25 +552,54 @@ export default function Header() {
                               Readers
                             </h4>
                             {searchResultsUsers.map((user) => (
-                              <button
+                              <div
                                 key={user.id}
-                                onClick={() => {
-                                  router.push(`/profile/${user.username}`);
-                                  setSearchQuery("");
-                                  setShowSearchResults(false);
-                                }}
-                                className="w-full flex items-center gap-3 px-4 py-2 hover:bg-cream-dark/50 transition-colors duration-200 text-left"
+                                className="w-full flex items-center gap-3 px-4 py-2 hover:bg-cream-dark/50 transition-colors duration-200"
                               >
-                                <UserAvatar avatarUrl={user.avatar} name={user.name} size={28} className="flex-shrink-0 shadow-sm" />
-                                <div className="min-w-0">
-                                  <p className="text-xs font-semibold text-charcoal truncate">
-                                    {user.name}
-                                  </p>
-                                  <p className="text-[10px] text-charcoal-muted truncate">
-                                    @{user.username}
-                                  </p>
-                                </div>
-                              </button>
+                                <button
+                                  onClick={() => {
+                                    router.push(`/profile/${user.username}`);
+                                    setSearchQuery("");
+                                    setShowSearchResults(false);
+                                  }}
+                                  className="flex items-center gap-3 min-w-0 flex-1 text-left"
+                                >
+                                  <UserAvatar avatarUrl={user.avatar} name={user.name} size={28} className="flex-shrink-0 shadow-sm" />
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-semibold text-charcoal truncate">
+                                      {user.name}
+                                    </p>
+                                    <p className="text-[10px] text-charcoal-muted truncate">
+                                      @{user.username}
+                                      {typeof user.followersCount === "number"
+                                        ? ` · ${user.followersCount} followers`
+                                        : ""}
+                                    </p>
+                                  </div>
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={followBusyId === user.id}
+                                  onClick={(e) => handleFollowFromSearch(e, user.id)}
+                                  className={`h-7 px-2.5 rounded-lg text-[10px] font-semibold flex items-center gap-1 flex-shrink-0 transition-all ${
+                                    user.isFollowing
+                                      ? "bg-cream-dark border border-cream-border text-charcoal"
+                                      : "bg-brand text-cream hover:bg-brand-light"
+                                  }`}
+                                >
+                                  {user.isFollowing ? (
+                                    <>
+                                      <UserCheck className="w-3 h-3" />
+                                      <span>Following</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <UserPlus className="w-3 h-3" />
+                                      <span>Follow</span>
+                                    </>
+                                  )}
+                                </button>
+                              </div>
                             ))}
                           </div>
                         )}
@@ -526,7 +607,7 @@ export default function Header() {
                     ) : (
                       <div className="px-4 py-6 text-center">
                         <p className="text-xs text-charcoal-muted">
-                          No results found for &ldquo;{searchQuery}&rdquo;
+                          No results found for &ldquo;{searchQuery}&rdquo;. Try a book title or reader name.
                         </p>
                       </div>
                     )}

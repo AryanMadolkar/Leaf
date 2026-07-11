@@ -691,8 +691,9 @@ function generateBook(index) {
   const first_publish_year = Math.floor(1800 + Math.random() * 226); // 1800 to 2025
   const page_count = Math.floor(150 + Math.random() * 650); // 150 to 800 pages
   
-  // Use public cover images based on ISBN
-  const cover_url = `https://covers.openlibrary.org/b/isbn/${isbn_13}-L.jpg`;
+  // Reuse a real curated cover so Open Library ISBN placeholders aren't blank
+  const curatedCover = curatedBooks[index % curatedBooks.length]?.cover_url;
+  const cover_url = curatedCover || `https://covers.openlibrary.org/b/isbn/${isbn_13}-L.jpg?default=false`;
   
   // Generate subjects list
   const subjects = [genre, "Popular", "Bestseller", genre === "Sci-Fi" || genre === "Fantasy" ? "Speculative" : "Modern"];

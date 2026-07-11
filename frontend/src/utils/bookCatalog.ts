@@ -1,5 +1,7 @@
 import crypto from "crypto";
 import { Book, INITIAL_BOOKS } from "@/data/mockData";
+import { COVER_ID_BY_ISBN } from "@/data/coverOverrides";
+import { coverUrlFromCoverId, withOpenLibraryDefaultFalse } from "@/utils/covers";
 
 export type CatalogShelf =
   | "all-time-greats"
@@ -17,6 +19,17 @@ export type CatalogShelf =
   | "biography"
   | "nonfiction"
   | "leaderboard";
+
+export function withResolvedCover(book: Book): Book {
+  const coverId = COVER_ID_BY_ISBN[book.id];
+  if (coverId) {
+    return { ...book, coverImage: coverUrlFromCoverId(coverId) };
+  }
+  return {
+    ...book,
+    coverImage: withOpenLibraryDefaultFalse(book.coverImage || ""),
+  };
+}
 
 export function filterBooksByShelf(books: Book[], shelf: CatalogShelf): Book[] {
   switch (shelf) {
@@ -99,9 +112,18 @@ export function filterBooksByShelf(books: Book[], shelf: CatalogShelf): Book[] {
   }
 }
 
+function preferBooksWithCovers(books: Book[]): Book[] {
+  return [...books].sort((a, b) => {
+    const aHas = COVER_ID_BY_ISBN[a.id] ? 1 : 0;
+    const bHas = COVER_ID_BY_ISBN[b.id] ? 1 : 0;
+    if (aHas !== bHas) return bHas - aHas;
+    return b.averageRating - a.averageRating;
+  });
+}
+
 export function getCatalogBooks(shelf: CatalogShelf, limit = 15, offset = 0): Book[] {
-  const filtered = filterBooksByShelf(INITIAL_BOOKS, shelf);
-  return filtered.slice(offset, offset + limit);
+  const filtered = preferBooksWithCovers(filterBooksByShelf(INITIAL_BOOKS, shelf));
+  return filtered.slice(offset, offset + limit).map(withResolvedCover);
 }
 
 /** Diverse pool spanning classics, modern favorites, and global voices for daily rotation */
@@ -145,5 +167,10 @@ export function getFeaturedBookIdForDate(dateKey?: string): string {
 
 export function getFeaturedBookForDate(dateKey?: string): Book | null {
   const id = getFeaturedBookIdForDate(dateKey);
-  return INITIAL_BOOKS.find((b) => b.id === id) ?? INITIAL_BOOKS.find((b) => b.averageRating >= 4.4) ?? INITIAL_BOOKS[0] ?? null;
+  const book =
+    INITIAL_BOOKS.find((b) => b.id === id) ??
+    INITIAL_BOOKS.find((b) => b.averageRating >= 4.4) ??
+    INITIAL_BOOKS[0] ??
+    null;
+  return book ? withResolvedCover(book) : null;
 }

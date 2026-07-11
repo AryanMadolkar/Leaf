@@ -36,7 +36,9 @@ export default function OnboardingPage() {
   const [followedUsers, setFollowedUsers] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
-  // Fallback suggest list if search is empty
+  const [suggestedReaders, setSuggestedReaders] = useState<any[]>([]);
+  const [readersLoading, setReadersLoading] = useState(true);
+
   const suggestedBooks = [
     { id: "9780140167771", title: "The Secret History", author: "Donna Tartt", coverImage: "https://covers.openlibrary.org/b/isbn/9780140167771-L.jpg" },
     { id: "9780593135204", title: "Project Hail Mary", author: "Andy Weir", coverImage: "https://covers.openlibrary.org/b/isbn/9780593135204-L.jpg" },
@@ -45,16 +47,31 @@ export default function OnboardingPage() {
     { id: "9780743273565", title: "The Great Gatsby", author: "F. Scott Fitzgerald", coverImage: "https://covers.openlibrary.org/b/isbn/9780743273565-L.jpg" },
   ];
 
-  const suggestedReaders = [
-    { id: "user-emma", name: "Emma Watson", username: "emma", avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&auto=format&fit=crop&q=80", bio: "Books are a uniquely portable magic." },
-    { id: "user-alex", name: "Alex Mercer", username: "alex_reads", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80", bio: "Sci-fi and historical non-fiction enthusiast." },
-    { id: "user-sophia", name: "Sophia Martinez", username: "sophia_lit", avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&auto=format&fit=crop&q=80", bio: "Classics and dark academia aficionado." },
-    { id: "user-julian", name: "Julian Vance", username: "julian_v", avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&auto=format&fit=crop&q=80", bio: "Always reading, forever learning." },
-  ];
-
   const genres = [
     "Fantasy", "Sci-Fi", "Literary Fiction", "Romance", "Mystery", "History", "Biography", "Thriller", "Poetry"
   ];
+
+  // Load real community readers for follow step
+  useEffect(() => {
+    let cancelled = false;
+    async function loadReaders() {
+      try {
+        const res = await fetch("/api/users/search?limit=12");
+        const data = await res.json();
+        if (!cancelled && data.success) {
+          setSuggestedReaders(data.users || []);
+        }
+      } catch (err) {
+        console.error("Failed to load suggested readers:", err);
+      } finally {
+        if (!cancelled) setReadersLoading(false);
+      }
+    }
+    loadReaders();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Search Debounce Effect
   useEffect(() => {
@@ -381,8 +398,15 @@ export default function OnboardingPage() {
                 </div>
 
                 <div className="space-y-3.5 my-6 max-h-[250px] overflow-y-auto pr-1">
-                  {suggestedReaders.map((r) => {
-                    const isFollowing = followedUsers.includes(r.id);
+                  {readersLoading ? (
+                    <p className="text-xs text-charcoal-muted text-center py-6">Finding readers…</p>
+                  ) : suggestedReaders.length === 0 ? (
+                    <p className="text-xs text-charcoal-muted text-center py-6">
+                      No other readers yet. You can find people later with search.
+                    </p>
+                  ) : (
+                    suggestedReaders.map((r) => {
+                    const isFollowing = followedUsers.includes(r.id) || r.isFollowing;
                     return (
                       <div
                         key={r.id}
@@ -418,7 +442,8 @@ export default function OnboardingPage() {
                         </button>
                       </div>
                     );
-                  })}
+                  })
+                  )}
                 </div>
 
                 <div className="flex justify-between items-center pt-4">

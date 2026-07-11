@@ -54,6 +54,19 @@ export async function GET() {
     if (profile) {
       profile.email = user.email || (profile as any).email || "";
       profile.created_at = (profile as any).created_at || (profile as any).joined_at || user.created_at || new Date().toISOString();
+
+      const { count: followersCount } = await supabase
+        .from("follows")
+        .select("follower_id", { count: "exact", head: true })
+        .eq("following_id", profile.id);
+
+      const { count: followingCount } = await supabase
+        .from("follows")
+        .select("following_id", { count: "exact", head: true })
+        .eq("follower_id", profile.id);
+
+      (profile as any).followersCount = followersCount || 0;
+      (profile as any).followingCount = followingCount || 0;
     }
 
     // 2. Fetch or dynamically create User Stats

@@ -1,6 +1,8 @@
 import crypto from "crypto";
 import { createClient } from "@/utils/supabase/server";
 import { Book, INITIAL_BOOKS } from "@/data/mockData";
+import { COVER_ID_BY_ISBN } from "@/data/coverOverrides";
+import { coverUrlFromCoverId, withOpenLibraryDefaultFalse } from "@/utils/covers";
 
 export interface NormalizedBook {
   id: string;
@@ -64,13 +66,21 @@ export function mapDbBookToClientBook(dbBook: any, avgRating?: number): Book {
     isbn_10: dbBook.isbn_10,
   }) || dbBook.id;
 
+  const isbnKey = dbBook.isbn_13 || dbBook.isbn_10 || canonicalId;
+  const coverId = COVER_ID_BY_ISBN[isbnKey] || COVER_ID_BY_ISBN[canonicalId];
+  const coverImage = coverId
+    ? coverUrlFromCoverId(coverId)
+    : withOpenLibraryDefaultFalse(
+        dbBook.cover_url || "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=600&auto=format&fit=crop&q=80"
+      );
+
   return {
     id: canonicalId,
     title: dbBook.title,
     author: dbBook.author_name || "Unknown Author",
     year: dbBook.first_publish_year || 2000,
     description: dbBook.description || "No description available.",
-    coverImage: dbBook.cover_url || "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=600&auto=format&fit=crop&q=80",
+    coverImage,
     averageRating,
     genres,
     pages: dbBook.page_count || 300,

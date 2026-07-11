@@ -4,9 +4,11 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import BookCard from "@/components/BookCard";
+import CoverImage from "@/components/CoverImage";
 import { useLeaf } from "@/context/LeafContext";
 import { Book } from "@/data/mockData";
 import type { CatalogShelf } from "@/utils/bookCatalog";
+import { COVER_ID_BY_ISBN } from "@/data/coverOverrides";
 import { 
   Search, Sparkles, BookOpen, Star, Award, Compass, 
   ChevronRight, Loader2, Library, Plus, MessageSquare, History
@@ -305,11 +307,15 @@ export default function DiscoverPage() {
                 {/* Cover container */}
                 <div className="relative w-40 h-56 rounded-lg overflow-hidden book-shadow bg-cream-dark flex-shrink-0">
                   <div className="absolute top-0 bottom-0 left-0 w-[4px] bg-gradient-to-r from-charcoal/20 to-transparent z-10" />
-                  <img
+                  <CoverImage
                     src={heroBook.coverImage}
-                    alt={heroBook.title}
-                    className="w-full h-full object-cover select-none"
-                    loading="eager"
+                    title={heroBook.title}
+                    author={heroBook.author}
+                    isbn={heroBook.id}
+                    coverId={COVER_ID_BY_ISBN[heroBook.id]}
+                    bookId={heroBook.id}
+                    className="w-full h-full"
+                    imgClassName="w-full h-full object-cover select-none"
                   />
                 </div>
 
@@ -449,10 +455,15 @@ export default function DiscoverPage() {
                       <span className="font-serif text-lg font-bold text-brand-muted/70 w-6 text-center">
                         {idx + 1}
                       </span>
-                      <img 
-                        src={book.coverImage} 
-                        alt={book.title} 
-                        className="w-10 h-14 object-cover rounded-md book-shadow bg-cream-dark flex-shrink-0"
+                      <CoverImage
+                        src={book.coverImage}
+                        title={book.title}
+                        author={book.author}
+                        isbn={book.id}
+                        coverId={COVER_ID_BY_ISBN[book.id]}
+                        bookId={book.id}
+                        className="w-10 h-14 rounded-md book-shadow flex-shrink-0"
+                        imgClassName="w-full h-full object-cover"
                       />
                       <div className="min-w-0 flex-1">
                         <p className="text-xs font-bold text-charcoal truncate">{book.title}</p>
@@ -477,10 +488,15 @@ export default function DiscoverPage() {
                       <span className="font-serif text-lg font-bold text-brand-muted/70 w-6 text-center">
                         {idx + 14}
                       </span>
-                      <img 
-                        src={book.coverImage} 
-                        alt={book.title} 
-                        className="w-10 h-14 object-cover rounded-md book-shadow bg-cream-dark flex-shrink-0"
+                      <CoverImage
+                        src={book.coverImage}
+                        title={book.title}
+                        author={book.author}
+                        isbn={book.id}
+                        coverId={COVER_ID_BY_ISBN[book.id]}
+                        bookId={book.id}
+                        className="w-10 h-14 rounded-md book-shadow flex-shrink-0"
+                        imgClassName="w-full h-full object-cover"
                       />
                       <div className="min-w-0 flex-1">
                         <p className="text-xs font-bold text-charcoal truncate">{book.title}</p>

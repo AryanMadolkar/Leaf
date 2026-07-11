@@ -1,4 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
+import { favoriteGenreFromTags } from "@/utils/genreUtils";
 
 export async function recalculateUserStats(supabase: any, userId: string) {
   try {
@@ -133,7 +134,7 @@ export async function recalculateUserStats(supabase: any, userId: string) {
 
     let totalLength = 0;
     let lenCount = 0;
-    const genreCounts: Record<string, number> = {};
+    const booksGenres: string[][] = [];
 
     if (userBooksData) {
       userBooksData.forEach((ub: any) => {
@@ -143,27 +144,19 @@ export async function recalculateUserStats(supabase: any, userId: string) {
         }
         if (ub.book?.subjects) {
           try {
-            const genres = JSON.parse(ub.book.subjects);
-            if (Array.isArray(genres)) {
-              genres.forEach((g: string) => {
-                genreCounts[g] = (genreCounts[g] || 0) + 1;
-              });
-            }
-          } catch (e) {}
+            const genres = typeof ub.book.subjects === "string"
+              ? JSON.parse(ub.book.subjects)
+              : ub.book.subjects;
+            booksGenres.push(Array.isArray(genres) ? genres : []);
+          } catch {
+            booksGenres.push([]);
+          }
         }
       });
     }
 
     const averageBookLength = lenCount > 0 ? Math.round(totalLength / lenCount) : 300;
-    
-    let favoriteGenre = "Fiction";
-    let maxCount = 0;
-    for (const [genre, count] of Object.entries(genreCounts)) {
-      if (count > maxCount) {
-        maxCount = count;
-        favoriteGenre = genre;
-      }
-    }
+    const favoriteGenre = favoriteGenreFromTags(booksGenres);
 
     // 6. Update user_stats in database
     const { error: updateError } = await supabase

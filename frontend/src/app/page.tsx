@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -18,6 +18,18 @@ import {
   X
 } from "lucide-react";
 import { StarDisplay } from "@/components/ReviewCard";
+import { formatRelativeTime } from "@/utils/time";
+
+type StreamReview = {
+  id: string;
+  rating: number;
+  content: string;
+  createdAt?: string;
+  reviewerName: string;
+  reviewerAvatar: string;
+  bookTitle: string;
+  bookCover: string;
+};
 
 export default function LandingPage() {
   const router = useRouter();
@@ -25,6 +37,29 @@ export default function LandingPage() {
   const [waitlistEmail, setWaitlistEmail] = useState("");
   const [waitlistName, setWaitlistName] = useState("");
   const [submittedWaitlist, setSubmittedWaitlist] = useState(false);
+  const [streamReviews, setStreamReviews] = useState<StreamReview[]>([]);
+  const [streamLoading, setStreamLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadStream() {
+      try {
+        const res = await fetch("/api/reviews?limit=3");
+        const data = await res.json();
+        if (!cancelled && data.success && Array.isArray(data.reviews)) {
+          setStreamReviews(data.reviews);
+        }
+      } catch (err) {
+        console.error("Failed to load community stream:", err);
+      } finally {
+        if (!cancelled) setStreamLoading(false);
+      }
+    }
+    loadStream();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleWaitlistSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -209,71 +244,67 @@ export default function LandingPage() {
 
             {/* Live Stream Container */}
             <div className="space-y-4">
-              {/* Activity item 1 */}
-              <div className="flex items-start gap-4 p-4 bg-cream-card border border-cream-border rounded-xl">
-                <img
-                  src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&auto=format&fit=crop&q=80"
-                  className="w-8 h-8 rounded-full object-cover border border-cream-border flex-shrink-0"
-                />
-                <div className="flex-1 min-w-0 space-y-1">
-                  <p className="text-xs text-charcoal-light font-sans">
-                    <span className="font-bold text-charcoal">Emma Sterling</span> rated <span className="font-bold">The Secret History</span>
-                  </p>
-                  <div className="flex items-center gap-1.5">
-                    <StarDisplay rating={5} size={11} />
-                    <span className="text-[10px] text-charcoal-muted">2 mins ago</span>
+              {streamLoading ? (
+                Array.from({ length: 3 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="flex items-start gap-4 p-4 bg-cream-card border border-cream-border rounded-xl animate-pulse"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-cream-dark flex-shrink-0" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-3 bg-cream-dark rounded w-3/4" />
+                      <div className="h-3 bg-cream-dark rounded w-1/2" />
+                    </div>
+                    <div className="w-10 h-14 bg-cream-dark rounded flex-shrink-0" />
                   </div>
-                  <p className="text-xs text-charcoal-muted/90 italic line-clamp-2">
-                    &ldquo;Donna Tartt&apos;s atmosphere is thick, elitist, and absolutely terrifying. I reread this every autumn...&rdquo;
-                  </p>
-                </div>
-                <img
-                  src="https://covers.openlibrary.org/b/isbn/9780140167771-L.jpg"
-                  className="w-10 h-14 object-cover rounded shadow-sm flex-shrink-0"
-                />
-              </div>
-
-              {/* Activity item 2 */}
-              <div className="flex items-start gap-4 p-4 bg-cream-card border border-cream-border rounded-xl">
-                <img
-                  src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&auto=format&fit=crop&q=80"
-                  className="w-8 h-8 rounded-full object-cover border border-cream-border flex-shrink-0"
-                />
-                <div className="flex-1 min-w-0 space-y-1">
-                  <p className="text-xs text-charcoal-light font-sans">
-                    <span className="font-bold text-charcoal">Alex Petrov</span> added <span className="font-bold">Project Hail Mary</span> to list
-                  </p>
-                  <p className="text-xs text-brand font-semibold">
-                    &ldquo;Sci-Fi Essentials&rdquo;
-                  </p>
-                  <span className="text-[10px] text-charcoal-muted">15 mins ago</span>
-                </div>
-                <img
-                  src="https://covers.openlibrary.org/b/isbn/9780593135204-L.jpg"
-                  className="w-10 h-14 object-cover rounded shadow-sm flex-shrink-0"
-                />
-              </div>
-
-              {/* Activity item 3 */}
-              <div className="flex items-start gap-4 p-4 bg-cream-card border border-cream-border rounded-xl">
-                <img
-                  src="https://images.unsplash.com/photo-1517841905240-472988babdf9?w=100&auto=format&fit=crop&q=80"
-                  className="w-8 h-8 rounded-full object-cover border border-cream-border flex-shrink-0"
-                />
-                <div className="flex-1 min-w-0 space-y-1">
-                  <p className="text-xs text-charcoal-light font-sans">
-                    <span className="font-bold text-charcoal">Sophia Chen</span> finished <span className="font-bold">Normal People</span>
-                  </p>
-                  <div className="flex items-center gap-1.5">
-                    <StarDisplay rating={4.5} size={11} />
-                    <span className="text-[10px] text-charcoal-muted">1 hour ago</span>
+                ))
+              ) : streamReviews.length > 0 ? (
+                streamReviews.map((review) => (
+                  <div
+                    key={review.id}
+                    className="flex items-start gap-4 p-4 bg-cream-card border border-cream-border rounded-xl"
+                  >
+                    <img
+                      src={
+                        review.reviewerAvatar ||
+                        "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&auto=format&fit=crop&q=80"
+                      }
+                      alt=""
+                      className="w-8 h-8 rounded-full object-cover border border-cream-border flex-shrink-0"
+                    />
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <p className="text-xs text-charcoal-light font-sans">
+                        <span className="font-bold text-charcoal">{review.reviewerName}</span>{" "}
+                        rated <span className="font-bold">{review.bookTitle || "a book"}</span>
+                      </p>
+                      <div className="flex items-center gap-1.5">
+                        {review.rating > 0 && <StarDisplay rating={review.rating} size={11} />}
+                        <span className="text-[10px] text-charcoal-muted">
+                          {formatRelativeTime(review.createdAt)}
+                        </span>
+                      </div>
+                      {review.content ? (
+                        <p className="text-xs text-charcoal-muted/90 italic line-clamp-2">
+                          &ldquo;{review.content}&rdquo;
+                        </p>
+                      ) : null}
+                    </div>
+                    {review.bookCover ? (
+                      <img
+                        src={review.bookCover}
+                        alt=""
+                        className="w-10 h-14 object-cover rounded shadow-sm flex-shrink-0"
+                      />
+                    ) : null}
                   </div>
+                ))
+              ) : (
+                <div className="p-4 bg-cream-card border border-cream-border rounded-xl">
+                  <p className="text-xs text-charcoal-muted">
+                    No community reviews yet. Be the first to rate a book on Leaf.
+                  </p>
                 </div>
-                <img
-                  src="https://covers.openlibrary.org/b/isbn/9781984822178-L.jpg"
-                  className="w-10 h-14 object-cover rounded shadow-sm flex-shrink-0"
-                />
-              </div>
+              )}
             </div>
 
           </div>
@@ -309,18 +340,44 @@ export default function LandingPage() {
               </div>
             </div>
 
-            {/* Rating distribution bar mockup */}
-            <div className="space-y-2 border-t border-cream-border/60 pt-6">
+            {/* Rating distribution bar */}
+            <div className="space-y-3 border-t border-cream-border/60 pt-6">
               <div className="flex justify-between items-center text-xs">
                 <span className="font-medium text-charcoal-muted">Average Rating Given</span>
                 <span className="font-bold text-charcoal flex items-center gap-1">
                   4.2 <Star className="w-3.5 h-3.5 fill-brand stroke-brand" />
                 </span>
               </div>
-              <div className="h-2 w-full bg-cream-dark rounded-full overflow-hidden flex">
-                <div className="h-full bg-brand" style={{ width: "65%" }} />
-                <div className="h-full bg-brand-light" style={{ width: "25%" }} />
-                <div className="h-full bg-brand-muted" style={{ width: "10%" }} />
+              <div className="h-2.5 w-full bg-cream-dark rounded-full overflow-hidden flex gap-0.5">
+                <div
+                  className="h-full rounded-full bg-brand"
+                  style={{ width: "65%" }}
+                  title="5 stars"
+                />
+                <div
+                  className="h-full rounded-full bg-[#C4A574]"
+                  style={{ width: "25%" }}
+                  title="3–4 stars"
+                />
+                <div
+                  className="h-full rounded-full bg-cream-border"
+                  style={{ width: "10%" }}
+                  title="1–2 stars"
+                />
+              </div>
+              <div className="flex items-center gap-4 text-[10px] text-charcoal-muted">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-brand" />
+                  5★
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[#C4A574]" />
+                  3–4★
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-cream-border border border-charcoal-muted/20" />
+                  1–2★
+                </span>
               </div>
             </div>
           </div>
