@@ -1,6 +1,20 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 
+type ProfileRow = {
+  id: string;
+  username: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  bio: string | null;
+  joined_at: string | null;
+};
+
+type FollowEdge = {
+  follower_id: string;
+  following_id: string;
+};
+
 export async function GET(request: Request) {
   try {
     const supabase = await createClient();
@@ -17,7 +31,6 @@ export async function GET(request: Request) {
       .limit(limit);
 
     if (q.length >= 1) {
-      // Search username or display name (case-insensitive)
       query = query.or(
         `username.ilike.%${q}%,display_name.ilike.%${q}%`
       );
@@ -26,10 +39,9 @@ export async function GET(request: Request) {
     const { data: profiles, error } = await query;
     if (error) throw error;
 
-    const rows = profiles || [];
+    const rows = (profiles || []) as ProfileRow[];
     const ids = rows.map((p) => p.id);
 
-    // Follower counts for returned profiles
     const followerCountMap: Record<string, number> = {};
     const followingSet = new Set<string>();
 
@@ -39,7 +51,7 @@ export async function GET(request: Request) {
         .select("follower_id, following_id")
         .in("following_id", ids);
 
-      (followRows || []).forEach((f: any) => {
+      ((followRows || []) as FollowEdge[]).forEach((f) => {
         followerCountMap[f.following_id] = (followerCountMap[f.following_id] || 0) + 1;
       });
 
@@ -50,11 +62,12 @@ export async function GET(request: Request) {
           .eq("follower_id", user.id)
           .in("following_id", ids);
 
-        (myFollows || []).forEach((f: any) => followingSet.add(f.following_id));
+        ((myFollows || []) as { following_id: string }[]).forEach((f) => {
+          followingSet.add(f.following_id);
+        });
       }
     }
 
-    // Following counts
     const followingCountMap: Record<string, number> = {};
     if (ids.length > 0) {
       const { data: outgoing } = await supabase
@@ -62,7 +75,7 @@ export async function GET(request: Request) {
         .select("follower_id")
         .in("follower_id", ids);
 
-      (outgoing || []).forEach((f: any) => {
+      ((outgoing || []) as { follower_id: string }[]).forEach((f) => {
         followingCountMap[f.follower_id] = (followingCountMap[f.follower_id] || 0) + 1;
       });
     }
@@ -82,8 +95,9 @@ export async function GET(request: Request) {
       }));
 
     return NextResponse.json({ success: true, users });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("Users search API error:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
