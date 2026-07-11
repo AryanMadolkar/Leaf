@@ -1,6 +1,68 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 
+function mapReview(r: any) {
+  const dateObj = new Date(r.created_at);
+  const dateString = dateObj.toLocaleDateString("en-US", {
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+  });
+
+  return {
+    id: r.id,
+    userId: r.user_id,
+    bookId: r.book_id,
+    rating: Number(r.rating) || 0,
+    content: r.review_text || "",
+    dateString,
+    createdAt: r.created_at,
+    likesCount: r.likes_count || 0,
+    commentsCount: 0,
+    isLiked: false,
+    reviewerName: r.profile?.display_name || "Reader",
+    reviewerAvatar: r.profile?.avatar_url || "",
+    reviewerUsername: r.profile?.username || "reader",
+    bookTitle: r.book?.title || "",
+    bookAuthor: r.book?.author_name || "",
+    bookCover: r.book?.cover_url || "",
+  };
+}
+
+export async function GET(request: Request) {
+  try {
+    const supabase = await createClient();
+    const { searchParams } = new URL(request.url);
+    const limit = Math.min(Number(searchParams.get("limit") || 20), 50);
+
+    const { data, error } = await supabase
+      .from("reviews")
+      .select(`
+        id,
+        user_id,
+        book_id,
+        rating,
+        review_text,
+        likes_count,
+        created_at,
+        profile:profiles(display_name, avatar_url, username),
+        book:books(title, author_name, cover_url)
+      `)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+
+    return NextResponse.json({
+      success: true,
+      reviews: (data || []).map(mapReview),
+    });
+  } catch (error: any) {
+    console.error("Reviews list API error:", error);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();

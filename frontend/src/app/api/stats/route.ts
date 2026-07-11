@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { buildGenreDistribution } from "@/utils/genreUtils";
 
 export async function GET(request: Request) {
   try {
@@ -160,7 +161,7 @@ export async function GET(request: Request) {
       previousYear: finishedPrevYear[idx],
     }));
 
-    // 5. Genre Distribution (Percentage & Count)
+    // 5. Genre Distribution (canonical literary genres — skip shelf tags)
     const { data: userBooksGenres } = await supabase
       .from("user_books")
       .select(`
@@ -168,35 +169,19 @@ export async function GET(request: Request) {
       `)
       .eq("user_id", targetUserId);
 
-    const genreCounts: Record<string, number> = {};
-    let totalGenresCount = 0;
+    const booksGenres = (userBooksGenres || []).map((row: any) => {
+      if (!row.book?.subjects) return [];
+      try {
+        const genres = typeof row.book.subjects === "string"
+          ? JSON.parse(row.book.subjects)
+          : row.book.subjects;
+        return Array.isArray(genres) ? genres : [];
+      } catch {
+        return [];
+      }
+    });
 
-    if (userBooksGenres) {
-      userBooksGenres.forEach((row: any) => {
-        if (row.book?.subjects) {
-          try {
-            const genres = typeof row.book.subjects === "string"
-              ? JSON.parse(row.book.subjects)
-              : row.book.subjects;
-            if (Array.isArray(genres)) {
-              genres.forEach((g: string) => {
-                genreCounts[g] = (genreCounts[g] || 0) + 1;
-                totalGenresCount++;
-              });
-            }
-          } catch (e) {}
-        }
-      });
-    }
-
-    const genreDistribution = Object.entries(genreCounts)
-      .map(([name, count]) => ({
-        name,
-        count,
-        percentage: totalGenresCount > 0 ? Math.round((count / totalGenresCount) * 100) : 0,
-      }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5); // top 5
+    const genreDistribution = buildGenreDistribution(booksGenres);
 
     // 6. Chronological Reading Activity Timeline
     const { data: timelineSessions } = await supabase

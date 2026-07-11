@@ -11,8 +11,6 @@ import {
   Comment,
   INITIAL_BOOKS,
   INITIAL_USERS,
-  INITIAL_REVIEWS,
-  INITIAL_DIARY_LOGS,
   INITIAL_LISTS,
   INITIAL_COMMENTS,
 } from "../data/mockData";
@@ -69,7 +67,7 @@ const supabase = createClient();
 export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [books, setBooks] = useState<Book[]>(INITIAL_BOOKS);
   const [users, setUsers] = useState<User[]>(INITIAL_USERS);
-  const [reviews, setReviews] = useState<Review[]>(INITIAL_REVIEWS);
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [diaryLogs, setDiaryLogs] = useState<ReadingLog[]>([]);
   const [lists, setLists] = useState<CuratedList[]>(INITIAL_LISTS);
   const [comments, setComments] = useState<Comment[]>(INITIAL_COMMENTS);
@@ -107,8 +105,8 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
           name: "Guest Reader",
           avatar: "",
           bio: "An avid reader exploring Leaf in guest mode.",
-          followersCount: 12,
-          followingCount: 18,
+          followersCount: 0,
+          followingCount: 0,
           favoriteBookIds: [],
         };
         setCurrentUser(defaultGuest);
@@ -119,7 +117,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
       else setDiaryLogs([]);
 
       if (storedReviews) setReviews(JSON.parse(storedReviews));
-      else setReviews(INITIAL_REVIEWS);
+      else setReviews([]);
 
       if (storedSessions) setReadingSessions(JSON.parse(storedSessions));
       else setReadingSessions([]);
@@ -531,8 +529,8 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
       name: "Guest Reader",
       avatar: "",
       bio: "An avid reader exploring Leaf in guest mode.",
-      followersCount: 12,
-      followingCount: 18,
+      followersCount: 0,
+      followingCount: 0,
       favoriteBookIds: [],
     };
     
@@ -829,7 +827,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return {
           ...u,
           isFollowing,
-          followersCount: isFollowing ? u.followersCount + 1 : u.followersCount - 1,
+          followersCount: isFollowing ? u.followersCount + 1 : Math.max(0, u.followersCount - 1),
         };
       }
       return u;
@@ -837,11 +835,19 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUsers(updatedUsers);
 
     try {
-      await fetch(`/api/user-books?followId=${userId}`, {
-        method: "PUT",
+      const res = await fetch("/api/follows", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
       });
+      if (!res.ok) {
+        throw new Error("Follow request failed");
+      }
     } catch (err) {
       console.error("Failed to save follow relationship:", err);
+      // Revert optimistic update
+      setUsers(users);
+      throw err;
     }
   };
 

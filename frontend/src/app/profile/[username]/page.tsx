@@ -5,15 +5,17 @@ import Header from "@/components/Header";
 import BookCard from "@/components/BookCard";
 import ReviewCard, { StarDisplay } from "@/components/ReviewCard";
 import { useLeaf } from "@/context/LeafContext";
-import { Calendar, Layers, Heart, BookOpen, UserCheck, UserPlus, Grid, Flame, ArrowUpRight } from "lucide-react";
+import { Calendar, Layers, Heart, BookOpen, UserCheck, UserPlus, Grid, Flame, ArrowUpRight, X } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
 import UserAvatar from "@/components/UserAvatar";
+import { useRouter } from "next/navigation";
 
 const supabase = createClient();
 
 export default function ProfilePage({ params }: { params: Promise<{ username: string }> }) {
   const { username } = React.use(params);
+  const router = useRouter();
   const {
     currentUser,
     toggleFollowUser,
@@ -28,6 +30,10 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
   const [userStats, setUserStats] = useState<any | null>(null);
   const [finishedLogs, setFinishedLogs] = useState<any[]>([]);
   const [userReviews, setUserReviews] = useState<any[]>([]);
+  const [socialModal, setSocialModal] = useState<"followers" | "following" | null>(null);
+  const [socialUsers, setSocialUsers] = useState<any[]>([]);
+  const [socialLoading, setSocialLoading] = useState(false);
+  const [followBusyId, setFollowBusyId] = useState<string | null>(null);
   const [favoriteBooks, setFavoriteBooks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [completedCount, setCompletedCount] = useState(0);
@@ -85,8 +91,8 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
         let mappedFinished: any[] = [];
         let mappedReviews: any[] = [];
         let mappedFavorites: any[] = [];
-        let followersCount = 12;
-        let followingCount = 18;
+        let followersCount = 0;
+        let followingCount = 0;
         let isFollowing = false;
 
         if (!isMock && targetProf) {
@@ -225,19 +231,16 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
               description: ub.book?.description || "",
             })) : [];
         } else {
-          // Handle mock profile calculations locally
-          const { INITIAL_DIARY_LOGS, INITIAL_REVIEWS, INITIAL_BOOKS } = await import("@/data/mockData");
+          // Local/guest fallback — use context data only (no hardcoded mock reviews)
+          const { INITIAL_BOOKS } = await import("@/data/mockData");
           const isMe = currentUser ? targetProf.id === currentUser.id : false;
-          
-          let logsToUse = [];
-          let reviewsToUse = [];
-          if (isMe) {
-            logsToUse = diaryLogs;
-            reviewsToUse = reviews;
-          } else {
-            logsToUse = INITIAL_DIARY_LOGS.filter((l) => l.userId === targetProf.id);
-            reviewsToUse = INITIAL_REVIEWS.filter((r) => r.userId === targetProf.id);
-          }
+
+          let logsToUse = isMe
+            ? diaryLogs
+            : diaryLogs.filter((l) => l.userId === targetProf.id);
+          let reviewsToUse = isMe
+            ? reviews
+            : reviews.filter((r) => r.userId === targetProf.id);
 
           // Map finished logs
           mappedFinished = logsToUse
@@ -308,8 +311,8 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
           setReadingCount(mockReading);
           setWantToReadCount(mockWantToRead);
 
-          followersCount = matchedMockUser?.followersCount || 12;
-          followingCount = matchedMockUser?.followingCount || 18;
+          followersCount = 0;
+          followingCount = 0;
           isFollowing = matchedMockUser?.isFollowing || false;
         }
 
@@ -384,13 +387,47 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
   const likedReviews = reviews.filter((r) => r.userId === targetUser.id && r.likesCount > 0);
 
   const handleFollowClick = async () => {
-    const originalFollowingState = targetUser.isFollowing;
     setTargetUser((prev: any) => ({
       ...prev,
       isFollowing: !prev.isFollowing,
       followersCount: prev.isFollowing ? prev.followersCount - 1 : prev.followersCount + 1,
     }));
     await toggleFollowUser(targetUser.id);
+  };
+
+  const openSocialModal = async (type: "followers" | "following") => {
+    setSocialModal(type);
+    setSocialLoading(true);
+    setSocialUsers([]);
+    try {
+      const res = await fetch(`/api/follows?userId=${targetUser.id}&type=${type}`);
+      const data = await res.json();
+      if (data.success) setSocialUsers(data.users || []);
+    } catch (err) {
+      console.error("Failed to load social list:", err);
+    } finally {
+      setSocialLoading(false);
+    }
+  };
+
+  const handleModalFollow = async (userId: string) => {
+    if (!currentUser?.id || currentUser.id === "guest-user-id") {
+      router.push("/auth");
+      return;
+    }
+    if (userId === currentUser.id) return;
+    setFollowBusyId(userId);
+    const prev = socialUsers;
+    setSocialUsers((list) =>
+      list.map((u) => (u.id === userId ? { ...u, isFollowing: !u.isFollowing } : u))
+    );
+    try {
+      await toggleFollowUser(userId);
+    } catch {
+      setSocialUsers(prev);
+    } finally {
+      setFollowBusyId(null);
+    }
   };
 
   return (
@@ -459,14 +496,22 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
 
             {/* Following stats */}
             <div className="flex justify-center md:justify-start gap-8 text-xs font-semibold text-charcoal">
-              <div className="flex gap-1.5">
+              <button
+                type="button"
+                onClick={() => openSocialModal("followers")}
+                className="flex gap-1.5 hover:opacity-80 transition-opacity"
+              >
                 <span className="font-serif text-sm font-bold">{targetUser.followersCount}</span>
                 <span className="text-charcoal-muted">followers</span>
-              </div>
-              <div className="flex gap-1.5">
+              </button>
+              <button
+                type="button"
+                onClick={() => openSocialModal("following")}
+                className="flex gap-1.5 hover:opacity-80 transition-opacity"
+              >
                 <span className="font-serif text-sm font-bold">{targetUser.followingCount}</span>
                 <span className="text-charcoal-muted">following</span>
-              </div>
+              </button>
             </div>
           </div>
           
@@ -745,6 +790,87 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
         </section>
 
       </main>
+
+      {/* Followers / Following modal */}
+      {socialModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            aria-label="Close"
+            className="absolute inset-0 bg-charcoal/40 backdrop-blur-sm"
+            onClick={() => setSocialModal(null)}
+          />
+          <div className="relative w-full max-w-md bg-cream border border-cream-border rounded-2xl shadow-2xl z-10 overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-cream-border">
+              <h3 className="font-serif text-lg font-bold text-charcoal capitalize">
+                {socialModal}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setSocialModal(null)}
+                className="p-1.5 rounded-lg text-charcoal-muted hover:bg-cream-dark hover:text-charcoal transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="max-h-[360px] overflow-y-auto p-3 space-y-1">
+              {socialLoading ? (
+                <p className="text-xs text-charcoal-muted text-center py-8">Loading…</p>
+              ) : socialUsers.length === 0 ? (
+                <p className="text-xs text-charcoal-muted text-center py-8">
+                  No {socialModal} yet.
+                </p>
+              ) : (
+                socialUsers.map((u) => (
+                  <div
+                    key={u.id}
+                    className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-cream-dark/40 transition-colors"
+                  >
+                    <button
+                      type="button"
+                      className="flex items-center gap-3 min-w-0 flex-1 text-left"
+                      onClick={() => {
+                        setSocialModal(null);
+                        router.push(`/profile/${u.username}`);
+                      }}
+                    >
+                      <UserAvatar avatarUrl={u.avatar} name={u.name} size={36} />
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-charcoal truncate">{u.name}</p>
+                        <p className="text-[10px] text-charcoal-muted truncate">@{u.username}</p>
+                      </div>
+                    </button>
+                    {u.id !== currentUser?.id && (
+                      <button
+                        type="button"
+                        disabled={followBusyId === u.id}
+                        onClick={() => handleModalFollow(u.id)}
+                        className={`h-7 px-2.5 rounded-lg text-[10px] font-semibold flex items-center gap-1 flex-shrink-0 ${
+                          u.isFollowing
+                            ? "bg-cream-dark border border-cream-border text-charcoal"
+                            : "bg-brand text-cream hover:bg-brand-light"
+                        }`}
+                      >
+                        {u.isFollowing ? (
+                          <>
+                            <UserCheck className="w-3 h-3" />
+                            Following
+                          </>
+                        ) : (
+                          <>
+                            <UserPlus className="w-3 h-3" />
+                            Follow
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

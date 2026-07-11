@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
+import { buildGenreDistribution } from "@/utils/genreUtils";
 
 export default function StatsPage() {
   const { currentUser, diaryLogs, readingSessions, books, userStats } = useLeaf();
@@ -116,27 +117,10 @@ export default function StatsPage() {
       previousYear: finishedPrevYear[idx],
     }));
 
-    // Genre Distribution
-    const genreCounts: Record<string, number> = {};
-    let totalGenresCount = 0;
-    diaryLogs.forEach((log) => {
-      const book = books.find((b) => b.id === log.bookId);
-      if (book?.genres) {
-        book.genres.forEach((g: string) => {
-          genreCounts[g] = (genreCounts[g] || 0) + 1;
-          totalGenresCount++;
-        });
-      }
-    });
-
-    const genreDistribution = Object.entries(genreCounts)
-      .map(([name, count]) => ({
-        name,
-        count,
-        percentage: totalGenresCount > 0 ? Math.round((count / totalGenresCount) * 100) : 0,
-      }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
+    // Genre Distribution (canonical literary genres only — skip shelf tags like Popular/BookTok)
+    const genreDistribution = buildGenreDistribution(
+      diaryLogs.map((log) => books.find((b) => b.id === log.bookId)?.genres)
+    );
 
     // Reading Timeline
     const rawTimeline: any[] = [];
@@ -788,7 +772,7 @@ export default function StatsPage() {
                     Total Slices
                   </span>
                   <span className="font-serif text-2xl font-bold text-charcoal leading-none mt-0.5">
-                    {genreDistribution.reduce((acc: number, g: any) => acc + g.count, 0)}
+                    {genreDistribution.length}
                   </span>
                   <span className="text-[9px] text-charcoal-muted mt-0.5">
                     Genres logged
