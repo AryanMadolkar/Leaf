@@ -3,7 +3,7 @@ import { createClient } from "@/utils/supabase/server";
 import { createPublicClient } from "@/utils/supabase/public";
 import { Book, INITIAL_BOOKS } from "@/data/mockData";
 import { COVER_ID_BY_ISBN } from "@/data/coverOverrides";
-import { coverUrlFromCoverId, withOpenLibraryDefaultFalse } from "@/utils/covers";
+import { coverUrlFromCoverId, coverUrlFromIsbn, withOpenLibraryDefaultFalse } from "@/utils/covers";
 import { withResolvedCover } from "@/utils/bookCatalog";
 
 export interface NormalizedBook {
