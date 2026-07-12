@@ -2,9 +2,10 @@
 
 import React from "react";
 import Header from "@/components/Header";
+import CoverImage from "@/components/CoverImage";
 import { StarDisplay } from "@/components/ReviewCard";
 import { useLeaf } from "@/context/LeafContext";
-import { Calendar, BookOpen, Trash } from "lucide-react";
+import { Calendar, BookOpen } from "lucide-react";
 import Link from "next/link";
 
 export default function ReadingDiaryPage() {
@@ -67,14 +68,15 @@ export default function ReadingDiaryPage() {
                       {/* Cover & Title */}
                       <td className="p-4 font-bold text-charcoal">
                         <div className="flex items-center gap-3.5">
-                          <Link href={`/book/${book.id}`}>
-                            <div className="relative w-9 h-14 rounded overflow-hidden shadow-sm hover:scale-95 transition-transform border border-cream-border">
-                              <img
-                                src={book.coverImage}
-                                alt={book.title}
-                                className="w-full h-full object-cover"
-                              />
-                            </div>
+                          <Link href={`/book/${book.id}`} className="flex-shrink-0">
+                            <CoverImage
+                              src={book.coverImage}
+                              title={book.title}
+                              author={book.author}
+                              bookId={book.id}
+                              className="w-9 h-14 rounded shadow-sm border border-cream-border hover:scale-95 transition-transform"
+                              imgClassName="w-full h-full object-cover"
+                            />
                           </Link>
                           <Link href={`/book/${book.id}`} className="hover:text-brand hover:underline transition-colors text-xs font-serif font-bold">
                             {book.title}

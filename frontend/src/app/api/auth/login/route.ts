@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { verifyPassword } from "@/utils/auth/password";
-import { attachSessionCookie, createSessionToken } from "@/utils/auth/session";
+import { createSessionToken } from "@/utils/auth/session";
 
 export async function POST(request: Request) {
   try {
@@ -61,8 +61,9 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     const token = await createSessionToken({ id: cred.user_id, email: cred.email || email });
-    const response = NextResponse.json({
+    return NextResponse.json({
       success: true,
+      token,
       user: {
         id: cred.user_id,
         email: cred.email || email,
@@ -71,7 +72,6 @@ export async function POST(request: Request) {
         onboarding_completed: Boolean(profile?.onboarding_completed),
       },
     });
-    return attachSessionCookie(response, token);
   } catch (error: any) {
     console.error("[auth/login]", error);
     return NextResponse.json(

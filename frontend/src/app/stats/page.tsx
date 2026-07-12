@@ -252,6 +252,14 @@ export default function StatsPage() {
     async function loadStats() {
       try {
         setLoading(true);
+        const isGuest =
+          !currentUser?.id ||
+          currentUser.id === "guest-user-id" ||
+          currentUser.id === "currentUser";
+        if (isGuest) {
+          loadLocalStatsFallback();
+          return;
+        }
         const res = await fetch(`/api/stats?userId=${currentUser.id}`);
         if (res.ok) {
           const payload = await res.json();
@@ -868,7 +876,7 @@ export default function StatsPage() {
           {/* Pages Read */}
           <div className="bg-cream-card border border-cream-border rounded-2xl p-5 shadow-xs flex flex-col justify-between min-h-[120px] transition-all hover:shadow-md">
             <div className="flex items-center justify-between text-charcoal-muted">
-              <span className="text-[9px] font-bold uppercase tracking-widest font-sans">Pages Recurated</span>
+              <span className="text-[9px] font-bold uppercase tracking-widest font-sans">Pages Logged</span>
               <TrendingUp className="w-4.5 h-4.5 text-brand" />
             </div>
             <div className="mt-4">

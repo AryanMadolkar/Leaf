@@ -64,3 +64,4 @@ Thumbs.db
 next-env.d.ts
 .idea/
 .vscode/
+.gstack/

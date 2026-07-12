@@ -16,6 +16,15 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, error: "Missing target userId" }, { status: 400 });
     }
 
+    // Guest / mock IDs are not UUIDs — skip Supabase to avoid 22P02 errors
+    const isUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        targetUserId
+      );
+    if (!isUuid) {
+      return NextResponse.json({ success: true, stats: null });
+    }
+
     // 1. Fetch main user stats row (with self-healing fallback)
     let stats = null;
     const { data: existingStats, error: statsError } = await supabase

@@ -35,7 +35,15 @@ export function resolveCoverUrl(
   opts?: { isbn?: string | null; coverId?: number | string | null; bookId?: string | null }
 ): string {
   if (opts?.coverId) return coverUrlFromCoverId(opts.coverId);
-  if (coverImage) return withOpenLibraryDefaultFalse(coverImage);
+
+  const raw = (coverImage || "").trim();
+  const isStockFallback =
+    !raw ||
+    raw.includes("photo-1543002588-bfa74002ed7e") ||
+    raw.includes("placeholder");
+
+  if (!isStockFallback) return withOpenLibraryDefaultFalse(raw);
   if (opts?.isbn) return coverUrlFromIsbn(opts.isbn);
+  if (opts?.bookId && /^[\dXx-]{10,}$/.test(opts.bookId)) return coverUrlFromIsbn(opts.bookId);
   return "";
 }

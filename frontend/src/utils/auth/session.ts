@@ -1,45 +1,18 @@
-import { cookies } from "next/headers";
-import { NextResponse } from "next/server";
-import {
-  SESSION_COOKIE,
-  createSessionToken,
-  sessionCookieOptions,
-  verifySessionToken,
-  type SessionUser,
-} from "@/utils/auth/tokens";
+import { createSessionToken, verifySessionToken, type SessionUser } from "@/utils/auth/tokens";
 
-export {
-  SESSION_COOKIE,
-  createSessionToken,
-  verifySessionToken,
-  sessionCookieOptions,
-  type SessionUser,
-};
+export { createSessionToken, verifySessionToken, type SessionUser };
 
-export function attachSessionCookie(response: NextResponse, token: string) {
-  response.cookies.set(SESSION_COOKIE, token, sessionCookieOptions());
-  return response;
+function extractBearerToken(authorization: string | null): string | null {
+  if (!authorization) return null;
+  const [scheme, token] = authorization.split(" ");
+  if (!scheme || scheme.toLowerCase() !== "bearer" || !token) return null;
+  return token.trim() || null;
 }
 
-export function clearSessionCookie(response: NextResponse) {
-  response.cookies.set(SESSION_COOKIE, "", {
-    ...sessionCookieOptions(0),
-    maxAge: 0,
-  });
-  return response;
-}
-
-export async function getSessionUser(): Promise<SessionUser | null> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(SESSION_COOKIE)?.value;
+export async function getUserFromAuthHeader(
+  authorization: string | null,
+): Promise<SessionUser | null> {
+  const token = extractBearerToken(authorization);
   if (!token) return null;
   return verifySessionToken(token);
-}
-
-export async function requireSessionUser(): Promise<SessionUser> {
-  const user = await getSessionUser();
-  if (!user) {
-    throw new Error("UNAUTHORIZED");
-  }
-  return user;
 }

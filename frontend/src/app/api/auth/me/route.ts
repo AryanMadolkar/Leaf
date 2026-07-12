@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { getSessionUser } from "@/utils/auth/session";
+import { getRequestUser } from "@/utils/auth/getRequestUser";
 import { createAdminClient } from "@/utils/supabase/admin";
 
 export async function GET() {
   try {
-    const session = await getSessionUser();
+    const { user: session } = await getRequestUser();
     if (!session) {
       return NextResponse.json({ success: false, user: null }, { status: 401 });
     }

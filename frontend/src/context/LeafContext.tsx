@@ -1,6 +1,8 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { authFetch, clearAccessToken, getAccessToken, setAccessToken } from "@/utils/auth/client";
 import {
   Book,
   User,
@@ -61,6 +63,8 @@ const isDeprecatedAvatar = (url: string | null | undefined): boolean => {
 const LeafContext = createContext<LeafContextType | undefined>(undefined);
 
 export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const pathname = usePathname();
+  const router = useRouter();
   const [books, setBooks] = useState<Book[]>(INITIAL_BOOKS);
   const [users, setUsers] = useState<User[]>(INITIAL_USERS);
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -406,10 +410,11 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   };
 
-  // Setup Auth — custom session cookie via /api/auth/me
+  // Setup Auth — JWT in localStorage, sent as Authorization: Bearer
   useEffect(() => {
     const isGuest = localStorage.getItem("leaf_guest_session") === "true";
     if (isGuest) {
+      clearAccessToken();
       setIsAuthenticated(true);
       setSession({
         user: {
@@ -421,11 +426,19 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
+    const token = getAccessToken();
+    if (!token) {
+      setSession(null);
+      setIsAuthenticated(false);
+      return;
+    }
+
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/auth/me", { credentials: "include" });
+        const res = await authFetch("/api/auth/me");
         if (!res.ok) {
+          clearAccessToken();
           if (!cancelled) {
             setSession(null);
             setIsAuthenticated(false);
@@ -455,6 +468,21 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
+  // Client-side route gate (JWT is not sent on document navigations)
+  useEffect(() => {
+    const protectedPrefixes = ["/feed", "/profile", "/library", "/stats", "/lists", "/settings", "/onboarding"];
+    const isProtected = protectedPrefixes.some(
+      (route) => pathname === route || pathname?.startsWith(route + "/"),
+    );
+    if (!isProtected) return;
+
+    const isGuest = localStorage.getItem("leaf_guest_session") === "true";
+    const token = getAccessToken();
+    if (!isGuest && !token && !isAuthenticated) {
+      router.replace("/auth");
+    }
+  }, [pathname, isAuthenticated, router]);
+
   // Load user data dynamically from active session
   useEffect(() => {
     if (!session?.user) return;
@@ -466,7 +494,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     async function fetchUserData() {
       try {
-        const res = await fetch("/api/init");
+        const res = await authFetch("/api/init");
         if (res.ok) {
           const data = await res.json();
           if (data.success) {
@@ -524,6 +552,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signInAsGuest = () => {
+    clearAccessToken();
     localStorage.setItem("leaf_guest_session", "true");
     document.cookie = "leaf_guest_session=true; path=/; max-age=31536000";
     
@@ -553,11 +582,12 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
+    clearAccessToken();
     localStorage.removeItem("leaf_guest_session");
     document.cookie = "leaf_guest_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
     document.cookie = "leaf_guest_onboarded=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
     try {
-      await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+      await fetch("/api/auth/logout", { method: "POST" });
     } catch {
       // Clear local state regardless
     }
@@ -567,7 +597,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUserStats(null);
   };
 
-  // Auth Action Methods — custom Leaf auth (no Supabase Auth / email links)
+  // Auth Action Methods — JWT Bearer auth
   const parseJsonSafe = async (res: Response) => {
     const text = await res.text();
     if (!text) {
@@ -589,14 +619,14 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signInWithPassword = async (email: string, password: string) => {
     const res = await fetch("/api/auth/login", {
       method: "POST",
-      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
     const data = await parseJsonSafe(res);
-    if (!res.ok || !data.success) {
+    if (!res.ok || !data.success || !data.token) {
       throw new Error(data.error || "Could not sign in.");
     }
+    setAccessToken(data.token);
     setSession({ user: { id: data.user.id, email: data.user.email } });
     setIsAuthenticated(true);
     setProfile(data.user);
@@ -606,18 +636,17 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signUpWithPassword = async (email: string, password: string, username: string, name: string) => {
     const res = await fetch("/api/auth/register", {
       method: "POST",
-      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password, username, name }),
     });
     const data = await parseJsonSafe(res);
-    if (!res.ok || !data.success) {
+    if (!res.ok || !data.success || !data.token) {
       throw new Error(data.error || "Could not create account.");
     }
+    setAccessToken(data.token);
     setSession({ user: { id: data.user.id, email: data.user.email } });
     setIsAuthenticated(true);
     setProfile(data.user);
-    // Shape expected by auth page (immediate session — no email confirmation)
     return { ...data, session: { user: data.user } };
   };
 
@@ -651,7 +680,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setReviews(updatedReviews);
 
     try {
-      await fetch("/api/reviews", {
+      await authFetch("/api/reviews", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reviewId, action }),
@@ -715,7 +744,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      const res = await fetch("/api/user-books", {
+      const res = await authFetch("/api/user-books", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -735,7 +764,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setUserStats(data.stats || null);
           
           // Trigger hot reload of profile catalog
-          const initRes = await fetch("/api/init");
+          const initRes = await authFetch("/api/init");
           if (initRes.ok) {
             const initData = await initRes.json();
             if (initData.success && initData.books?.length) {
@@ -774,7 +803,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const endPage = startPage + pagesRead;
 
     try {
-      const res = await fetch("/api/reading-sessions", {
+      const res = await authFetch("/api/reading-sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -795,7 +824,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setReadingSessions(data.sessions || []);
           setUserStats(data.stats || null);
 
-          const initRes = await fetch("/api/init");
+          const initRes = await authFetch("/api/init");
           if (initRes.ok) {
             const initData = await initRes.json();
             if (initData.success && initData.books?.length) {
@@ -857,7 +886,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUsers(updatedUsers);
 
     try {
-      const res = await fetch("/api/follows", {
+      const res = await authFetch("/api/follows", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId }),
@@ -891,9 +920,8 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       const { data, error } = await (async () => {
-        const res = await fetch("/api/profile", {
+        const res = await authFetch("/api/profile", {
           method: "PATCH",
-          credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             display_name: name,

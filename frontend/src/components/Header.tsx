@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useLeaf } from "@/context/LeafContext";
 import { useTheme } from "@/context/ThemeContext";
 import { Book } from "@/data/mockData";
-import { Search, Plus, BookOpen, Star, LogOut, Check, X, Calendar, Clock, Book as BookIcon, Activity, CheckCircle, ChevronRight, Award, Bookmark, User, Settings, UserPlus, UserCheck, Sun, Moon } from "lucide-react";
+import { Search, Plus, BookOpen, Star, LogOut, Check, X, Calendar, Clock, Book as BookIcon, Activity, CheckCircle, ChevronRight, Award, Bookmark, User, Settings, UserPlus, UserCheck, Menu, Sun, Moon } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import UserAvatar from "@/components/UserAvatar";
 
@@ -123,8 +123,9 @@ export default function Header() {
   // Account dropdown state
   const [showAccountDropdown, setShowAccountDropdown] = useState(false);
   const accountDropdownRef = useRef<HTMLDivElement>(null);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-  // Close account dropdown when clicking outside or pressing Escape
+  // Close account dropdown / mobile nav when clicking outside or pressing Escape
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (
@@ -137,6 +138,7 @@ export default function Header() {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setShowAccountDropdown(false);
+        setMobileNavOpen(false);
       }
     }
 
@@ -147,6 +149,10 @@ export default function Header() {
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
+
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [pathname]);
 
   // Log Modal state
   const [isLogOpen, setIsLogOpen] = useState(false);
@@ -482,8 +488,8 @@ export default function Header() {
             </span>
           </Link>
 
-          {/* Nav Links */}
-          <nav className="hidden md:flex items-center gap-8">
+          {/* Nav Links (desktop) */}
+          <nav className="hidden md:flex items-center gap-8" aria-label="Main">
             {navItems.map((item) => {
               const isActive = pathname === item.href;
               return (
@@ -503,7 +509,18 @@ export default function Header() {
           </nav>
 
           {/* Search & Actions */}
-          <div className="flex items-center gap-4 flex-1 justify-end md:flex-initial">
+          <div className="flex items-center gap-2 sm:gap-4 flex-1 justify-end md:flex-initial">
+            {/* Mobile menu toggle */}
+            <button
+              type="button"
+              className="md:hidden flex items-center justify-center w-9 h-9 rounded-lg border border-cream-border bg-cream-card text-charcoal hover:bg-cream-dark/50 transition-colors"
+              aria-label={mobileNavOpen ? "Close menu" : "Open menu"}
+              aria-expanded={mobileNavOpen}
+              aria-controls="mobile-nav"
+              onClick={() => setMobileNavOpen((open) => !open)}
+            >
+              {mobileNavOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+            </button>
             {/* Search Bar */}
             <div ref={searchRef} className="relative w-full max-w-[200px] md:max-w-[240px]">
               <div className="relative">
@@ -761,6 +778,33 @@ export default function Header() {
             </div>
           </div>
         </div>
+
+        {mobileNavOpen && (
+          <nav
+            id="mobile-nav"
+            className="md:hidden border-t border-cream-border bg-cream"
+            aria-label="Mobile"
+          >
+            <div className="max-w-6xl mx-auto px-6 py-3 flex flex-col gap-1">
+              {navItems.map((item) => {
+                const isActive = pathname === item.href;
+                return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={`px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                        isActive
+                          ? "bg-brand/10 text-brand"
+                          : "text-charcoal-muted hover:bg-cream-dark/60 hover:text-charcoal"
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                );
+              })}
+            </div>
+          </nav>
+        )}
       </header>
 
       {/* Global Log Book Modal */}

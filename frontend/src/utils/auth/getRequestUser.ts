@@ -1,9 +1,11 @@
-import { getSessionUser, type SessionUser } from "@/utils/auth/session";
+import { headers } from "next/headers";
+import { getUserFromAuthHeader, type SessionUser } from "@/utils/auth/session";
 
-/** Drop-in replacement for supabase.auth.getUser() in API routes. */
+/** Resolve the current user from the Authorization: Bearer JWT header. */
 export async function getRequestUser(): Promise<{ user: SessionUser | null; error: Error | null }> {
   try {
-    const user = await getSessionUser();
+    const headerStore = await headers();
+    const user = await getUserFromAuthHeader(headerStore.get("authorization"));
     return { user, error: null };
   } catch (error: any) {
     return { user: null, error };
