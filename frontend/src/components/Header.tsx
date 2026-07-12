@@ -763,39 +763,33 @@ export default function Header() {
           </div>
         </div>
 
-        <AnimatePresence>
-          {mobileNavOpen && (
-            <motion.nav
-              id="mobile-nav"
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="md:hidden overflow-hidden border-t border-cream-border bg-cream"
-              aria-label="Mobile"
-            >
-              <div className="max-w-6xl mx-auto px-6 py-3 flex flex-col gap-1">
-                {navItems.map((item) => {
-                  const isActive = pathname === item.href;
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      onClick={() => setMobileNavOpen(false)}
-                      className={`px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                        isActive
-                          ? "bg-brand/10 text-brand"
-                          : "text-charcoal-muted hover:bg-cream-dark/60 hover:text-charcoal"
-                      }`}
-                    >
-                      {item.label}
-                    </Link>
-                  );
-                })}
-              </div>
-            </motion.nav>
-          )}
-        </AnimatePresence>
+        {mobileNavOpen && (
+          <nav
+            id="mobile-nav"
+            className="md:hidden border-t border-cream-border bg-cream"
+            aria-label="Mobile"
+          >
+            <div className="max-w-6xl mx-auto px-6 py-3 flex flex-col gap-1">
+              {navItems.map((item) => {
+                const isActive = pathname === item.href;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setMobileNavOpen(false)}
+                    className={`px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                      isActive
+                        ? "bg-brand/10 text-brand"
+                        : "text-charcoal-muted hover:bg-cream-dark/60 hover:text-charcoal"
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </div>
+          </nav>
+        )}
       </header>
 
       {/* Global Log Book Modal */}
