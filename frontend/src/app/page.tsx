@@ -98,12 +98,6 @@ export default function LandingPage() {
         </Link>
         <div className="flex items-center gap-4">
           <Link
-            href="/feed"
-            className="text-xs font-semibold text-charcoal-muted hover:text-charcoal transition-colors"
-          >
-            Explore Community
-          </Link>
-          <Link
             href="/auth"
             className="px-4 py-2 bg-charcoal hover:bg-charcoal-light text-cream font-medium text-xs rounded-lg shadow transition-colors"
           >
