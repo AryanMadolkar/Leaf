@@ -147,23 +147,6 @@ export default function LandingPage() {
             <p className="text-base md:text-lg text-charcoal-muted max-w-xl mx-auto leading-relaxed">
               Track what you read. Share what you love. Discover your next literary obsession.
             </p>
-
-            {/* CTAs */}
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-              <button
-                onClick={() => setIsWaitlistOpen(true)}
-                className="w-full sm:w-auto px-6 h-12 bg-brand hover:bg-brand-light text-cream font-semibold text-sm rounded-lg shadow-md hover:shadow-lg transition-all duration-300 flex items-center justify-center gap-2"
-              >
-                Join the Waitlist
-                <ArrowRight className="w-4 h-4" />
-              </button>
-              <Link
-                href="/feed"
-                className="w-full sm:w-auto px-6 h-12 bg-cream-card border border-cream-border hover:bg-cream-dark/40 text-charcoal font-semibold text-sm rounded-lg flex items-center justify-center gap-2 transition-all"
-              >
-                Explore the Community
-              </Link>
-            </div>
           </motion.div>
 
           {/* Floating Collage */}
