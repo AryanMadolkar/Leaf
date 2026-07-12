@@ -32,7 +32,6 @@ export default function StatsPage() {
   const [hoveredLinePoint, setHoveredLinePoint] = useState<any>(null);
   const [hoveredBarIndex, setHoveredBarIndex] = useState<number | null>(null);
   const [hoveredGenre, setHoveredGenre] = useState<any>(null);
-  const [hoveredHeatmapDay, setHoveredHeatmapDay] = useState<any>(null);
 
   const loadLocalStatsFallback = () => {
     console.log("Using client-side stats fallback from context.");
@@ -42,11 +41,6 @@ export default function StatsPage() {
       const dateStr = s.logged_at ? s.logged_at.split("T")[0] : new Date().toISOString().split("T")[0];
       dailyMap[dateStr] = (dailyMap[dateStr] || 0) + (s.pages_read || s.pagesRead || 0);
     });
-
-    const heatmapRows = Object.entries(dailyMap).map(([date, pagesRead]) => ({
-      date,
-      pagesRead,
-    }));
 
     // 2. Charts
     const last7Days = [];
@@ -234,7 +228,6 @@ export default function StatsPage() {
     setData({
       success: true,
       stats: activeStats,
-      heatmap: heatmapRows,
       charts: {
         last7Days,
         last30Days,
@@ -317,129 +310,7 @@ export default function StatsPage() {
     );
   }
 
-  const { stats, heatmap, charts, genreDistribution, timeline, pace, insights } = data;
-
-  // 1. Heatmap Calculation (365 days aligned back from today)
-  const renderHeatmap = () => {
-    const today = new Date();
-    const daysToShow = 365;
-    const days = [];
-    
-    for (let i = daysToShow - 1; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(today.getDate() - i);
-      const dateStr = d.toISOString().split("T")[0];
-      const match = heatmap.find((h: any) => h.date === dateStr);
-      const pages = match ? match.pagesRead : 0;
-      days.push({
-        date: d,
-        dateStr,
-        pages,
-      });
-    }
-
-    // Grid details: group into weeks (columns of 7 rows)
-    const weeks: any[][] = [];
-    let currentWeek: any[] = [];
-    
-    // Align starting day: pad the first week with null if needed
-    const startDayOfWeek = days[0].date.getDay(); // 0 is Sunday
-    for (let i = 0; i < startDayOfWeek; i++) {
-      currentWeek.push(null);
-    }
-
-    days.forEach((day) => {
-      if (currentWeek.length === 7) {
-        weeks.push(currentWeek);
-        currentWeek = [];
-      }
-      currentWeek.push(day);
-    });
-
-    if (currentWeek.length > 0) {
-      // Pad end of last week
-      while (currentWeek.length < 7) {
-        currentWeek.push(null);
-      }
-      weeks.push(currentWeek);
-    }
-
-    const getHeatmapColor = (pages: number) => {
-      if (pages === 0) return "bg-cream-dark border-cream-border/30";
-      if (pages < 20) return "bg-brand-light/20 border-brand-light/10 text-brand";
-      if (pages < 50) return "bg-brand-light/50 border-brand-light/25 text-cream";
-      if (pages < 100) return "bg-brand border-brand-light/50 text-cream";
-      return "bg-brand-dark border-brand-light text-cream";
-    };
-
-    return (
-      <div className="space-y-3">
-        <div className="flex justify-between items-center">
-          <span className="text-[10px] font-bold text-charcoal-muted uppercase tracking-wider block">
-            Annual Reading Activity Heatmap
-          </span>
-          <div className="flex items-center gap-1.5 text-[10px] text-charcoal-muted">
-            <span>Less</span>
-            <div className="w-2.5 h-2.5 rounded-xs bg-cream-dark" />
-            <div className="w-2.5 h-2.5 rounded-xs bg-brand-light/20" />
-            <div className="w-2.5 h-2.5 rounded-xs bg-brand-light/50" />
-            <div className="w-2.5 h-2.5 rounded-xs bg-brand" />
-            <div className="w-2.5 h-2.5 rounded-xs bg-brand-dark" />
-            <span>More</span>
-          </div>
-        </div>
-
-        {/* Heatmap Grid scroll container */}
-        <div className="border border-cream-border bg-cream-card rounded-2xl p-5 shadow-xs overflow-x-auto">
-          <div className="min-w-[700px] flex gap-[3px]">
-            {/* Weekday labels */}
-            <div className="grid grid-rows-7 text-[8px] font-bold text-charcoal-muted select-none pr-1.5 text-right uppercase tracking-wider leading-[14px]">
-              <span>Sun</span>
-              <span className="opacity-0">Mon</span>
-              <span>Tue</span>
-              <span className="opacity-0">Wed</span>
-              <span>Thu</span>
-              <span className="opacity-0">Fri</span>
-              <span>Sat</span>
-            </div>
-
-            {/* Grid display */}
-            <div className="flex flex-1 gap-[3px]">
-              {weeks.map((week, wIdx) => (
-                <div key={wIdx} className="grid grid-rows-7 gap-[3px] flex-shrink-0">
-                  {week.map((day, dIdx) => {
-                    if (!day) return <div key={dIdx} className="w-[11px] h-[11px] bg-transparent" />;
-                    return (
-                      <div
-                        key={dIdx}
-                        onMouseEnter={() => setHoveredHeatmapDay(day)}
-                        onMouseLeave={() => setHoveredHeatmapDay(null)}
-                        className={`w-[11px] h-[11px] rounded-xs border transition-all duration-200 cursor-pointer ${getHeatmapColor(
-                          day.pages
-                        )} hover:scale-115 hover:shadow-xs`}
-                      />
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-          </div>
-          
-          {/* Legend/Hover Info */}
-          <div className="h-6 flex items-center justify-between mt-3 text-[10px] text-charcoal-muted border-t border-cream-border/50 pt-2 px-1">
-            {hoveredHeatmapDay ? (
-              <span>
-                <strong>{hoveredHeatmapDay.pages} pages read</strong> on {new Date(hoveredHeatmapDay.dateStr).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
-              </span>
-            ) : (
-              <span className="italic opacity-80">Hover over cells to see reading page logs</span>
-            )}
-            <span className="opacity-75">All-time record: {heatmap.reduce((max: number, h: any) => Math.max(max, h.pagesRead), 0)} pages in a single day!</span>
-          </div>
-        </div>
-      </div>
-    );
-  };
+  const { stats, charts, genreDistribution, timeline, pace, insights } = data;
 
   // 2. Custom Line Chart: Pages read over time
   const renderLineChart = () => {
@@ -930,11 +801,6 @@ export default function StatsPage() {
           <div className="min-w-0">
             {renderDonutChart()}
           </div>
-        </section>
-
-        {/* Heatmap Grid */}
-        <section>
-          {renderHeatmap()}
         </section>
 
         {/* Bar Chart & Advanced Reading Pace and shareable insights */}
