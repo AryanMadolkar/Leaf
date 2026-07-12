@@ -10,9 +10,13 @@ import Link from "next/link";
 export default function ReadingDiaryPage() {
   const { diaryLogs, books, currentUser } = useLeaf();
 
-  // Filter finished logs of current user, sorted chronological
+  // Diary timeline: books finished or currently being read, sorted chronological
   const userDiaryLogs = diaryLogs
-    .filter((log) => log.userId === currentUser.id && log.status === "Finished")
+    .filter(
+      (log) =>
+        log.userId === currentUser.id &&
+        (log.status === "Finished" || log.status === "Currently Reading")
+    )
     .sort((a, b) => new Date(b.dateLogged).getTime() - new Date(a.dateLogged).getTime());
 
   return (
@@ -27,7 +31,7 @@ export default function ReadingDiaryPage() {
             Reading Diary
           </h1>
           <p className="text-xs text-charcoal-muted">
-            A chronological timeline of the books you have read and logged on Leaf.
+            A chronological timeline of the books you are reading and have finished on Leaf.
           </p>
         </div>
 
@@ -40,6 +44,7 @@ export default function ReadingDiaryPage() {
                   <th className="p-4 pl-6">Read Date</th>
                   <th className="p-4">Book details</th>
                   <th className="p-4">Author</th>
+                  <th className="p-4">Status</th>
                   <th className="p-4">My Rating</th>
                 </tr>
               </thead>
@@ -85,12 +90,27 @@ export default function ReadingDiaryPage() {
                       {/* Author */}
                       <td className="p-4 text-charcoal-light font-medium">{book.author}</td>
 
+                      {/* Status */}
+                      <td className="p-4">
+                        {log.status === "Currently Reading" ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-brand/10 text-brand text-[9px] font-semibold uppercase tracking-wide">
+                            Reading
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cream-dark text-charcoal-muted text-[9px] font-semibold uppercase tracking-wide">
+                            Finished
+                          </span>
+                        )}
+                      </td>
+
                       {/* Rating */}
                       <td className="p-4">
                         {log.rating !== undefined ? (
                           <StarDisplay rating={log.rating} size={11} />
                         ) : (
-                          <span className="text-[10px] text-charcoal-muted italic">Shelved only</span>
+                          <span className="text-[10px] text-charcoal-muted italic">
+                            {log.status === "Currently Reading" ? "In progress" : "Shelved only"}
+                          </span>
                         )}
                       </td>
                     </tr>
