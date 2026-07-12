@@ -773,18 +773,17 @@ export default function Header() {
               {navItems.map((item) => {
                 const isActive = pathname === item.href;
                 return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setMobileNavOpen(false)}
-                    className={`px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                      isActive
-                        ? "bg-brand/10 text-brand"
-                        : "text-charcoal-muted hover:bg-cream-dark/60 hover:text-charcoal"
-                    }`}
-                  >
-                    {item.label}
-                  </Link>
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={`px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                        isActive
+                          ? "bg-brand/10 text-brand"
+                          : "text-charcoal-muted hover:bg-cream-dark/60 hover:text-charcoal"
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
                 );
               })}
             </div>
