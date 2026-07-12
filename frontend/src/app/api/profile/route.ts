@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { getSessionUser } from "@/utils/auth/session";
+import { getRequestUser } from "@/utils/auth/getRequestUser";
 import { createAdminClient } from "@/utils/supabase/admin";
 
 export async function PATCH(request: Request) {
   try {
-    const user = await getSessionUser();
+    const { user } = await getRequestUser();
     if (!user) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
@@ -35,7 +35,6 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ success: false, error: error.message }, { status: 400 });
     }
 
-    // Optional follows during onboarding
     if (Array.isArray(body.follow_user_ids) && body.follow_user_ids.length > 0) {
       const rows = body.follow_user_ids
         .filter((id: unknown) => typeof id === "string" && id !== user.id)

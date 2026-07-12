@@ -4,8 +4,9 @@ import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useLeaf } from "@/context/LeafContext";
+import { useTheme } from "@/context/ThemeContext";
 import { Book } from "@/data/mockData";
-import { Search, Plus, BookOpen, Star, LogOut, Check, X, Calendar, Clock, Book as BookIcon, Activity, CheckCircle, ChevronRight, Award, Bookmark, User, Settings, UserPlus, UserCheck, Menu } from "lucide-react";
+import { Search, Plus, BookOpen, Star, LogOut, Check, X, Calendar, Clock, Book as BookIcon, Activity, CheckCircle, ChevronRight, Award, Bookmark, User, Settings, UserPlus, UserCheck, Menu, Sun, Moon } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import UserAvatar from "@/components/UserAvatar";
 
@@ -95,7 +96,8 @@ export const StarRating = ({
 export default function Header() {
   const pathname = usePathname();
   const router = useRouter();
-  const { 
+  const { theme, toggleTheme } = useTheme();
+  const {
     books, 
     currentUser, 
     logBook, 
@@ -651,6 +653,20 @@ export default function Header() {
                 )}
               </AnimatePresence>
             </div>
+
+            {/* Theme Toggle */}
+            <button
+              onClick={toggleTheme}
+              className="w-9 h-9 shrink-0 rounded-lg border border-cream-border flex items-center justify-center bg-cream-dark/50 hover:bg-cream-dark hover:scale-105 transition-all duration-300 focus:outline-none cursor-pointer"
+              title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+              aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              {theme === "dark" ? (
+                <Sun className="w-4 h-4 text-charcoal-muted" />
+              ) : (
+                <Moon className="w-4 h-4 text-charcoal-muted" />
+              )}
+            </button>
 
             {/* Log Book Action */}
             <button

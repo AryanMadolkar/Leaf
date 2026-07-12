@@ -1,9 +1,11 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 @theme {
   --font-serif: var(--font-serif), Georgia, serif;
   --font-sans: var(--font-sans), system-ui, sans-serif;
-  
+
   --color-brand: #2E4D38;
   --color-brand-light: #416B4E;
   --color-brand-muted: #5B7B63;
@@ -21,12 +23,29 @@
   --foreground: #1C1C1A;
 }
 
+[data-theme="dark"] {
+  --background: #14140F;
+  --foreground: #EDEAE3;
+
+  --color-brand: #5B8A69;
+  --color-brand-light: #74A382;
+  --color-brand-muted: #8FA894;
+  --color-cream: #14140F;
+  --color-cream-dark: #1B1B15;
+  --color-cream-card: #1E1E17;
+  --color-cream-border: #33332A;
+  --color-charcoal: #EDEAE3;
+  --color-charcoal-light: #F5F2EB;
+  --color-charcoal-muted: #9C988C;
+}
+
 body {
   background-color: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 /* Glassmorphism utility */
@@ -35,6 +54,11 @@ body {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(230, 225, 216, 0.5);
+}
+
+[data-theme="dark"] .glass {
+  background: rgba(20, 20, 15, 0.75);
+  border: 1px solid rgba(51, 51, 42, 0.5);
 }
 
 /* Custom Scrollbar for editorial aesthetic */
@@ -56,10 +80,18 @@ body {
   background: #C4BEB3;
 }
 
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: #33332A;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: #454539;
+}
+
 /* Book Cover Hover Shadow Animation */
 .book-shadow {
-  box-shadow: 
-    0 4px 6px -1px rgba(0, 0, 0, 0.05), 
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.05),
     0 2px 4px -1px rgba(0, 0, 0, 0.03),
     0 10px 15px -3px rgba(46, 77, 56, 0.05);
   transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1);
@@ -67,8 +99,22 @@ body {
 
 .book-shadow:hover {
   transform: translateY(-8px) rotate(1deg);
-  box-shadow: 
-    0 20px 25px -5px rgba(0, 0, 0, 0.1), 
+  box-shadow:
+    0 20px 25px -5px rgba(0, 0, 0, 0.1),
     0 10px 10px -5px rgba(0, 0, 0, 0.04),
     0 25px 30px -10px rgba(46, 77, 56, 0.15);
+}
+
+[data-theme="dark"] .book-shadow {
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.3),
+    0 2px 4px -1px rgba(0, 0, 0, 0.2),
+    0 10px 15px -3px rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="dark"] .book-shadow:hover {
+  box-shadow:
+    0 20px 25px -5px rgba(0, 0, 0, 0.5),
+    0 10px 10px -5px rgba(0, 0, 0, 0.3),
+    0 25px 30px -10px rgba(0, 0, 0, 0.4);
 }

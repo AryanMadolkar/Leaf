@@ -81,27 +81,6 @@ export default function ListsPage() {
                     alt={list.title}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />
-                  {/* Floating likes and comments */}
-                  <div className="absolute top-3 right-3 flex gap-1.5 z-10">
-                    <div 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleLikeList(list.id);
-                      }}
-                      className={`flex items-center gap-1 px-2 py-0.5 backdrop-blur-md rounded-full text-[9px] font-bold shadow-sm transition-all border ${
-                        list.isLiked 
-                          ? "bg-rose-500/90 border-rose-400 text-cream" 
-                          : "bg-charcoal/45 hover:bg-charcoal/70 border-white/10 text-cream"
-                      }`}
-                    >
-                      <Heart className={`w-2.5 h-2.5 ${list.isLiked ? "fill-rose-500 text-rose-500" : ""}`} />
-                      <span>{list.likesCount}</span>
-                    </div>
-                    <div className="flex items-center gap-1 px-2 py-0.5 bg-charcoal/45 backdrop-blur-md rounded-full text-[9px] font-bold border border-white/10 text-cream">
-                      <MessageSquare className="w-2.5 h-2.5" />
-                      <span>{list.commentsCount}</span>
-                    </div>
-                  </div>
                   <div className="absolute inset-0 bg-gradient-to-t from-charcoal/90 via-charcoal/30 to-transparent flex flex-col justify-end p-5">
                     <span className="text-[8px] uppercase tracking-wider text-cream/70 font-bold mb-0.5">
                       {list.bookIds.length} Books Curated

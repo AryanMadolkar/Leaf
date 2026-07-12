@@ -1,6 +1,5 @@
 import { SignJWT, jwtVerify } from "jose";
 
-export const SESSION_COOKIE = "leaf_session";
 export const SESSION_DAYS = 30;
 
 export type SessionUser = {
@@ -35,14 +34,4 @@ export async function verifySessionToken(token: string): Promise<SessionUser | n
   } catch {
     return null;
   }
-}
-
-export function sessionCookieOptions(maxAgeSeconds = SESSION_DAYS * 24 * 60 * 60) {
-  return {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax" as const,
-    path: "/",
-    maxAge: maxAgeSeconds,
-  };
 }
