@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { query } from "@/utils/db";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { verifyPassword } from "@/utils/auth/password";
 import { attachSessionCookie, createSessionToken } from "@/utils/auth/session";
 
@@ -13,47 +13,69 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Email and password are required." }, { status: 400 });
     }
 
-    const result = await query<{
-      user_id: string;
-      password_hash: string;
-      username: string;
-      display_name: string | null;
-      onboarding_completed: boolean;
-    }>(
-      `SELECT c.user_id, c.password_hash, p.username, p.display_name, p.onboarding_completed
-       FROM public.user_credentials c
-       JOIN public.profiles p ON p.id = c.user_id
-       WHERE lower(c.email) = $1
-       LIMIT 1`,
-      [email],
-    );
+    let admin;
+    try {
+      admin = createAdminClient();
+    } catch {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Server auth is not configured. Add SUPABASE_SERVICE_ROLE_KEY and AUTH_SECRET in Vercel env.",
+        },
+        { status: 500 },
+      );
+    }
 
-    const row = result.rows[0];
-    if (!row) {
+    const { data: cred, error: credError } = await admin
+      .from("user_credentials")
+      .select("user_id, password_hash, email")
+      .ilike("email", email)
+      .maybeSingle();
+
+    if (credError) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            credError.code === "42P01" || credError.message.includes("user_credentials")
+              ? "Auth tables are missing. Run migration 002_custom_auth.sql on your database."
+              : credError.message,
+        },
+        { status: 500 },
+      );
+    }
+
+    if (!cred) {
       return NextResponse.json({ success: false, error: "Invalid email or password." }, { status: 401 });
     }
 
-    const ok = await verifyPassword(password, row.password_hash);
+    const ok = await verifyPassword(password, cred.password_hash);
     if (!ok) {
       return NextResponse.json({ success: false, error: "Invalid email or password." }, { status: 401 });
     }
 
-    const token = await createSessionToken({ id: row.user_id, email });
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("username, display_name, onboarding_completed")
+      .eq("id", cred.user_id)
+      .maybeSingle();
+
+    const token = await createSessionToken({ id: cred.user_id, email: cred.email || email });
     const response = NextResponse.json({
       success: true,
       user: {
-        id: row.user_id,
-        email,
-        username: row.username,
-        display_name: row.display_name || "Reader",
-        onboarding_completed: row.onboarding_completed,
+        id: cred.user_id,
+        email: cred.email || email,
+        username: profile?.username || email.split("@")[0],
+        display_name: profile?.display_name || "Reader",
+        onboarding_completed: Boolean(profile?.onboarding_completed),
       },
     });
     return attachSessionCookie(response, token);
   } catch (error: any) {
     console.error("[auth/login]", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Could not sign in." },
+      { success: false, error: error?.message || "Could not sign in." },
       { status: 500 },
     );
   }

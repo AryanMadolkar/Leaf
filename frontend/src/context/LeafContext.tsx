@@ -568,6 +568,24 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Auth Action Methods — custom Leaf auth (no Supabase Auth / email links)
+  const parseJsonSafe = async (res: Response) => {
+    const text = await res.text();
+    if (!text) {
+      return {
+        success: false,
+        error: `Server returned an empty response (${res.status}). Check Vercel env: AUTH_SECRET and SUPABASE_SERVICE_ROLE_KEY.`,
+      };
+    }
+    try {
+      return JSON.parse(text);
+    } catch {
+      return {
+        success: false,
+        error: `Server returned an invalid response (${res.status}). Check Vercel deployment logs.`,
+      };
+    }
+  };
+
   const signInWithPassword = async (email: string, password: string) => {
     const res = await fetch("/api/auth/login", {
       method: "POST",
@@ -575,7 +593,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
-    const data = await res.json();
+    const data = await parseJsonSafe(res);
     if (!res.ok || !data.success) {
       throw new Error(data.error || "Could not sign in.");
     }
@@ -592,7 +610,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password, username, name }),
     });
-    const data = await res.json();
+    const data = await parseJsonSafe(res);
     if (!res.ok || !data.success) {
       throw new Error(data.error || "Could not create account.");
     }

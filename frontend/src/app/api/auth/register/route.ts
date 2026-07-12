@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-import { getPool } from "@/utils/db";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { hashPassword } from "@/utils/auth/password";
 import { attachSessionCookie, createSessionToken } from "@/utils/auth/session";
 
@@ -19,7 +19,6 @@ function sanitizeUsername(raw: string) {
 }
 
 export async function POST(request: Request) {
-  const client = await getPool().connect();
   try {
     const body = await request.json();
     const email = normalizeEmail(String(body.email || ""));
@@ -35,42 +34,80 @@ export async function POST(request: Request) {
     }
     if (!username) username = `reader_${randomUUID().slice(0, 6)}`;
 
-    const existing = await client.query(
-      `SELECT user_id FROM public.user_credentials WHERE lower(email) = $1 LIMIT 1`,
-      [email],
-    );
-    if (existing.rows[0]) {
+    let admin;
+    try {
+      admin = createAdminClient();
+    } catch {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Server auth is not configured. Add SUPABASE_SERVICE_ROLE_KEY and AUTH_SECRET in Vercel env.",
+        },
+        { status: 500 },
+      );
+    }
+
+    const { data: existingCred } = await admin
+      .from("user_credentials")
+      .select("user_id")
+      .ilike("email", email)
+      .maybeSingle();
+
+    if (existingCred) {
       return NextResponse.json({ success: false, error: "An account with this email already exists." }, { status: 409 });
     }
 
-    const taken = await client.query(
-      `SELECT id FROM public.profiles WHERE lower(username) = $1 LIMIT 1`,
-      [username],
-    );
-    if (taken.rows[0]) {
+    const { data: taken } = await admin
+      .from("profiles")
+      .select("id")
+      .ilike("username", username)
+      .maybeSingle();
+
+    if (taken) {
       username = `${username}_${randomUUID().slice(0, 4)}`;
     }
 
     const userId = randomUUID();
     const passwordHash = await hashPassword(password);
 
-    await client.query("BEGIN");
-    try {
-      await client.query(
-        `INSERT INTO public.profiles (id, username, display_name, email, avatar_url, onboarding_completed)
-         VALUES ($1, $2, $3, $4, '', false)`,
-        [userId, username, name, email],
+    const { error: profileError } = await admin.from("profiles").insert({
+      id: userId,
+      username,
+      display_name: name,
+      email,
+      avatar_url: "",
+      onboarding_completed: false,
+    });
+
+    if (profileError) {
+      return NextResponse.json({ success: false, error: profileError.message }, { status: 500 });
+    }
+
+    const { error: statsError } = await admin.from("user_stats").insert({ user_id: userId });
+    if (statsError) {
+      await admin.from("profiles").delete().eq("id", userId);
+      return NextResponse.json({ success: false, error: statsError.message }, { status: 500 });
+    }
+
+    const { error: credError } = await admin.from("user_credentials").insert({
+      user_id: userId,
+      email,
+      password_hash: passwordHash,
+    });
+
+    if (credError) {
+      await admin.from("user_stats").delete().eq("user_id", userId);
+      await admin.from("profiles").delete().eq("id", userId);
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            credError.message.includes("user_credentials") || credError.code === "42P01"
+              ? "Auth tables are missing. Run migration 002_custom_auth.sql on your database."
+              : credError.message,
+        },
+        { status: 500 },
       );
-      await client.query(`INSERT INTO public.user_stats (user_id) VALUES ($1)`, [userId]);
-      await client.query(
-        `INSERT INTO public.user_credentials (user_id, email, password_hash)
-         VALUES ($1, $2, $3)`,
-        [userId, email, passwordHash],
-      );
-      await client.query("COMMIT");
-    } catch (err) {
-      await client.query("ROLLBACK");
-      throw err;
     }
 
     const token = await createSessionToken({ id: userId, email });
@@ -82,10 +119,8 @@ export async function POST(request: Request) {
   } catch (error: any) {
     console.error("[auth/register]", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Could not create account." },
+      { success: false, error: error?.message || "Could not create account." },
       { status: 500 },
     );
-  } finally {
-    client.release();
   }
 }
