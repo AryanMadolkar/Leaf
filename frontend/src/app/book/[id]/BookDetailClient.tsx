@@ -9,6 +9,7 @@ import { Book } from "@/data/mockData";
 import { BookOpen, Calendar, Check, Heart, Plus, Star, Users, Award } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import UserAvatar from "@/components/UserAvatar";
+import CoverImage from "@/components/CoverImage";
 
 interface BookDetailClientProps {
   book: Book;
@@ -179,20 +180,14 @@ export default function BookDetailClient({ book: initialBook }: BookDetailClient
             <div className="relative w-48 h-72 md:w-56 md:h-84 rounded-xl overflow-hidden book-shadow bg-cream-dark">
               <div className="absolute top-0 bottom-0 left-0 w-[4px] bg-gradient-to-r from-charcoal/25 to-transparent z-10" />
               <div className="absolute top-0 bottom-0 left-[4px] w-[1px] bg-white/25 z-10" />
-               {book.coverImage && !book.coverImage.includes("placeholder") ? (
-                <img
-                  src={book.coverImage}
-                  alt={book.title}
-                  className="w-full h-full object-cover select-none"
-                />
-              ) : (
-                <div className="w-full h-full p-6 bg-gradient-to-br from-brand-muted to-brand text-cream flex flex-col justify-between items-center text-center select-none font-serif relative">
-                  <div className="w-full text-left opacity-30 text-[9px] uppercase tracking-widest font-sans font-semibold">Leaf Library Edition</div>
-                  <span className="font-bold text-lg leading-tight mt-6 block">{book.title}</span>
-                  <span className="text-xs italic mt-2 opacity-80 block">by {book.author}</span>
-                  <div className="w-full border-t border-white/20 mt-6 pt-3 text-[8px] uppercase tracking-wider font-sans font-semibold opacity-40">Leaf Reading Club</div>
-                </div>
-              )}
+              <CoverImage
+                src={book.coverImage}
+                title={book.title}
+                author={book.author}
+                bookId={book.id}
+                className="w-full h-full"
+                imgClassName="w-full h-full object-cover select-none"
+              />
             </div>
 
             {currentActiveStatus === "Currently Reading" ? (

@@ -374,18 +374,120 @@ export async function searchOpenLibrary(query: string): Promise<Book[]> {
   }
 }
 
+function extractOpenLibraryText(field: unknown): string {
+  if (!field) return "";
+  if (typeof field === "string") return field.trim();
+  if (typeof field === "object" && field !== null && "value" in field) {
+    return String((field as { value?: unknown }).value || "").trim();
+  }
+  return "";
+}
+
+/** Heuristic: Open Library often attaches a non-English blurb as the work description. */
+function looksNonEnglish(text: string): boolean {
+  if (!text) return false;
+  const lower = text.toLowerCase().trim();
+  if (
+    /^(esta é|esta es|este es|cette |dies ist|questo |questa |os meus|mis d[ií]as|i miei|uma hist[oó]ria|é uma)/i.test(
+      lower,
+    )
+  ) {
+    return true;
+  }
+  const letters = text.replace(/[^a-zA-ZÀ-ÿ]/g, "");
+  if (letters.length < 40) return false;
+  const nonAscii = letters.replace(/[a-zA-Z]/g, "").length;
+  return nonAscii / letters.length > 0.1;
+}
+
+function isWeakCover(url?: string | null): boolean {
+  if (!url) return true;
+  return (
+    url.includes("photo-1543002588-bfa74002ed7e") ||
+    url.includes("placeholder") ||
+    /\/b\/isbn\/OL/i.test(url)
+  );
+}
+
+async function fetchEnglishEditionMeta(workKey: string): Promise<{
+  isbn13?: string;
+  isbn10?: string;
+  coverId?: number;
+  pageCount?: number;
+  publishYear?: number;
+  description?: string;
+}> {
+  try {
+    const res = await fetch(`https://openlibrary.org${workKey}/editions.json?limit=40`);
+    if (!res.ok) return {};
+    const data = await res.json();
+    const entries: any[] = data.entries || [];
+
+    const eng = entries.filter((e) =>
+      (e.languages || []).some((l: any) => {
+        const key = typeof l === "string" ? l : l?.key;
+        return key === "/languages/eng" || key === "eng";
+      }),
+    );
+    const pool = eng.length ? eng : entries;
+
+    // Prefer editions that have a real cover + ISBN
+    const ranked = [...pool].sort((a, b) => {
+      const score = (e: any) =>
+        (Array.isArray(e.covers) && e.covers.find((c: number) => c > 0) ? 4 : 0) +
+        (e.isbn_13?.[0] || e.isbn_10?.[0] ? 2 : 0) +
+        (e.number_of_pages ? 1 : 0);
+      return score(b) - score(a);
+    });
+
+    const best = ranked[0];
+    if (!best) return {};
+
+    const coverId = (best.covers || []).find((c: number) => c > 0);
+    const yearMatch = String(best.publish_date || "").match(/\d{4}/);
+    return {
+      isbn13: best.isbn_13?.[0],
+      isbn10: best.isbn_10?.[0],
+      coverId,
+      pageCount: best.number_of_pages || undefined,
+      publishYear: yearMatch ? parseInt(yearMatch[0], 10) : undefined,
+      description: extractOpenLibraryText(best.description) || undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
+async function fetchWikipediaSummary(title: string): Promise<string> {
+  try {
+    const slug = title.trim().replace(/\s+/g, "_");
+    const res = await fetch(
+      `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(slug)}`,
+      { headers: { Accept: "application/json" } },
+    );
+    if (!res.ok) return "";
+    const data = await res.json();
+    if (data?.type === "disambiguation") return "";
+    return String(data?.extract || "").trim();
+  } catch {
+    return "";
+  }
+}
+
 // Fetch and Cache Book by Open Library Key
-export async function getBookByOpenLibraryKey(key: string): Promise<Book | null> {
+export async function getBookByOpenLibraryKey(key: string, opts?: { forceRefresh?: boolean }): Promise<Book | null> {
   console.log(`[getBookByOpenLibraryKey] Invoked with key: "${key}"`);
-  const cached = await getCachedBook(key);
-  if (cached) {
-    console.log(`[getBookByOpenLibraryKey] Cache HIT for key: "${key}"`);
-    return cached;
+  if (!opts?.forceRefresh) {
+    const cached = await getCachedBook(key);
+    if (cached && !isWeakCover(cached.coverImage) && !looksNonEnglish(cached.description || "")) {
+      console.log(`[getBookByOpenLibraryKey] Cache HIT for key: "${key}"`);
+      return cached;
+    }
   }
 
   const cleanKey = key.startsWith("/works/") ? key : `/works/${key}`;
   const fetchUrl = `https://openlibrary.org${cleanKey}.json`;
-  console.log(`[getBookByOpenLibraryKey] Cache MISS. Fetching Open Library URL: "${fetchUrl}"`);
+  console.log(`[getBookByOpenLibraryKey] Fetching Open Library URL: "${fetchUrl}"`);
 
   try {
     const res = await fetch(fetchUrl);
@@ -416,30 +518,46 @@ export async function getBookByOpenLibraryKey(key: string): Promise<Book | null>
       }
     }
 
-    let description = "";
-    if (data.description) {
-      if (typeof data.description === "string") {
-        description = data.description;
-      } else if (data.description.value) {
-        description = data.description.value;
-      }
+    const editionMeta = await fetchEnglishEditionMeta(cleanKey);
+
+    let description = extractOpenLibraryText(data.description);
+    if (!description || looksNonEnglish(description)) {
+      description = editionMeta.description || description;
+    }
+    if (!description || looksNonEnglish(description)) {
+      const wiki = await fetchWikipediaSummary(title);
+      if (wiki) description = wiki;
     }
 
-    const firstPublishYear = data.created?.value 
-      ? new Date(data.created.value).getFullYear() 
-      : 2000;
+    const workCoverId = (data.covers || []).find((c: number) => c > 0);
+    const coverId = editionMeta.coverId || workCoverId;
+    const coverUrl = coverId
+      ? coverUrlFromCoverId(coverId)
+      : editionMeta.isbn13 || editionMeta.isbn10
+        ? coverUrlFromIsbn(editionMeta.isbn13 || editionMeta.isbn10!)
+        : "";
+
+    const firstPublishYear =
+      editionMeta.publishYear ||
+      (data.first_publish_date ? parseInt(String(data.first_publish_date).match(/\d{4}/)?.[0] || "", 10) : undefined) ||
+      2000;
 
     const subjects = data.subjects || [];
+    const pageCount = editionMeta.pageCount || data.number_of_pages || data.number_of_pages_median || 300;
 
     console.log(`[getBookByOpenLibraryKey] Saving book to database...`);
-    // Save in DB
     const id = await saveBookToDatabase({
       open_library_key: cleanKey,
+      isbn_10: editionMeta.isbn10 || null,
+      isbn_13: editionMeta.isbn13 || null,
       title,
       description,
       author_name: authorName,
       author_key: authorKey,
       first_publish_year: firstPublishYear,
+      page_count: pageCount,
+      language: "eng",
+      cover_url: coverUrl || null,
       subjects,
     });
     console.log(`[getBookByOpenLibraryKey] Book saved in database with ID: "${id}". Fetching cached record...`);
@@ -454,16 +572,17 @@ export async function getBookByOpenLibraryKey(key: string): Promise<Book | null>
     return mapDbBookToClientBook({
       id,
       open_library_key: cleanKey,
+      isbn_10: editionMeta.isbn10 || null,
+      isbn_13: editionMeta.isbn13 || null,
       title,
       description,
       author_name: authorName,
       author_key: authorKey,
       first_publish_year: firstPublishYear,
       subjects,
-      page_count: data.number_of_pages || data.number_of_pages_median || 300,
-      cover_url: data.covers?.[0]
-        ? `https://covers.openlibrary.org/b/id/${data.covers[0]}-L.jpg`
-        : `https://covers.openlibrary.org/b/isbn/${id}-L.jpg`,
+      page_count: pageCount,
+      language: "eng",
+      cover_url: coverUrl,
     });
   } catch (err) {
     console.error(`Error fetching work details for ${cleanKey}:`, err);
@@ -615,7 +734,7 @@ export async function fetchBookFromOpenLibrary(id: string): Promise<Book | null>
       console.log(`[fetchBookFromOpenLibrary] Fetching by Open Library Work Key: "${id}"`);
       // Strip /works/ if present to get clean work key
       const cleanKey = id.replace(/^\/works\//, "");
-      return await getBookByOpenLibraryKey(cleanKey);
+      return await getBookByOpenLibraryKey(cleanKey, { forceRefresh: true });
     }
   } catch (error) {
     console.error(`[fetchBookFromOpenLibrary] API failure fetching book ID "${id}":`, error);
@@ -630,18 +749,24 @@ export async function getBookById(id: string): Promise<Book | null> {
     return null;
   }
 
-  // 1. Try Cache
+  // 1. Try Cache — refresh if cover/synopsis are weak or non-English
   const cached = await getBookFromCache(id);
-  if (cached) {
+  const cacheIsStale =
+    cached &&
+    (isWeakCover(cached.coverImage) || looksNonEnglish(cached.description || ""));
+
+  if (cached && !cacheIsStale) {
     return cached;
   }
 
-  // 2. Fetch & Cache
+  // 2. Fetch & Cache (force refresh when stale so DB gets cover + English synopsis)
   const fetched = await fetchBookFromOpenLibrary(id);
   if (fetched) {
     console.log(`[getBookById] Successfully retrieved and cached book ID: "${id}" from Open Library`);
     return fetched;
   }
+
+  if (cached) return cached;
 
   console.warn(`[getBookById] Book detail resolution failed for ID: "${id}"`);
   return null;
