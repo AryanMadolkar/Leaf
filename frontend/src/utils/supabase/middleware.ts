@@ -1,116 +1,47 @@
-import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { SESSION_COOKIE, verifySessionToken } from "@/utils/auth/tokens";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder-project.supabase.co";
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
+const protectedRoutes = [
+  "/feed",
+  "/profile",
+  "/library",
+  "/stats",
+  "/lists",
+  "/settings",
+  "/onboarding",
+];
 
-// User requested middleware helper
-export const createClient = (request: NextRequest) => {
-  let supabaseResponse = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
-  });
-
-  const supabase = createServerClient(
-    supabaseUrl,
-    supabaseKey,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-          supabaseResponse = NextResponse.next({
-            request,
-          });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          );
-        },
-      },
-    },
-  );
-
-  return supabaseResponse;
-};
-
-// Route protection & session refresh logic
 export async function updateSession(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
-  });
-
-  const supabase = createServerClient(
-    supabaseUrl,
-    supabaseKey,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-          supabaseResponse = NextResponse.next({
-            request,
-          });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          );
-        },
-      },
-    },
-  );
-
-  // Refresh user session if token is expired
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const isGuestSession = request.cookies.get("leaf_guest_session")?.value === "true";
-  const userObj = user || (isGuestSession ? { id: "guest-user-id", email: "guest@example.com" } : null);
-
   const path = request.nextUrl.pathname;
-  const protectedRoutes = ["/feed", "/profile", "/library", "/stats", "/lists", "/settings", "/onboarding"];
-  const isProtected = protectedRoutes.some((route) => path === route || path.startsWith(route + "/"));
+  const isGuestSession = request.cookies.get("leaf_guest_session")?.value === "true";
+  const sessionToken = request.cookies.get(SESSION_COOKIE)?.value;
+  const sessionUser = sessionToken ? await verifySessionToken(sessionToken) : null;
+  const isAuthed = Boolean(sessionUser) || isGuestSession;
 
-  // Check public profiles at /u/... which do not need redirecting to auth
+  const isProtected = protectedRoutes.some(
+    (route) => path === route || path.startsWith(route + "/"),
+  );
   const isPublicProfile = path.startsWith("/u/");
 
-  if (!userObj && isProtected && !isPublicProfile) {
+  if (!isAuthed && isProtected && !isPublicProfile) {
     const url = request.nextUrl.clone();
     url.pathname = "/auth";
     return NextResponse.redirect(url);
   }
 
-  if (userObj && path === "/auth") {
+  if (isAuthed && path === "/auth") {
     const url = request.nextUrl.clone();
     if (isGuestSession) {
       const isGuestOnboarded = request.cookies.get("leaf_guest_onboarded")?.value === "true";
-      if (!isGuestOnboarded) {
-        url.pathname = "/onboarding";
-      } else {
-        url.pathname = "/feed";
-      }
-    } else {
-      // Check onboarding status
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("onboarding_completed")
-        .eq("id", userObj.id)
-        .single();
-
-      if (profile && !profile.onboarding_completed) {
-        url.pathname = "/onboarding";
-      } else {
-        url.pathname = "/feed";
-      }
+      url.pathname = isGuestOnboarded ? "/feed" : "/onboarding";
+    } else if (sessionUser) {
+      // Lightweight gate — detailed onboarding check happens client-side via /api/auth/me
+      url.pathname = "/feed";
     }
     return NextResponse.redirect(url);
   }
 
-  return supabaseResponse;
+  return NextResponse.next({
+    request: { headers: request.headers },
+  });
 }

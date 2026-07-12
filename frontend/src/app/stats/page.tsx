@@ -720,15 +720,15 @@ export default function StatsPage() {
     const colors = ["#2E4D38", "#4A6B53", "#7A8C80", "#9B918B", "#D4CECE"];
 
     return (
-      <div className="space-y-4 h-full flex flex-col justify-between">
+      <div className="space-y-4 h-full flex flex-col justify-between min-w-0 w-full">
         <span className="text-[10px] font-bold text-charcoal-muted uppercase tracking-wider block">
           Literary Genre Footprint
         </span>
 
-        <div className="bg-cream-card border border-cream-border rounded-2xl p-6 shadow-xs flex-1 flex flex-col sm:flex-row items-center justify-center gap-8 min-h-[220px]">
+        <div className="bg-cream-card border border-cream-border rounded-2xl p-4 sm:p-5 shadow-xs flex-1 flex flex-col items-center gap-5 min-h-[220px] min-w-0 w-full overflow-hidden">
           {/* Donut SVG */}
-          <div className="relative w-[180px] h-[180px] flex-shrink-0">
-            <svg width={size} height={size} className="transform -rotate-90 overflow-visible">
+          <div className="relative w-[160px] h-[160px] shrink-0">
+            <svg width={160} height={160} viewBox={`0 0 ${size} ${size}`} className="transform -rotate-90">
               <circle cx={center} cy={center} r={r} fill="none" stroke="#EAE3DF" strokeWidth="16" />
               {slices.map((slice: any, idx: number) => {
                 const color = colors[idx % colors.length];
@@ -753,7 +753,7 @@ export default function StatsPage() {
             </svg>
             
             {/* Center Label Text */}
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none select-none px-4">
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none select-none px-5">
               {hoveredGenre ? (
                 <>
                   <span className="text-[10px] font-bold text-charcoal-muted uppercase tracking-wider truncate max-w-full">
@@ -783,26 +783,24 @@ export default function StatsPage() {
           </div>
 
           {/* Legends */}
-          <div className="flex-1 space-y-2.5 w-full">
+          <div className="w-full min-w-0 space-y-1.5">
             {slices.map((slice: any, idx: number) => {
               const color = colors[idx % colors.length];
               const isHovered = hoveredGenre?.name === slice.name;
               return (
                 <div
                   key={idx}
-                  className={`flex items-center justify-between text-xs p-1.5 rounded-lg border transition-all duration-200 ${
+                  className={`flex items-center gap-2 text-xs px-2 py-1.5 rounded-lg border transition-colors duration-200 min-w-0 ${
                     isHovered
-                      ? "bg-cream-dark border-cream-border shadow-2xs translate-x-1"
+                      ? "bg-cream-dark border-cream-border shadow-2xs"
                       : "border-transparent"
                   }`}
                   onMouseEnter={() => setHoveredGenre(slice)}
                   onMouseLeave={() => setHoveredGenre(null)}
                 >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-2.5 h-2.5 rounded-xs flex-shrink-0" style={{ backgroundColor: color }} />
-                    <span className="font-medium text-charcoal truncate">{slice.name}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 pl-2">
+                  <div className="w-2.5 h-2.5 rounded-xs shrink-0" style={{ backgroundColor: color }} />
+                  <span className="font-medium text-charcoal truncate min-w-0 flex-1">{slice.name}</span>
+                  <div className="flex items-center gap-1.5 shrink-0 tabular-nums">
                     <span className="text-charcoal-muted text-[10px]">{slice.count}x</span>
                     <span className="font-semibold text-charcoal">{slice.percentage}%</span>
                   </div>
@@ -916,12 +914,12 @@ export default function StatsPage() {
           </div>
         </section>
 
-        {/* Line Chart & Heatmap */}
+        {/* Line Chart & Genre Footprint */}
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 min-w-0">
             {renderLineChart()}
           </div>
-          <div>
+          <div className="min-w-0">
             {renderDonutChart()}
           </div>
         </section>
@@ -933,59 +931,59 @@ export default function StatsPage() {
 
         {/* Bar Chart & Advanced Reading Pace and shareable insights */}
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 min-w-0">
             {renderBarChart()}
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-6 min-w-0">
             <span className="text-[10px] font-bold text-charcoal-muted uppercase tracking-wider block">
               Advanced Reading Metrics
             </span>
             
-            <div className="bg-cream-card border border-cream-border rounded-2xl p-5 shadow-xs space-y-4">
+            <div className="bg-cream-card border border-cream-border rounded-2xl p-5 shadow-xs space-y-4 overflow-hidden">
               <div className="divide-y divide-cream-border/60">
                 
                 {/* Pages Pace */}
-                <div className="py-2.5 flex justify-between items-center text-xs">
-                  <span className="text-charcoal-muted">Average pace</span>
-                  <span className="font-bold text-charcoal">{pace.avgPagesPerDay} pages / day</span>
+                <div className="py-2.5 flex justify-between items-center gap-3 text-xs min-w-0">
+                  <span className="text-charcoal-muted shrink-0">Average pace</span>
+                  <span className="font-bold text-charcoal text-right truncate">{pace.avgPagesPerDay} pages / day</span>
                 </div>
 
                 {/* Books completion */}
-                <div className="py-2.5 flex justify-between items-center text-xs">
-                  <span className="text-charcoal-muted">Monthly throughput</span>
-                  <span className="font-bold text-charcoal">{pace.avgBooksPerMonth} books / month</span>
+                <div className="py-2.5 flex justify-between items-center gap-3 text-xs min-w-0">
+                  <span className="text-charcoal-muted shrink-0">Monthly throughput</span>
+                  <span className="font-bold text-charcoal text-right truncate">{pace.avgBooksPerMonth} books / month</span>
                 </div>
 
                 {/* Days to finish */}
-                <div className="py-2.5 flex justify-between items-center text-xs">
-                  <span className="text-charcoal-muted">Avg days to finish</span>
-                  <span className="font-bold text-charcoal">{pace.avgDaysToFinish} days</span>
+                <div className="py-2.5 flex justify-between items-center gap-3 text-xs min-w-0">
+                  <span className="text-charcoal-muted shrink-0">Avg days to finish</span>
+                  <span className="font-bold text-charcoal text-right truncate">{pace.avgDaysToFinish} days</span>
                 </div>
 
                 {/* Fastest Finish */}
                 {pace.fastestBook && (
-                  <div className="py-2.5 space-y-1">
+                  <div className="py-2.5 space-y-1 min-w-0">
                     <span className="text-charcoal-muted text-xs block">Fastest complete</span>
-                    <div className="flex items-center gap-2 mt-0.5">
+                    <div className="flex items-center gap-2 mt-0.5 min-w-0">
                       {pace.fastestBook.coverImage && (
-                        <img src={pace.fastestBook.coverImage} className="w-5 h-7 object-cover rounded shadow-xs" />
+                        <img src={pace.fastestBook.coverImage} className="w-5 h-7 object-cover rounded shadow-xs shrink-0" />
                       )}
-                      <span className="font-semibold text-xs text-charcoal truncate max-w-[180px]">{pace.fastestBook.title}</span>
-                      <span className="text-[10px] text-brand ml-auto font-bold flex-shrink-0">{pace.fastestBook.days} days</span>
+                      <span className="font-semibold text-xs text-charcoal truncate min-w-0 flex-1">{pace.fastestBook.title}</span>
+                      <span className="text-[10px] text-brand font-bold shrink-0">{pace.fastestBook.days} days</span>
                     </div>
                   </div>
                 )}
 
                 {pace.longestBook && (
-                  <div className="py-2.5 space-y-1">
+                  <div className="py-2.5 space-y-1 min-w-0">
                     <span className="text-charcoal-muted text-xs block">Longest book finished</span>
-                    <div className="flex items-center gap-2 mt-0.5">
+                    <div className="flex items-center gap-2 mt-0.5 min-w-0">
                       {pace.longestBook.coverImage && (
-                        <img src={pace.longestBook.coverImage} className="w-5 h-7 object-cover rounded shadow-xs" />
+                        <img src={pace.longestBook.coverImage} className="w-5 h-7 object-cover rounded shadow-xs shrink-0" />
                       )}
-                      <span className="font-semibold text-xs text-charcoal truncate max-w-[180px]">{pace.longestBook.title}</span>
-                      <span className="text-[10px] text-brand ml-auto font-bold flex-shrink-0">{pace.longestBook.pages} pages</span>
+                      <span className="font-semibold text-xs text-charcoal truncate min-w-0 flex-1">{pace.longestBook.title}</span>
+                      <span className="text-[10px] text-brand font-bold shrink-0">{pace.longestBook.pages} pages</span>
                     </div>
                   </div>
                 )}

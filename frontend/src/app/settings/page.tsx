@@ -4,14 +4,12 @@ import React, { useState, useRef, useEffect } from "react";
 import Header from "@/components/Header";
 import UserAvatar from "@/components/UserAvatar";
 import { useLeaf } from "@/context/LeafContext";
-import { createClient } from "@/utils/supabase/client";
 import { Camera, Trash2, Check, AlertCircle, ArrowLeft, Sparkles, Loader } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 export default function SettingsPage() {
   const { currentUser, updateProfile, session } = useLeaf();
-  const supabase = createClient();
   const router = useRouter();
 
   const [displayName, setDisplayName] = useState("");
@@ -70,59 +68,15 @@ export default function SettingsPage() {
     try {
       let finalAvatarUrl = avatarPreview;
 
-      // Handle avatar image upload
+      // Handle avatar image upload (stored as data URL via profile API)
       if (avatarFile) {
-        const isGuest = session?.user?.id === "guest-user-id";
-        
-        if (isGuest) {
-          // Fallback to Base64 for Guest Mode
-          const reader = new FileReader();
-          const base64Promise = new Promise<string>((resolve, reject) => {
-            reader.onload = () => resolve(reader.result as string);
-            reader.onerror = (err) => reject(err);
-          });
-          reader.readAsDataURL(avatarFile);
-          finalAvatarUrl = await base64Promise;
-        } else {
-          // Upload to Supabase Storage
-          try {
-            const fileExt = avatarFile.name.split(".").pop() || "png";
-            const fileName = `avatar-${Date.now()}.${fileExt}`;
-            const filePath = `${session.user.id}/${fileName}`;
-
-            // Try uploading to 'avatars' bucket
-            const { data, error: uploadError } = await supabase.storage
-              .from("avatars")
-              .upload(filePath, avatarFile, { upsert: true });
-
-            if (uploadError) {
-              console.warn("Supabase Storage upload error, falling back to local Base64 storage:", uploadError);
-              // Fallback to Base64 if bucket does not exist or has permission issues
-              const reader = new FileReader();
-              const base64Promise = new Promise<string>((resolve, reject) => {
-                reader.onload = () => resolve(reader.result as string);
-                reader.onerror = (err) => reject(err);
-              });
-              reader.readAsDataURL(avatarFile);
-              finalAvatarUrl = await base64Promise;
-            } else {
-              // Retrieve public URL
-              const { data: urlData } = supabase.storage
-                .from("avatars")
-                .getPublicUrl(filePath);
-              finalAvatarUrl = urlData.publicUrl;
-            }
-          } catch (storageErr) {
-            console.warn("Storage API caught error, using Base64 fallback:", storageErr);
-            const reader = new FileReader();
-            const base64Promise = new Promise<string>((resolve, reject) => {
-              reader.onload = () => resolve(reader.result as string);
-              reader.onerror = (err) => reject(err);
-            });
-            reader.readAsDataURL(avatarFile);
-            finalAvatarUrl = await base64Promise;
-          }
-        }
+        const reader = new FileReader();
+        const base64Promise = new Promise<string>((resolve, reject) => {
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = (err) => reject(err);
+        });
+        reader.readAsDataURL(avatarFile);
+        finalAvatarUrl = await base64Promise;
       }
 
       // Sync settings to context & database/local storage

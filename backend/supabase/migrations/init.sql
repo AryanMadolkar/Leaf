@@ -21,9 +21,9 @@ CREATE TABLE IF NOT EXISTS public.books (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 2. Create profiles table (bound to auth.users)
+-- 2. Create profiles table (app-owned identity; not bound to Supabase Auth)
 CREATE TABLE IF NOT EXISTS public.profiles (
-  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   username TEXT UNIQUE NOT NULL,
   display_name TEXT,
   email TEXT,
@@ -35,6 +35,17 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- 2b. Email/password credentials for Leaf's own auth
+CREATE TABLE IF NOT EXISTS public.user_credentials (
+  user_id UUID PRIMARY KEY REFERENCES public.profiles(id) ON DELETE CASCADE,
+  email TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_user_credentials_email
+  ON public.user_credentials (lower(email));
 
 -- 3. Create user_stats table for reading calculations
 CREATE TABLE IF NOT EXISTS public.user_stats (
@@ -176,38 +187,8 @@ CREATE POLICY "Allow auth users to update own reviews" ON public.reviews
 CREATE POLICY "Allow auth users to delete own reviews" ON public.reviews
   FOR DELETE USING (auth.uid() = user_id);
 
--- 9. Automatic Trigger function for newly signed up auth.users
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
-DECLARE
-  new_username TEXT;
-BEGIN
-  -- Generate unique username using metadata or random hash fallback
-  new_username := COALESCE(
-    NEW.raw_user_meta_data->>'username',
-    'user_' || substr(md5(random()::text), 1, 8)
-  );
-
-  -- Insert profile
-  INSERT INTO public.profiles (id, username, display_name, email, avatar_url, onboarding_completed)
-  VALUES (
-    NEW.id,
-    new_username,
-    COALESCE(NEW.raw_user_meta_data->>'display_name', NEW.raw_user_meta_data->>'name', 'Reader'),
-    NEW.email,
-    COALESCE(NEW.raw_user_meta_data->>'avatar_url', ''),
-    FALSE
-  );
-
-  -- Insert default user stats
-  INSERT INTO public.user_stats (user_id)
-  VALUES (NEW.id);
-
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Trigger execution
-CREATE OR REPLACE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+-- Profile / stats inserts used by custom app auth (service role / server)
+CREATE POLICY "Allow server insert profiles" ON public.profiles
+  FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow server insert user_stats" ON public.user_stats
+  FOR INSERT WITH CHECK (true);

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
-import { createClient } from "@/utils/supabase/server";
 import { createServerClient } from "@supabase/ssr";
+import { createAdminClient } from "@/utils/supabase/admin";
+import { getRequestUser } from "@/utils/auth/getRequestUser";
 import { recalculateUserStats } from "@/utils/supabaseStats";
 import { getBookById } from "@/utils/booksApi";
 
@@ -75,11 +76,8 @@ export async function GET(request: Request) {
     const { url: envUrl, anonKey: envAnonKey, serviceRoleKey } = verifyEnv();
     console.log("[DEBUG] [user-books] Env verification passed. URL:", envUrl, "Anon Key Length:", envAnonKey.length);
 
-    const userClient = await createClient();
     const { searchParams } = new URL(request.url);
-    
-    // Default to active user session, fallback to searchParam if querying another profile
-    const { data: { user }, error: authError } = await userClient.auth.getUser();
+    const { user, error: authError } = await getRequestUser();
     if (authError) {
       console.warn("[DEBUG] [user-books] Session auth error:", authError);
     }
@@ -90,7 +88,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, error: "Missing target userId" }, { status: 400 });
     }
 
-    const dbClient = getSupabaseClient(serviceRoleKey) || userClient;
+    const dbClient = getSupabaseClient(serviceRoleKey) || createAdminClient();
     await verifyDatabaseSchema(dbClient);
 
     const { data: rows, error: selectError } = await dbClient
@@ -150,8 +148,7 @@ export async function POST(request: Request) {
       : status; // check if already formatted
 
     // 4. Authenticate User
-    const userClient = await createClient();
-    const { data: { user }, error: authError } = await userClient.auth.getUser();
+    const { user, error: authError } = await getRequestUser();
 
     if (authError || !user) {
       console.error("[DEBUG] [user-books] User authentication check failed:", authError);
@@ -159,7 +156,7 @@ export async function POST(request: Request) {
     }
     console.log("[DEBUG] [user-books] Current authenticated user ID:", user.id);
 
-    const dbClient = getSupabaseClient(serviceRoleKey) || userClient;
+    const dbClient = getSupabaseClient(serviceRoleKey) || createAdminClient();
 
     // Ensure profile row exists (critical to avoid foreign key violations in user_books/user_stats)
     const { data: existingProfile, error: profileCheckError } = await dbClient
@@ -176,9 +173,10 @@ export async function POST(request: Request) {
       console.log("[DEBUG] [user-books] Profile row missing for user. Creating fallback profile row.");
       const newProfile = {
         id: user.id,
-        username: user.user_metadata?.username || user.email?.split("@")[0] || `user_${crypto.randomUUID().slice(0, 8)}`,
-        display_name: user.user_metadata?.display_name || user.user_metadata?.name || "Reader",
-        avatar_url: '',
+        username: user.email?.split("@")[0] || `user_${crypto.randomUUID().slice(0, 8)}`,
+        display_name: "Reader",
+        email: user.email,
+        avatar_url: "",
         onboarding_completed: false,
       };
 
@@ -483,8 +481,7 @@ export async function PUT(request: Request) {
   try {
     console.log("[DEBUG] [user-books] Incoming PUT request.");
     const { serviceRoleKey } = verifyEnv();
-    const userClient = await createClient();
-    const { data: { user }, error: authError } = await userClient.auth.getUser();
+    const { user, error: authError } = await getRequestUser();
 
     if (authError || !user) {
       console.error("[DEBUG] [user-books] User authentication check failed:", authError);
@@ -499,7 +496,7 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: false, error: "Missing followId" }, { status: 400 });
     }
 
-    const dbClient = getSupabaseClient(serviceRoleKey) || userClient;
+    const dbClient = getSupabaseClient(serviceRoleKey) || createAdminClient();
 
     // Check if relationship already exists
     const { data: existingFollow, error: followFetchError } = await dbClient

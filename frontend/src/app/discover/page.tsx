@@ -53,6 +53,7 @@ export default function DiscoverPage() {
 
   // Hero featured book (server-cached, rotates daily)
   const [heroBook, setHeroBook] = useState<Book | null>(null);
+  const [heroDate, setHeroDate] = useState<string | null>(null);
   const [heroLoading, setHeroLoading] = useState(true);
 
   // Cached catalog shelves
@@ -105,11 +106,13 @@ export default function DiscoverPage() {
     async function loadFeatured() {
       setHeroLoading(true);
       try {
-        const res = await fetch("/api/books/featured");
+        const today = new Date().toISOString().slice(0, 10);
+        const res = await fetch(`/api/books/featured?date=${today}`);
         if (res.ok) {
           const data = await res.json();
           if (data.success && data.book) {
             setHeroBook(data.book);
+            setHeroDate(data.date || today);
           }
         }
       } catch (err) {
@@ -324,6 +327,12 @@ export default function DiscoverPage() {
                   <div className="space-y-2">
                     <span className="px-2.5 py-1 bg-brand/10 border border-brand/20 text-brand rounded-full text-[9px] font-bold tracking-wider uppercase">
                       Featured Volume of the Day
+                      {heroDate
+                        ? ` · ${new Date(heroDate + "T12:00:00Z").toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                          })}`
+                        : ""}
                     </span>
                     <h2 className="font-serif text-3xl font-bold text-charcoal leading-tight">
                       {heroBook.title}

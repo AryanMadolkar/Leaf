@@ -1,8 +1,10 @@
 import crypto from "crypto";
 import { createClient } from "@/utils/supabase/server";
+import { createPublicClient } from "@/utils/supabase/public";
 import { Book, INITIAL_BOOKS } from "@/data/mockData";
 import { COVER_ID_BY_ISBN } from "@/data/coverOverrides";
 import { coverUrlFromCoverId, withOpenLibraryDefaultFalse } from "@/utils/covers";
+import { withResolvedCover } from "@/utils/bookCatalog";
 
 export interface NormalizedBook {
   id: string;
@@ -246,29 +248,30 @@ export async function getCachedBook(query: string): Promise<Book | null> {
   return null;
 }
 
-// Search local database
+// Search local catalog + public Supabase books table (no cookies — cache-safe)
 export async function searchLocalBooks(query: string): Promise<Book[]> {
-  const queryLower = query.toLowerCase();
-  const localResults = INITIAL_BOOKS.filter((b: Book) => 
-    b.title.toLowerCase().includes(queryLower) || 
-    b.author.toLowerCase().includes(queryLower)
-  );
+  const queryLower = query.toLowerCase().trim();
+  if (queryLower.length < 2) return [];
 
-  const supabase = await createClient();
+  const localResults = INITIAL_BOOKS.filter(
+    (b: Book) =>
+      b.title.toLowerCase().includes(queryLower) ||
+      b.author.toLowerCase().includes(queryLower)
+  ).map(withResolvedCover);
 
   try {
+    const supabase = createPublicClient();
     const { data: records, error } = await supabase
       .from("books")
       .select("*")
-      .or(`title.ilike.%${query}%,author_name.ilike.%${query}%`)
+      .or(`title.ilike.%${queryLower}%,author_name.ilike.%${queryLower}%`)
       .limit(20);
 
     if (error || !records) return localResults.slice(0, 20);
 
     const dbResults = records.map((r: any) => mapDbBookToClientBook(r));
-    
-    // Merge them
-    const seen = new Set(localResults.map(r => r.id));
+
+    const seen = new Set(localResults.map((r) => r.id));
     const combined = [...localResults];
     for (const b of dbResults) {
       if (!seen.has(b.id)) {
@@ -280,6 +283,86 @@ export async function searchLocalBooks(query: string): Promise<Book[]> {
   } catch (error) {
     console.error("Error doing local search in Supabase:", error);
     return localResults.slice(0, 20);
+  }
+}
+
+/** Search Open Library only (no DB/cookies) — safe to cache. */
+export async function searchOpenLibraryRemote(query: string): Promise<Book[]> {
+  const res = await fetch(
+    `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=12`,
+    { next: { revalidate: 300 } }
+  );
+  if (!res.ok) return [];
+
+  const data = await res.json();
+  const docs = data.docs || [];
+  const results: Book[] = [];
+
+  for (const doc of docs.slice(0, 12)) {
+    const isbn13 = doc.isbn?.find((i: string) => i.length === 13) || null;
+    const isbn10 = doc.isbn?.find((i: string) => i.length === 10) || null;
+    const isbn = isbn13 || isbn10 || doc.isbn?.[0] || "";
+    const coverId = doc.cover_i;
+    const coverUrl = coverId
+      ? coverUrlFromCoverId(coverId)
+      : isbn
+        ? withOpenLibraryDefaultFalse(`https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg`)
+        : "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=600&auto=format&fit=crop&q=80";
+
+    const id =
+      doc.key?.replace("/works/", "") ||
+      isbn13 ||
+      isbn10 ||
+      `ol-${doc.cover_i || Math.random().toString(36).slice(2)}`;
+
+    results.push({
+      id,
+      title: doc.title || "Untitled",
+      author: doc.author_name?.[0] || "Unknown Author",
+      year: doc.first_publish_year || 2000,
+      description:
+        (Array.isArray(doc.first_sentence)
+          ? doc.first_sentence[0]
+          : doc.first_sentence) || "No description available.",
+      coverImage: coverUrl,
+      averageRating: 4.0,
+      genres: (doc.subject || []).slice(0, 4),
+      pages: doc.number_of_pages_median || doc.number_of_pages || 300,
+    });
+  }
+
+  return results;
+}
+
+// Main book search: local catalog/DB first, then Open Library to fill gaps
+export async function searchOpenLibrary(query: string): Promise<Book[]> {
+  if (!query || query.trim().length < 2) return [];
+
+  const q = query.trim();
+  const localResults = await searchLocalBooks(q);
+
+  // Always try Open Library when we have fewer than 8 strong local hits
+  if (localResults.length >= 8) {
+    return localResults.slice(0, 15);
+  }
+
+  try {
+    const remoteResults = await searchOpenLibraryRemote(q);
+    const seen = new Set(
+      localResults.map((r) => `${r.title.toLowerCase()}::${r.author.toLowerCase()}`)
+    );
+    const combined = [...localResults];
+    for (const book of remoteResults) {
+      const key = `${book.title.toLowerCase()}::${book.author.toLowerCase()}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        combined.push(book);
+      }
+    }
+    return combined.slice(0, 15);
+  } catch (error) {
+    console.error("Open Library search API error:", error);
+    return localResults;
   }
 }
 
@@ -496,97 +579,6 @@ export async function getBookByISBN(isbn: string): Promise<Book | null> {
   } catch (err) {
     console.error(`Error fetching edition details for ISBN ${isbn}:`, err);
     return null;
-  }
-}
-
-// Main book search combining Local DB + Open Library API
-export async function searchOpenLibrary(query: string): Promise<Book[]> {
-  if (!query || query.trim().length < 2) return [];
-
-  // 1. Search local DB first
-  const localResults = await searchLocalBooks(query);
-  if (localResults.length > 0) {
-    return localResults;
-  }
-
-  // 2. Fetch from Open Library if local search has few results
-  try {
-    const res = await fetch(
-      `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}`
-    );
-    if (!res.ok) return localResults;
-
-    const data = await res.json();
-    const docs = data.docs || [];
-
-    const serverResults: Book[] = [];
-
-    // Normalize and save top results
-    for (const doc of docs.slice(0, 12)) {
-      const isbn = doc.isbn?.[0] || "";
-      const coverUrl = doc.cover_i
-        ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg`
-        : isbn
-        ? `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg`
-        : null;
-
-      const title = doc.title;
-      const authorName = doc.author_name?.[0] || "Unknown Author";
-      const authorKey = doc.author_key?.[0] || null;
-      const subjects = doc.subject || [];
-      const firstPublishYear = doc.first_publish_year || 2000;
-      const pageCount = doc.number_of_pages_median || doc.number_of_pages || 300;
-      const language = doc.language?.[0] || "eng";
-
-      const book = {
-        open_library_key: doc.key,
-        isbn_10: doc.isbn?.find((i: string) => i.length === 10) || null,
-        isbn_13: doc.isbn?.find((i: string) => i.length === 13) || null,
-        title,
-        description: doc.first_sentence?.[0] || null,
-        author_name: authorName,
-        author_key: authorKey,
-        first_publish_year: firstPublishYear,
-        page_count: pageCount,
-        language,
-        cover_url: coverUrl,
-        subjects,
-      };
-
-      const dbId = await saveBookToDatabase(book);
-      let cached = await getCachedBook(dbId);
-      if (!cached) {
-        // Fallback in-memory construction if saving failed
-        cached = {
-          id: dbId,
-          title: book.title,
-          author: book.author_name,
-          year: book.first_publish_year,
-          description: book.description || "No description available.",
-          coverImage: book.cover_url || "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=600&auto=format&fit=crop&q=80",
-          averageRating: 4.0,
-          genres: book.subjects.slice(0, 4),
-          pages: book.page_count,
-        };
-      }
-      serverResults.push(cached);
-    }
-
-    // Merge unique by title+author
-    const seen = new Set(localResults.map((r) => `${r.title.toLowerCase()}::${r.author.toLowerCase()}`));
-    const combined = [...localResults];
-    for (const book of serverResults) {
-      const key = `${book.title.toLowerCase()}::${book.author.toLowerCase()}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        combined.push(book);
-      }
-    }
-
-    return combined.slice(0, 15);
-  } catch (error) {
-    console.error("Open Library search API error:", error);
-    return localResults;
   }
 }
 

@@ -1,4 +1,3 @@
-import crypto from "crypto";
 import { Book, INITIAL_BOOKS } from "@/data/mockData";
 import { COVER_ID_BY_ISBN } from "@/data/coverOverrides";
 import { coverUrlFromCoverId, withOpenLibraryDefaultFalse } from "@/utils/covers";
@@ -158,19 +157,43 @@ export const FEATURED_POOL_IDS = [
   "9780593493446", "9780385550369", "9780802163372", "9780374602638", "9780593426213",
 ];
 
+/** Unique featured IDs that actually exist in the local catalog. */
+function getFeaturedPool(): string[] {
+  const catalogIds = new Set(INITIAL_BOOKS.map((b) => b.id));
+  return [...new Set(FEATURED_POOL_IDS)].filter((id) => catalogIds.has(id));
+}
+
+/** Day ordinal (UTC) so consecutive calendar days always advance the index. */
+function utcDayOrdinal(dateKey: string): number {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  return Math.floor(Date.UTC(y, m - 1, d) / 86_400_000);
+}
+
 export function getFeaturedBookIdForDate(dateKey?: string): string {
   const key = dateKey ?? new Date().toISOString().slice(0, 10);
-  const hash = crypto.createHash("sha256").update(`featured:${key}`).digest();
-  const index = hash.readUInt32BE(0) % FEATURED_POOL_IDS.length;
-  return FEATURED_POOL_IDS[index];
+  const pool = getFeaturedPool();
+  if (pool.length === 0) return FEATURED_POOL_IDS[0];
+  const index = utcDayOrdinal(key) % pool.length;
+  return pool[index];
 }
 
 export function getFeaturedBookForDate(dateKey?: string): Book | null {
-  const id = getFeaturedBookIdForDate(dateKey);
-  const book =
-    INITIAL_BOOKS.find((b) => b.id === id) ??
-    INITIAL_BOOKS.find((b) => b.averageRating >= 4.4) ??
-    INITIAL_BOOKS[0] ??
-    null;
-  return book ? withResolvedCover(book) : null;
+  const key = dateKey ?? new Date().toISOString().slice(0, 10);
+  const pool = getFeaturedPool();
+  if (pool.length === 0) {
+    const fallback = INITIAL_BOOKS[0];
+    return fallback ? withResolvedCover(fallback) : null;
+  }
+
+  const start = utcDayOrdinal(key) % pool.length;
+  // Walk the pool from today's index so a missing catalog entry never stalls rotation
+  for (let i = 0; i < pool.length; i++) {
+    const id = pool[(start + i) % pool.length];
+    const book = INITIAL_BOOKS.find((b) => b.id === id);
+    if (book) return withResolvedCover(book);
+  }
+
+  const fallback =
+    INITIAL_BOOKS.find((b) => b.averageRating >= 4.4) ?? INITIAL_BOOKS[0] ?? null;
+  return fallback ? withResolvedCover(fallback) : null;
 }

@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
+import { getRequestUser } from "@/utils/auth/getRequestUser";
 import { buildGenreDistribution } from "@/utils/genreUtils";
 
 export async function GET(request: Request) {
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const { searchParams } = new URL(request.url);
 
     // Default to active user session, fallback to searchParam if querying another profile
-    const { data: { user } } = await supabase.auth.getUser();
+    const { user } = await getRequestUser();
     const targetUserId = searchParams.get("userId") || user?.id;
 
     if (!targetUserId) {
