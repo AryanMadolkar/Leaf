@@ -85,7 +85,8 @@ export default function UserLibraryPage() {
                 {currentUser.name}&rsquo;s Library
               </h1>
               <p className="text-xs text-charcoal-muted mt-0.5">
-                Curating a digital bookshelf of {userLogs.length} logged works
+                Curating a digital bookshelf of {userLogs.length} logged{" "}
+                {userLogs.length === 1 ? "work" : "works"}
               </p>
             </div>
           </div>
