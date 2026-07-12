@@ -2,19 +2,16 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   BookOpen,
   TrendingUp,
   Sparkles,
   Layers,
   Users,
-  Check,
   Star,
   Book,
   Calendar,
-  X
 } from "lucide-react";
 import { StarDisplay } from "@/components/ReviewCard";
 import { formatRelativeTime } from "@/utils/time";
@@ -31,11 +28,6 @@ type StreamReview = {
 };
 
 export default function LandingPage() {
-  const router = useRouter();
-  const [isWaitlistOpen, setIsWaitlistOpen] = useState(false);
-  const [waitlistEmail, setWaitlistEmail] = useState("");
-  const [waitlistName, setWaitlistName] = useState("");
-  const [submittedWaitlist, setSubmittedWaitlist] = useState(false);
   const [streamReviews, setStreamReviews] = useState<StreamReview[]>([]);
   const [streamLoading, setStreamLoading] = useState(true);
 
@@ -60,14 +52,6 @@ export default function LandingPage() {
     };
   }, []);
 
-  const handleWaitlistSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!waitlistEmail || !waitlistName) return;
-    setSubmittedWaitlist(true);
-    setTimeout(() => {
-      // Keep open for preview then reset
-    }, 3000);
-  };
 
   const floatingCovers = [
     { src: "https://covers.openlibrary.org/b/isbn/9780140167771-L.jpg", rotate: "-6deg", y: 20, delay: 0 },
@@ -370,121 +354,10 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="border-t border-cream-border py-8 px-6 bg-cream">
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-charcoal-muted">
+        <div className="max-w-6xl mx-auto text-xs text-charcoal-muted">
           <p>© 2026 Leaf. Designed with care for readers everywhere.</p>
-          <div className="flex gap-6">
-            <Link href="/feed" className="hover:underline">Explore</Link>
-            <button onClick={() => setIsWaitlistOpen(true)} className="hover:underline text-left">Join Waitlist</button>
-            <Link href="/auth" className="hover:underline">Login</Link>
-          </div>
         </div>
       </footer>
-
-      {/* Waitlist Dialog Overlay */}
-      <AnimatePresence>
-        {isWaitlistOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => {
-                setIsWaitlistOpen(false);
-                setSubmittedWaitlist(false);
-              }}
-              className="absolute inset-0 bg-charcoal/45 backdrop-blur-sm"
-            />
-
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="relative w-full max-w-md bg-cream border border-cream-border p-6 rounded-2xl shadow-2xl z-10 space-y-6"
-            >
-              <div className="flex items-center justify-between">
-                <span className="font-serif text-xl font-bold text-charcoal">
-                  Join the Leaf Waitlist
-                </span>
-                <button
-                  onClick={() => {
-                    setIsWaitlistOpen(false);
-                    setSubmittedWaitlist(false);
-                  }}
-                  className="p-1 hover:bg-cream-dark/50 rounded-lg text-charcoal-muted hover:text-charcoal transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              {!submittedWaitlist ? (
-                <form onSubmit={handleWaitlistSubmit} className="space-y-4">
-                  <p className="text-xs text-charcoal-muted leading-normal">
-                    We are launching invite-only beta clusters to ensure high-quality reviews and human curation. Claim your spot.
-                  </p>
-                  
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-semibold uppercase tracking-wider text-charcoal">Your Name</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Donna Tartt"
-                      value={waitlistName}
-                      onChange={(e) => setWaitlistName(e.target.value)}
-                      className="w-full h-10 px-3 text-xs bg-cream-card border border-cream-border rounded-lg text-charcoal focus:outline-none focus:border-brand-muted"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-semibold uppercase tracking-wider text-charcoal">Email Address</label>
-                    <input
-                      type="email"
-                      required
-                      placeholder="you@literary.com"
-                      value={waitlistEmail}
-                      onChange={(e) => setWaitlistEmail(e.target.value)}
-                      className="w-full h-10 px-3 text-xs bg-cream-card border border-cream-border rounded-lg text-charcoal focus:outline-none focus:border-brand-muted"
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="w-full h-10 bg-brand hover:bg-brand-light text-cream font-semibold text-xs rounded-lg shadow-sm transition-colors"
-                  >
-                    Submit Request
-                  </button>
-                </form>
-              ) : (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="text-center py-6 space-y-4"
-                >
-                  <div className="mx-auto w-12 h-12 bg-brand/10 border border-brand/20 rounded-full flex items-center justify-center text-brand">
-                    <Check className="w-6 h-6" />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="font-serif text-lg font-bold text-charcoal">You&apos;re on the list, {waitlistName}!</p>
-                    <p className="text-xs text-charcoal-muted leading-relaxed">
-                      We sent a confirmation to <span className="font-semibold text-charcoal">{waitlistEmail}</span>. Keep an eye on your inbox.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setIsWaitlistOpen(false);
-                      setSubmittedWaitlist(false);
-                      setWaitlistName("");
-                      setWaitlistEmail("");
-                    }}
-                    className="px-4 py-1.5 border border-cream-border bg-cream hover:bg-cream-dark text-xs font-semibold rounded-lg text-charcoal-muted hover:text-charcoal transition-colors"
-                  >
-                    Close
-                  </button>
-                </motion.div>
-              )}
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
     </div>
   );
