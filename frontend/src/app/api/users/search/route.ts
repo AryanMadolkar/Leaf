@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
+import { getRequestUser } from "@/utils/auth/getRequestUser";
 
 type ProfileRow = {
   id: string;
@@ -17,12 +18,12 @@ type FollowEdge = {
 
 export async function GET(request: Request) {
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const { searchParams } = new URL(request.url);
     const q = (searchParams.get("q") || "").trim();
     const limit = Math.min(Number(searchParams.get("limit") || 12), 30);
 
-    const { data: { user } } = await supabase.auth.getUser();
+    const { user } = await getRequestUser();
 
     let query = supabase
       .from("profiles")

@@ -18,12 +18,10 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/utils/supabase/client";
 import { Book } from "@/data/mockData";
 import UserAvatar from "@/components/UserAvatar";
 
 export default function OnboardingPage() {
-  const supabase = createClient();
   const { session, profile, logBook, toggleFollowUser } = useLeaf();
   const router = useRouter();
 
@@ -153,30 +151,27 @@ export default function OnboardingPage() {
     }
 
     try {
-      // 1. Update Profile in Supabase
-      const { error } = await supabase
-        .from("profiles")
-        .update({
+      // 1. Update Profile via Leaf auth API
+      const res = await fetch("/api/profile", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           favorite_genres: selectedGenres,
           onboarding_completed: true,
-        })
-        .eq("id", session.user.id);
-
-      if (error) throw error;
-
-      // 2. Sync follows relationship to database
-      for (const followedId of followedUsers) {
-        await supabase.from("follows").insert({
-          follower_id: session.user.id,
-          following_id: followedId,
-        });
+          follow_user_ids: followedUsers,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to save onboarding");
       }
 
-      // 3. Add Pinned Favorites to Library as Completed (5 stars seed)
+      // 2. Add Pinned Favorites to Library as Completed (5 stars seed)
       for (const favBook of favoriteBooks) {
-        // Ensure book is cached in public.books first
         await fetch("/api/user-books", {
           method: "POST",
+          credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             bookId: favBook.id,

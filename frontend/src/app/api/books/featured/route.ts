@@ -5,12 +5,15 @@ import { CACHE_DAILY } from "@/utils/apiCache";
 
 const getCachedFeatured = unstable_cache(
   async (dateKey: string) => getFeaturedBookForDate(dateKey),
-  ["featured-book"],
-  { revalidate: 86400, tags: ["featured-book"] }
+  ["featured-book-daily"],
+  { revalidate: 3600, tags: ["featured-book"] }
 );
 
-export async function GET() {
-  const dateKey = new Date().toISOString().slice(0, 10);
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  // Prefer explicit date param (client), else UTC today — flips at 00:00 UTC
+  const dateKey =
+    searchParams.get("date") || new Date().toISOString().slice(0, 10);
 
   try {
     const book = await getCachedFeatured(dateKey);
@@ -20,7 +23,12 @@ export async function GET() {
 
     return NextResponse.json(
       { success: true, book, date: dateKey },
-      { headers: { "Cache-Control": CACHE_DAILY } }
+      {
+        headers: {
+          "Cache-Control": CACHE_DAILY,
+          "CDN-Cache-Control": `public, s-maxage=86400, stale-while-revalidate=3600`,
+        },
+      }
     );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";

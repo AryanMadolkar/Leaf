@@ -196,26 +196,35 @@ export default function Header() {
 
     setHeaderLoading(true);
     const handler = setTimeout(async () => {
+      const q = searchQuery.trim().toLowerCase();
+      const localFallback = books
+        .filter(
+          (b) =>
+            b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q)
+        )
+        .slice(0, 8);
+
       try {
-        const res = await fetch(`/api/books/search?q=${encodeURIComponent(searchQuery)}`);
+        const res = await fetch(`/api/books/search?q=${encodeURIComponent(searchQuery.trim())}`);
         if (res.ok) {
           const data = await res.json();
-          if (data.success) {
-            setHeaderSearchResults(data.books || []);
-            data.books.forEach((book: Book) => {
-              addCachedBookToContext(book);
-            });
+          if (data.success && Array.isArray(data.books) && data.books.length > 0) {
+            setHeaderSearchResults(data.books);
+            data.books.forEach((book: Book) => addCachedBookToContext(book));
+            return;
           }
         }
+        setHeaderSearchResults(localFallback);
       } catch (err) {
         console.error("Header search API failed:", err);
+        setHeaderSearchResults(localFallback);
       } finally {
         setHeaderLoading(false);
       }
     }, 300);
 
     return () => clearTimeout(handler);
-  }, [searchQuery, addCachedBookToContext]);
+  }, [searchQuery, addCachedBookToContext, books]);
 
   // Debounced reader search from Supabase profiles
   useEffect(() => {
@@ -253,26 +262,36 @@ export default function Header() {
 
     setLogLoading(true);
     const handler = setTimeout(async () => {
+      const q = logSearch.trim().toLowerCase();
+      const localFallback = books
+        .filter(
+          (b) =>
+            b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q)
+        )
+        .slice(0, 15);
+
       try {
-        const res = await fetch(`/api/books/search?q=${encodeURIComponent(logSearch)}`);
+        const res = await fetch(`/api/books/search?q=${encodeURIComponent(logSearch.trim())}`);
         if (res.ok) {
           const data = await res.json();
-          if (data.success) {
-            setLogSearchResults(data.books || []);
-            data.books.forEach((book: Book) => {
-              addCachedBookToContext(book);
-            });
+          if (data.success && Array.isArray(data.books) && data.books.length > 0) {
+            setLogSearchResults(data.books);
+            data.books.forEach((book: Book) => addCachedBookToContext(book));
+            return;
           }
         }
+        // API empty/failed — still show local catalog matches
+        setLogSearchResults(localFallback);
       } catch (err) {
         console.error("Log modal search API failed:", err);
+        setLogSearchResults(localFallback);
       } finally {
         setLogLoading(false);
       }
     }, 300);
 
     return () => clearTimeout(handler);
-  }, [logSearch, addCachedBookToContext]);
+  }, [logSearch, addCachedBookToContext, books]);
 
   // Companion Search Debounced Fetch
   useEffect(() => {
@@ -619,10 +638,10 @@ export default function Header() {
             {/* Log Book Action */}
             <button
               onClick={() => setIsLogOpen(true)}
-              className="flex items-center gap-1.5 px-3.5 h-9 bg-brand hover:bg-brand-light text-cream font-medium text-xs rounded-lg shadow-sm hover:shadow-md transition-all duration-300"
+              className="flex items-center gap-1.5 px-3.5 h-9 bg-brand hover:bg-brand-light text-cream font-medium text-xs rounded-lg shadow-sm hover:shadow-md transition-all duration-300 whitespace-nowrap"
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Log Book</span>
+              <Plus className="w-3.5 h-3.5 shrink-0" />
+              <span>Log</span>
             </button>
 
             {/* Account Panel Dropdown */}
@@ -709,10 +728,10 @@ export default function Header() {
                     {/* Footer / Sign Out */}
                     <div className="border-t border-cream-border p-1.5 bg-cream-card/50">
                       <button
-                        onClick={() => {
+                        onClick={async () => {
                           setShowAccountDropdown(false);
-                          signOut();
-                          router.push("/auth");
+                          await signOut();
+                          window.location.assign("/");
                         }}
                         className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors text-left cursor-pointer"
                       >
@@ -821,7 +840,7 @@ export default function Header() {
                       ))}
                       {logSearch && !logLoading && logSearchResults.length === 0 && (
                         <p className="text-xs text-charcoal-muted text-center py-6">
-                          No matching books found on Open Library.
+                          No matching books found. Try another title or author.
                         </p>
                       )}
                       {!logSearch && (

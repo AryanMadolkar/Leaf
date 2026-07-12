@@ -1,16 +1,17 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
-import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
+import { getRequestUser } from "@/utils/auth/getRequestUser";
 import { recalculateUserStats } from "@/utils/supabaseStats";
 import { getBookById } from "@/utils/booksApi";
 
 export async function GET(request: Request) {
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const { searchParams } = new URL(request.url);
     
     // Default to active user session, fallback to searchParam if querying another profile
-    const { data: { user } } = await supabase.auth.getUser();
+    const { user } = await getRequestUser();
     const targetUserId = searchParams.get("userId") || user?.id;
 
     if (!targetUserId) {
@@ -52,8 +53,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const supabase = createAdminClient();
+    const { user, error: authError } = await getRequestUser();
 
     if (authError || !user) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
+import { getRequestUser } from "@/utils/auth/getRequestUser";
 
 type FollowOutgoing = { following_id: string };
 type FollowIncoming = { follower_id: string };
@@ -14,7 +15,7 @@ type ProfileRow = {
 /** List followers or following for a user, or toggle follow. */
 export async function GET(request: Request) {
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("userId");
     const type = searchParams.get("type") || "followers"; // followers | following
@@ -23,7 +24,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, error: "Missing userId" }, { status: 400 });
     }
 
-    const { data: { user } } = await supabase.auth.getUser();
+    const { user } = await getRequestUser();
 
     let profileIds: string[] = [];
 
@@ -83,8 +84,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const supabase = createAdminClient();
+    const { user, error: authError } = await getRequestUser();
 
     if (authError || !user) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });

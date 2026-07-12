@@ -1,7 +1,6 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { createClient } from "@/utils/supabase/client";
 import {
   Book,
   User,
@@ -25,7 +24,7 @@ interface LeafContextType {
   currentUser: User;
   isAuthenticated: boolean;
   signIn: (email: string) => void;
-  signOut: () => void;
+  signOut: () => Promise<void>;
   addReview: (bookId: string, rating: number, content: string) => void;
   toggleLikeReview: (reviewId: string) => void;
   toggleLikeList: (listId: string) => void;
@@ -50,7 +49,6 @@ interface LeafContextType {
   profile: any | null;
   signInWithPassword: (email: string, password: string) => Promise<any>;
   signUpWithPassword: (email: string, password: string, username: string, name: string) => Promise<any>;
-  signInWithGoogle: () => Promise<any>;
   resetPassword: (email: string) => Promise<any>;
   signInAsGuest: () => void;
 }
@@ -61,8 +59,6 @@ const isDeprecatedAvatar = (url: string | null | undefined): boolean => {
 };
 
 const LeafContext = createContext<LeafContextType | undefined>(undefined);
-
-const supabase = createClient();
 
 export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [books, setBooks] = useState<Book[]>(INITIAL_BOOKS);
@@ -410,46 +406,54 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   };
 
-  // Setup Auth Subscription
+  // Setup Auth — custom session cookie via /api/auth/me
   useEffect(() => {
     const isGuest = localStorage.getItem("leaf_guest_session") === "true";
     if (isGuest) {
       setIsAuthenticated(true);
-      const mockSession = {
+      setSession({
         user: {
           id: "guest-user-id",
           email: "guest@example.com",
-        }
-      };
-      setSession(mockSession);
-      loadLocalStorageData();
-    } else {
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        setSession(session);
-        setIsAuthenticated(!!session);
+        },
       });
+      loadLocalStorageData();
+      return;
     }
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (_event === "SIGNED_OUT") {
-        localStorage.removeItem("leaf_guest_session");
-        document.cookie = "leaf_guest_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-        document.cookie = "leaf_guest_onboarded=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-        setProfile(null);
-        setUserStats(null);
-        setDiaryLogs([]);
-        setReadingSessions([]);
-      } else if (session) {
-        localStorage.removeItem("leaf_guest_session");
-        document.cookie = "leaf_guest_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-        document.cookie = "leaf_guest_onboarded=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-        setSession(session);
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/auth/me", { credentials: "include" });
+        if (!res.ok) {
+          if (!cancelled) {
+            setSession(null);
+            setIsAuthenticated(false);
+          }
+          return;
+        }
+        const data = await res.json();
+        if (cancelled || !data.success || !data.user) return;
+        setSession({
+          user: {
+            id: data.user.id,
+            email: data.user.email,
+          },
+        });
         setIsAuthenticated(true);
+        setProfile((prev: any) => prev || data.user);
+      } catch {
+        if (!cancelled) {
+          setSession(null);
+          setIsAuthenticated(false);
+        }
       }
-    });
+    })();
 
-    return () => subscription.unsubscribe();
-  }, [supabase]);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Load user data dynamically from active session
   useEffect(() => {
@@ -552,55 +556,55 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem("leaf_guest_session");
     document.cookie = "leaf_guest_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
     document.cookie = "leaf_guest_onboarded=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-    await supabase.auth.signOut();
+    try {
+      await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+    } catch {
+      // Clear local state regardless
+    }
     setIsAuthenticated(false);
     setSession(null);
     setProfile(null);
+    setUserStats(null);
   };
 
-  // Auth Action Methods
+  // Auth Action Methods — custom Leaf auth (no Supabase Auth / email links)
   const signInWithPassword = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
     });
-    if (error) throw error;
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || "Could not sign in.");
+    }
+    setSession({ user: { id: data.user.id, email: data.user.email } });
+    setIsAuthenticated(true);
+    setProfile(data.user);
     return data;
   };
 
   const signUpWithPassword = async (email: string, password: string, username: string, name: string) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/api/auth/callback`,
-        data: {
-          username,
-          display_name: name,
-        },
-      },
+    const res = await fetch("/api/auth/register", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, username, name }),
     });
-    if (error) throw error;
-    return data;
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || "Could not create account.");
+    }
+    setSession({ user: { id: data.user.id, email: data.user.email } });
+    setIsAuthenticated(true);
+    setProfile(data.user);
+    // Shape expected by auth page (immediate session — no email confirmation)
+    return { ...data, session: { user: data.user } };
   };
 
-  const signInWithGoogle = async () => {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/api/auth/callback`,
-      },
-    });
-    if (error) throw error;
-    return data;
-  };
-
-  const resetPassword = async (email: string) => {
-    const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth?reset=true`,
-    });
-    if (error) throw error;
-    return data;
+  const resetPassword = async (_email: string) => {
+    throw new Error("Password reset is not available yet. Create a new account or continue as guest.");
   };
 
   // Review Operations
@@ -868,17 +872,24 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .update({
-          display_name: name,
-          bio,
-          avatar_url: avatar,
-          favorite_genres: genres || [],
-        })
-        .eq("id", session.user.id)
-        .select()
-        .single();
+      const { data, error } = await (async () => {
+        const res = await fetch("/api/profile", {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            display_name: name,
+            bio,
+            avatar_url: avatar,
+            favorite_genres: genres || [],
+          }),
+        });
+        const json = await res.json();
+        if (!res.ok || !json.success) {
+          return { data: null, error: { message: json.error || "Update failed" } };
+        }
+        return { data: json.profile, error: null };
+      })();
 
       if (!error && data) {
         setProfile(data);
@@ -893,7 +904,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return updated;
         });
       } else {
-        console.warn("Supabase profile update failed, updating profile locally:", error);
+        console.warn("Profile update failed, updating profile locally:", error);
         const updatedUser = {
           ...currentUser,
           name,
@@ -905,7 +916,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem("leaf_local_profile", JSON.stringify(updatedUser));
       }
     } catch (err) {
-      console.error("Failed to sync profile update to Supabase, updating profile locally:", err);
+      console.error("Failed to sync profile update, updating profile locally:", err);
       const updatedUser = {
         ...currentUser,
         name,
@@ -952,12 +963,11 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
         logReadingSession,
         updateBookProgressDirectly,
         
-        // Supabase Auth
+        // Auth
         session,
         profile,
         signInWithPassword,
         signUpWithPassword,
-        signInWithGoogle,
         resetPassword,
         signInAsGuest,
       }}

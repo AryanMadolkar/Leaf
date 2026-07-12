@@ -1,17 +1,19 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
-import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
+import { getRequestUser } from "@/utils/auth/getRequestUser";
 import { mapDbBookToClientBook } from "@/utils/booksApi";
 import { INITIAL_BOOKS } from "@/data/mockData";
 
 export async function GET() {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const { user, error: authError } = await getRequestUser();
 
     if (authError || !user) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
+
+    const supabase = createAdminClient();
 
     // 1. Fetch or dynamically create User Profile
     let profile = null;
@@ -29,9 +31,10 @@ export async function GET() {
       console.log("[DEBUG] [init] Profile not found for authenticated user. Creating fallback profile.");
       const fallbackProfile = {
         id: user.id,
-        username: user.user_metadata?.username || user.email?.split("@")[0] || `user_${crypto.randomUUID().slice(0, 8)}`,
-        display_name: user.user_metadata?.display_name || user.user_metadata?.name || "Reader",
-        avatar_url: '',
+        username: user.email?.split("@")[0] || `user_${crypto.randomUUID().slice(0, 8)}`,
+        display_name: "Reader",
+        email: user.email,
+        avatar_url: "",
         onboarding_completed: false,
       };
 
@@ -53,7 +56,7 @@ export async function GET() {
 
     if (profile) {
       profile.email = user.email || (profile as any).email || "";
-      profile.created_at = (profile as any).created_at || (profile as any).joined_at || user.created_at || new Date().toISOString();
+      profile.created_at = (profile as any).created_at || (profile as any).joined_at || new Date().toISOString();
 
       const { count: followersCount } = await supabase
         .from("follows")
