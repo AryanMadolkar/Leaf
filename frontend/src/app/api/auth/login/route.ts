@@ -56,7 +56,7 @@ export async function POST(request: Request) {
 
     const { data: profile } = await admin
       .from("profiles")
-      .select("username, display_name, onboarding_completed")
+      .select("username, display_name, onboarding_completed, avatar_url, bio")
       .eq("id", cred.user_id)
       .maybeSingle();
 
@@ -69,6 +69,8 @@ export async function POST(request: Request) {
         email: cred.email || email,
         username: profile?.username || email.split("@")[0],
         display_name: profile?.display_name || "Reader",
+        avatar_url: profile?.avatar_url || "",
+        bio: profile?.bio || "",
         onboarding_completed: Boolean(profile?.onboarding_completed),
       },
     });

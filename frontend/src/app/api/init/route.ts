@@ -129,11 +129,12 @@ export async function GET() {
       return {
         id: ub.id,
         userId: user.id,
-        bookId: ub.book?.id || "",
+        bookId: ub.book?.id || ub.book_id || "",
         status: clientStatus,
         dateLogged,
         rating: ub.rating !== null ? ub.rating : undefined,
         currentPage: ub.current_page || 0,
+        review: ub.review || undefined,
       };
     }) : [];
 

@@ -11,9 +11,13 @@ import Link from "next/link";
 export default function ReadingDiaryPage() {
   const { diaryLogs, books, currentUser } = useLeaf();
 
-  // Filter finished logs of current user, sorted chronological
+  // Finished + currently reading (want-to-read stays on the shelf only)
   const userDiaryLogs = diaryLogs
-    .filter((log) => log.userId === currentUser.id && log.status === "Finished")
+    .filter(
+      (log) =>
+        log.userId === currentUser.id &&
+        (log.status === "Finished" || log.status === "Currently Reading"),
+    )
     .sort((a, b) => new Date(b.dateLogged).getTime() - new Date(a.dateLogged).getTime());
 
   return (
@@ -28,7 +32,7 @@ export default function ReadingDiaryPage() {
             Reading Diary
           </h1>
           <p className="text-xs text-charcoal-muted">
-            A chronological timeline of the books you have read and logged on Leaf.
+            A chronological timeline of books you&apos;re reading and have finished on Leaf.
           </p>
         </div>
 
@@ -38,7 +42,8 @@ export default function ReadingDiaryPage() {
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="bg-cream-dark/50 border-b border-cream-border font-semibold text-charcoal uppercase tracking-wider text-[9px] select-none">
-                  <th className="p-4 pl-6">Read Date</th>
+                  <th className="p-4 pl-6">Date</th>
+                  <th className="p-4">Status</th>
                   <th className="p-4">Book details</th>
                   <th className="p-4">Author</th>
                   <th className="p-4">My Rating</th>
@@ -48,6 +53,7 @@ export default function ReadingDiaryPage() {
                 {userDiaryLogs.map((log) => {
                   const book = books.find((b) => b.id === log.bookId);
                   if (!book) return null;
+                  const isReading = log.status === "Currently Reading";
 
                   return (
                     <tr key={log.id} className="hover:bg-cream-dark/15 transition-all">
@@ -63,6 +69,18 @@ export default function ReadingDiaryPage() {
                             })}
                           </span>
                         </div>
+                      </td>
+
+                      <td className="p-4">
+                        <span
+                          className={`inline-block text-[9px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                            isReading
+                              ? "bg-brand/10 text-brand border-brand/20"
+                              : "bg-cream-dark text-charcoal-muted border-cream-border"
+                          }`}
+                        >
+                          {isReading ? "Reading" : "Finished"}
+                        </span>
                       </td>
 
                       {/* Cover & Title */}
@@ -92,7 +110,9 @@ export default function ReadingDiaryPage() {
                         {log.rating !== undefined ? (
                           <StarDisplay rating={log.rating} size={11} />
                         ) : (
-                          <span className="text-[10px] text-charcoal-muted italic">Shelved only</span>
+                          <span className="text-[10px] text-charcoal-muted italic">
+                            {isReading ? "In progress" : "Shelved only"}
+                          </span>
                         )}
                       </td>
                     </tr>
@@ -106,7 +126,7 @@ export default function ReadingDiaryPage() {
               <div className="space-y-1">
                 <p className="font-serif text-lg font-bold text-charcoal">Your diary is empty</p>
                 <p className="text-xs text-charcoal-muted max-w-sm mx-auto">
-                  Start logging books you have read using the &ldquo;Log Book&rdquo; button on the navigation bar above.
+                  Log a book as Currently Reading or Finished using the + Log button above.
                 </p>
               </div>
             </div>

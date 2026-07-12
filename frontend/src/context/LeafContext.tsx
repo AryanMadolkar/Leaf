@@ -25,6 +25,8 @@ interface LeafContextType {
   comments: Comment[];
   currentUser: User;
   isAuthenticated: boolean;
+  /** True until we know who the signed-in user is (avoid flashing a mock profile). */
+  isProfileLoading: boolean;
   signIn: (email: string) => void;
   signOut: () => Promise<void>;
   addReview: (bookId: string, rating: number, content: string) => void;
@@ -55,10 +57,40 @@ interface LeafContextType {
   signInAsGuest: () => void;
 }
 
+const EMPTY_USER: User = {
+  id: "",
+  username: "",
+  name: "",
+  avatar: "",
+  bio: "",
+  followersCount: 0,
+  followingCount: 0,
+  favoriteBookIds: [],
+  email: "",
+};
+
 const isDeprecatedAvatar = (url: string | null | undefined): boolean => {
   if (!url) return false;
   return url.includes("photo-1534528741775-53994a69daeb");
 };
+
+function mapApiUserToCurrentUser(raw: any, emailFallback = ""): User {
+  const cleanedAvatar = isDeprecatedAvatar(raw.avatar_url || raw.avatar)
+    ? ""
+    : (raw.avatar_url || raw.avatar || "");
+  return {
+    id: raw.id,
+    username: raw.username || "",
+    name: raw.display_name || raw.name || "Reader",
+    avatar: cleanedAvatar,
+    bio: raw.bio || "",
+    followersCount: raw.followersCount || 0,
+    followingCount: raw.followingCount || 0,
+    favoriteBookIds: raw.favoriteBookIds || [],
+    email: raw.email || emailFallback,
+    created_at: raw.created_at || raw.joined_at || "",
+  };
+}
 
 const LeafContext = createContext<LeafContextType | undefined>(undefined);
 
@@ -71,10 +103,13 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [diaryLogs, setDiaryLogs] = useState<ReadingLog[]>([]);
   const [lists, setLists] = useState<CuratedList[]>(INITIAL_LISTS);
   const [comments, setComments] = useState<Comment[]>(INITIAL_COMMENTS);
-  const [currentUser, setCurrentUser] = useState<User>(INITIAL_USERS[4]); // Rowan Fallback
+  const [currentUser, setCurrentUser] = useState<User>(EMPTY_USER);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [isProfileLoading, setIsProfileLoading] = useState<boolean>(true);
   const [readingSessions, setReadingSessions] = useState<any[]>([]);
   const [userStats, setUserStats] = useState<any | null>(null);
+  /** Skip duplicate /api/init when mount already hydrated the session. */
+  const skipNextInitRef = React.useRef(false);
 
   // Supabase auth sessions
   const [session, setSession] = useState<any | null>(null);
@@ -416,6 +451,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (isGuest) {
       clearAccessToken();
       setIsAuthenticated(true);
+      setIsProfileLoading(false);
       setSession({
         user: {
           id: "guest-user-id",
@@ -430,35 +466,98 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!token) {
       setSession(null);
       setIsAuthenticated(false);
+      setIsProfileLoading(false);
+      setCurrentUser(EMPTY_USER);
       return;
+    }
+
+    // Instant hydrate from cache so the header never flashes a mock user
+    try {
+      const cached = localStorage.getItem("leaf_local_profile");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed?.id && parsed.id !== "guest-user-id" && parsed.id !== "currentUser") {
+          if (isDeprecatedAvatar(parsed.avatar)) parsed.avatar = "";
+          setCurrentUser(parsed);
+          setProfile(parsed);
+          setIsProfileLoading(false);
+        }
+      }
+    } catch {
+      // ignore bad cache
     }
 
     let cancelled = false;
     (async () => {
       try {
-        const res = await authFetch("/api/auth/me");
-        if (!res.ok) {
+        // Fetch identity + library in parallel for faster first paint
+        const [meRes, initRes] = await Promise.all([
+          authFetch("/api/auth/me"),
+          authFetch("/api/init"),
+        ]);
+
+        if (!meRes.ok) {
           clearAccessToken();
           if (!cancelled) {
             setSession(null);
             setIsAuthenticated(false);
+            setIsProfileLoading(false);
+            setCurrentUser(EMPTY_USER);
+            setProfile(null);
           }
           return;
         }
-        const data = await res.json();
-        if (cancelled || !data.success || !data.user) return;
+
+        const meData = await meRes.json();
+        if (cancelled || !meData.success || !meData.user) return;
+
+        const mappedFromMe = mapApiUserToCurrentUser(meData.user, meData.user.email);
+        skipNextInitRef.current = true;
         setSession({
           user: {
-            id: data.user.id,
-            email: data.user.email,
+            id: meData.user.id,
+            email: meData.user.email,
           },
         });
         setIsAuthenticated(true);
-        setProfile((prev: any) => prev || data.user);
+        setCurrentUser((prev) => (prev.id === mappedFromMe.id && prev.avatar ? prev : mappedFromMe));
+        setProfile((prev: any) => prev || meData.user);
+        setIsProfileLoading(false);
+
+        if (initRes.ok) {
+          const data = await initRes.json();
+          if (!cancelled && data.success) {
+            if (data.books?.length) {
+              setBooks((prev) => {
+                const merged = new Map(prev.map((b) => [b.id, b]));
+                data.books.forEach((b: Book) => merged.set(b.id, b));
+                return Array.from(merged.values());
+              });
+            }
+            setDiaryLogs(data.diaryLogs || []);
+            setReviews(data.reviews || []);
+            setReadingSessions(data.sessions || []);
+            setUserStats(data.stats || null);
+
+            if (data.profile) {
+              const mappedUser = mapApiUserToCurrentUser(
+                {
+                  ...data.profile,
+                  email: data.profile.email || meData.user.email,
+                },
+                meData.user.email,
+              );
+              setProfile({ ...data.profile, avatar_url: mappedUser.avatar });
+              setCurrentUser(mappedUser);
+              localStorage.setItem("leaf_local_profile", JSON.stringify(mappedUser));
+            }
+          }
+        }
       } catch {
         if (!cancelled) {
           setSession(null);
           setIsAuthenticated(false);
+          setIsProfileLoading(false);
         }
       }
     })();
@@ -483,68 +582,75 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [pathname, isAuthenticated, router]);
 
-  // Load user data dynamically from active session
+  // Load user data when session is set after login/signup (mount path already hydrates in parallel)
   useEffect(() => {
     if (!session?.user) return;
 
     if (session.user.id === "guest-user-id") {
       loadLocalStorageData();
+      setIsProfileLoading(false);
       return;
     }
 
+    if (skipNextInitRef.current) {
+      skipNextInitRef.current = false;
+      return;
+    }
+
+    let cancelled = false;
     async function fetchUserData() {
       try {
         const res = await authFetch("/api/init");
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success) {
-            // Merge user library books into the full catalog instead of replacing it
-            if (data.books?.length) {
-              setBooks((prev) => {
-                const merged = new Map(prev.map((b) => [b.id, b]));
-                data.books.forEach((b: Book) => merged.set(b.id, b));
-                return Array.from(merged.values());
-              });
-            }
-            setDiaryLogs(data.diaryLogs);
-            setReviews(data.reviews);
-            setReadingSessions(data.sessions || []);
-            setUserStats(data.stats || null);
-            
-            // Map profile details to the Client currentUser interface for layout compatibility
-            if (data.profile) {
-              const cleanedAvatar = isDeprecatedAvatar(data.profile.avatar_url) ? "" : (data.profile.avatar_url || "");
-              const cleanedProfile = { ...data.profile, avatar_url: cleanedAvatar };
-              setProfile(cleanedProfile);
-              
-              const mappedUser = {
-                id: data.profile.id,
-                username: data.profile.username,
-                name: data.profile.display_name || "Reader",
-                avatar: cleanedAvatar,
-                bio: data.profile.bio || "",
-                followersCount: data.profile.followersCount || 0,
-                followingCount: data.profile.followingCount || 0,
-                favoriteBookIds: data.profile.favoriteBookIds || [],
-                email: data.profile.email || session.user.email || "",
-                created_at: data.profile.created_at || data.profile.joined_at || session.user.created_at || "",
-              };
-              setCurrentUser(mappedUser);
-              localStorage.setItem("leaf_local_profile", JSON.stringify(mappedUser));
-            }
-          }
-        } else {
+        if (!res.ok) {
           console.warn("API init failed, falling back to localStorage data.");
-          loadLocalStorageData();
+          if (!cancelled) {
+            loadLocalStorageData();
+            setIsProfileLoading(false);
+          }
+          return;
         }
+        const data = await res.json();
+        if (cancelled || !data.success) return;
+
+        if (data.books?.length) {
+          setBooks((prev) => {
+            const merged = new Map(prev.map((b) => [b.id, b]));
+            data.books.forEach((b: Book) => merged.set(b.id, b));
+            return Array.from(merged.values());
+          });
+        }
+        setDiaryLogs(data.diaryLogs || []);
+        setReviews(data.reviews || []);
+        setReadingSessions(data.sessions || []);
+        setUserStats(data.stats || null);
+
+        if (data.profile) {
+          const mappedUser = mapApiUserToCurrentUser(
+            {
+              ...data.profile,
+              email: data.profile.email || session.user.email || "",
+            },
+            session.user.email || "",
+          );
+          setProfile({ ...data.profile, avatar_url: mappedUser.avatar });
+          setCurrentUser(mappedUser);
+          localStorage.setItem("leaf_local_profile", JSON.stringify(mappedUser));
+        }
+        setIsProfileLoading(false);
       } catch (err) {
         console.error("Failed to load authenticated user profile details:", err);
-        loadLocalStorageData();
+        if (!cancelled) {
+          loadLocalStorageData();
+          setIsProfileLoading(false);
+        }
       }
     }
 
     fetchUserData();
-  }, [session]);
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.id]);
 
   const signIn = (email: string) => {
     // Legacy fallback, do nothing or mock signin
@@ -570,6 +676,8 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCurrentUser(guestUser);
     setProfile(guestUser);
     setIsAuthenticated(true);
+    setIsProfileLoading(false);
+    skipNextInitRef.current = true;
     setSession({
       user: {
         id: "guest-user-id",
@@ -584,6 +692,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signOut = async () => {
     clearAccessToken();
     localStorage.removeItem("leaf_guest_session");
+    localStorage.removeItem("leaf_local_profile");
     document.cookie = "leaf_guest_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
     document.cookie = "leaf_guest_onboarded=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
     try {
@@ -592,8 +701,10 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Clear local state regardless
     }
     setIsAuthenticated(false);
+    setIsProfileLoading(false);
     setSession(null);
     setProfile(null);
+    setCurrentUser(EMPTY_USER);
     setUserStats(null);
   };
 
@@ -627,9 +738,13 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error(data.error || "Could not sign in.");
     }
     setAccessToken(data.token);
-    setSession({ user: { id: data.user.id, email: data.user.email } });
-    setIsAuthenticated(true);
+    const mapped = mapApiUserToCurrentUser(data.user, data.user.email);
+    setCurrentUser(mapped);
     setProfile(data.user);
+    localStorage.setItem("leaf_local_profile", JSON.stringify(mapped));
+    setIsProfileLoading(false);
+    setIsAuthenticated(true);
+    setSession({ user: { id: data.user.id, email: data.user.email } });
     return data;
   };
 
@@ -644,9 +759,13 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error(data.error || "Could not create account.");
     }
     setAccessToken(data.token);
-    setSession({ user: { id: data.user.id, email: data.user.email } });
-    setIsAuthenticated(true);
+    const mapped = mapApiUserToCurrentUser(data.user, data.user.email);
+    setCurrentUser(mapped);
     setProfile(data.user);
+    localStorage.setItem("leaf_local_profile", JSON.stringify(mapped));
+    setIsProfileLoading(false);
+    setIsAuthenticated(true);
+    setSession({ user: { id: data.user.id, email: data.user.email } });
     return { ...data, session: { user: data.user } };
   };
 
@@ -993,6 +1112,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
         comments,
         currentUser,
         isAuthenticated,
+        isProfileLoading,
         signIn,
         signOut,
         addReview,

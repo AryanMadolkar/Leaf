@@ -50,6 +50,7 @@ export interface ReadingLog {
   dateLogged: string; // e.g. "2026-06-12"
   rating?: number;
   currentPage?: number;
+  review?: string;
 }
 
 export interface CuratedList {

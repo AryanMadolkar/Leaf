@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useLeaf } from "@/context/LeafContext";
 import { useTheme } from "@/context/ThemeContext";
 import { Book } from "@/data/mockData";
-import { Search, Plus, BookOpen, Star, LogOut, Check, X, Calendar, Clock, Book as BookIcon, Activity, CheckCircle, ChevronRight, Award, Bookmark, User, Settings, UserPlus, UserCheck, Menu, Sun, Moon } from "lucide-react";
+import { Search, Plus, BookOpen, Star, LogOut, Check, X, Calendar, Clock, Book as BookIcon, Activity, CheckCircle, ChevronRight, Award, Bookmark, User, Settings, UserPlus, UserCheck, Menu, Sun, Moon, Loader2 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import UserAvatar from "@/components/UserAvatar";
 
@@ -99,7 +99,8 @@ export default function Header() {
   const { theme, toggleTheme } = useTheme();
   const {
     books, 
-    currentUser, 
+    currentUser,
+    isProfileLoading,
     logBook, 
     signOut, 
     addCachedBookToContext,
@@ -679,6 +680,15 @@ export default function Header() {
 
             {/* Account Panel Dropdown */}
             <div className="relative flex items-center" ref={accountDropdownRef}>
+              {isProfileLoading || !currentUser.id ? (
+                <div
+                  className="w-8 h-8 rounded-full border border-cream-border flex items-center justify-center bg-cream-dark/50"
+                  aria-label="Loading profile"
+                  title="Loading profile"
+                >
+                  <Loader2 className="w-3.5 h-3.5 text-brand animate-spin" />
+                </div>
+              ) : (
               <button
                 onClick={() => setShowAccountDropdown(!showAccountDropdown)}
                 className="w-8 h-8 rounded-full border border-cream-border flex items-center justify-center bg-cream-dark/50 hover:bg-cream-dark hover:scale-105 transition-all duration-300 focus:outline-none cursor-pointer"
@@ -688,9 +698,10 @@ export default function Header() {
               >
                 <UserAvatar avatarUrl={currentUser.avatar} name={currentUser.name} size={30} className="border-0 bg-transparent" />
               </button>
+              )}
 
               <AnimatePresence>
-                {showAccountDropdown && (
+                {showAccountDropdown && currentUser.id && (
                   <motion.div
                     initial={{ opacity: 0, scale: 0.95, y: 8 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}

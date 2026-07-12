@@ -1,15 +1,16 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import Header from "@/components/Header";
-import ReviewCard, { StarDisplay } from "@/components/ReviewCard";
 import BookCard from "@/components/BookCard";
+import CoverImage from "@/components/CoverImage";
+import { StarDisplay } from "@/components/ReviewCard";
 import { useLeaf } from "@/context/LeafContext";
 import Link from "next/link";
-import { TrendingUp, Layers, BookOpen, Star, Plus, Sparkles } from "lucide-react";
+import { TrendingUp, Layers, BookOpen, Star, Sparkles } from "lucide-react";
 
 export default function HomeFeed() {
-  const { reviews, books, lists, diaryLogs } = useLeaf();
+  const { reviews, books, lists, diaryLogs, currentUser } = useLeaf();
 
   // Recently finished books for horizontal carousel
   const recentlyFinished = books.slice(0, 4);
@@ -58,6 +59,52 @@ export default function HomeFeed() {
     const merged = Array.from(new Set([...recommendedReads, ...fallbackRecs])).slice(0, 4);
     recommendedReads = merged;
   }
+
+  const recentActivity = useMemo(() => {
+    const uid = currentUser.id;
+    if (!uid) return [];
+
+    const reviewsByBook = new Map(
+      reviews
+        .filter((r) => r.userId === uid)
+        .map((r) => [r.bookId, r] as const),
+    );
+
+    return [...diaryLogs]
+      .filter((log) => log.userId === uid && log.bookId)
+      .sort((a, b) => {
+        const da = a.dateLogged || "";
+        const db = b.dateLogged || "";
+        return db.localeCompare(da);
+      })
+      .map((log) => {
+        const book = books.find((b) => b.id === log.bookId);
+        const review = reviewsByBook.get(log.bookId);
+        const content = review?.content || log.review;
+        return {
+          log,
+          book,
+          review: content
+            ? { ...(review || { rating: log.rating || 0, content }), content }
+            : review,
+        };
+      })
+      .filter((item) => !!item.book)
+      .slice(0, 12);
+  }, [diaryLogs, books, reviews, currentUser.id]);
+
+  const statusLabel = (status: string) => {
+    if (status === "Finished") return "Finished";
+    if (status === "Currently Reading") return "Started reading";
+    return "Want to read";
+  };
+
+  const formatActivityDate = (dateLogged: string) => {
+    if (!dateLogged) return "";
+    const d = new Date(dateLogged.includes("T") ? dateLogged : `${dateLogged}T12:00:00`);
+    if (Number.isNaN(d.getTime())) return dateLogged;
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  };
 
   return (
     <div className="min-h-screen bg-cream flex flex-col">
@@ -109,16 +156,70 @@ export default function HomeFeed() {
               Recent Activity
             </h3>
 
-            {reviews.length > 0 ? (
-              <div className="space-y-6">
-                {reviews.map((review) => (
-                  <ReviewCard key={review.id} review={review} />
+            {recentActivity.length > 0 ? (
+              <div className="space-y-4">
+                {recentActivity.map(({ log, book, review }) => (
+                  <div
+                    key={log.id}
+                    className="bg-cream-card border border-cream-border rounded-xl p-4 md:p-5 shadow-sm hover:shadow-md transition-all duration-300"
+                  >
+                    <div className="flex gap-4">
+                      <Link href={`/book/${book!.id}`} className="flex-shrink-0">
+                        <div className="relative w-16 h-24 md:w-20 md:h-28 rounded-md overflow-hidden shadow-sm bg-cream-dark">
+                          <div className="absolute top-0 bottom-0 left-0 w-[2px] bg-charcoal/20 z-10" />
+                          <CoverImage
+                            src={book!.coverImage}
+                            title={book!.title}
+                            author={book!.author}
+                            bookId={book!.id}
+                            className="w-full h-full"
+                            imgClassName="w-full h-full object-cover"
+                          />
+                        </div>
+                      </Link>
+
+                      <div className="flex-1 min-w-0 flex flex-col justify-between gap-2">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider font-semibold text-brand mb-1">
+                            {statusLabel(log.status)}
+                          </p>
+                          <Link
+                            href={`/book/${book!.id}`}
+                            className="font-serif text-base font-bold text-charcoal hover:text-brand transition-colors"
+                          >
+                            {book!.title}
+                          </Link>
+                          <p className="text-xs text-charcoal-muted mt-0.5">
+                            by {book!.author}
+                          </p>
+
+                          {(log.rating || review?.rating) ? (
+                            <div className="mt-2">
+                              <StarDisplay rating={log.rating || review?.rating || 0} size={12} />
+                            </div>
+                          ) : null}
+
+                          {review?.content ? (
+                            <p className="mt-2 text-xs text-charcoal-light leading-relaxed line-clamp-3">
+                              &ldquo;{review.content}&rdquo;
+                            </p>
+                          ) : null}
+                        </div>
+
+                        <p className="text-[10px] text-charcoal-muted/70">
+                          {formatActivityDate(log.dateLogged)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 ))}
               </div>
             ) : (
               <div className="text-center py-16 bg-cream-card border border-cream-border rounded-xl">
-                <p className="text-sm text-charcoal-muted">No reviews in the feed yet.</p>
-                <p className="text-xs text-charcoal-muted/75 mt-1">Be the first to rate and review a book!</p>
+                <p className="text-sm text-charcoal-muted">No books logged yet.</p>
+                <p className="text-xs text-charcoal-muted/75 mt-1">
+                  Use + Log to add a book — it will show up here.
+                </p>
               </div>
             )}
           </div>
