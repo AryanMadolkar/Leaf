@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   BookOpen,
-  ArrowRight,
   TrendingUp,
   Sparkles,
   Layers,
@@ -365,27 +364,6 @@ export default function LandingPage() {
             </div>
           </div>
 
-        </section>
-
-        {/* Final CTA */}
-        <section className="bg-brand text-cream py-16 px-6 text-center">
-          <div className="max-w-2xl mx-auto space-y-6">
-            <h2 className="font-serif text-3xl md:text-5xl font-bold">
-              Ready to claim your digital bookshelf?
-            </h2>
-            <p className="text-xs md:text-sm text-cream/80 max-w-md mx-auto leading-relaxed">
-              Join Leaf today and start building a beautiful chronological diary of the ideas that shape you.
-            </p>
-            <div className="pt-2">
-              <button
-                onClick={() => setIsWaitlistOpen(true)}
-                className="px-8 h-12 bg-cream hover:bg-cream-dark text-charcoal font-semibold text-sm rounded-lg shadow transition-colors inline-flex items-center gap-2"
-              >
-                Join the Waitlist
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
         </section>
 
       </main>
