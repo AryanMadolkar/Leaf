@@ -70,11 +70,19 @@ export function mapDbBookToClientBook(dbBook: any, avgRating?: number): Book {
 
   const isbnKey = dbBook.isbn_13 || dbBook.isbn_10 || canonicalId;
   const coverId = COVER_ID_BY_ISBN[isbnKey] || COVER_ID_BY_ISBN[canonicalId];
+  const rawCover = dbBook.cover_url || "";
+  const isStockFallback =
+    !rawCover ||
+    rawCover.includes("photo-1543002588-bfa74002ed7e") ||
+    rawCover.includes("placeholder");
+
   const coverImage = coverId
     ? coverUrlFromCoverId(coverId)
-    : withOpenLibraryDefaultFalse(
-        dbBook.cover_url || "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=600&auto=format&fit=crop&q=80"
-      );
+    : isStockFallback
+      ? (dbBook.isbn_13 || dbBook.isbn_10
+          ? coverUrlFromIsbn(dbBook.isbn_13 || dbBook.isbn_10)
+          : "")
+      : withOpenLibraryDefaultFalse(rawCover);
 
   return {
     id: canonicalId,
@@ -307,7 +315,7 @@ export async function searchOpenLibraryRemote(query: string): Promise<Book[]> {
       ? coverUrlFromCoverId(coverId)
       : isbn
         ? withOpenLibraryDefaultFalse(`https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg`)
-        : "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=600&auto=format&fit=crop&q=80";
+        : "";
 
     const id =
       doc.key?.replace("/works/", "") ||
