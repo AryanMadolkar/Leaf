@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Instrument_Serif, Inter } from "next/font/google";
 import "./globals.css";
 import { LeafProvider } from "@/context/LeafContext";
+import { ThemeProvider, THEME_INLINE_SCRIPT } from "@/context/ThemeContext";
 
 const serif = Instrument_Serif({
   variable: "--font-serif",
@@ -34,12 +35,21 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      data-theme="light"
+      suppressHydrationWarning
       className={`${serif.variable} ${sans.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-cream text-charcoal font-sans">
-        <LeafProvider>
-          {children}
-        </LeafProvider>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{ __html: THEME_INLINE_SCRIPT }}
+        />
+      </head>
+      <body className="min-h-full flex flex-col bg-cream text-charcoal font-sans" suppressHydrationWarning>
+        <ThemeProvider>
+          <LeafProvider>
+            {children}
+          </LeafProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
