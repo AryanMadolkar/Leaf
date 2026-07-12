@@ -139,7 +139,7 @@ export default function HomeFeed() {
                     key={book.id}
                     className="py-3 flex gap-3 first:pt-0 last:pb-0 items-start group"
                   >
-                    <span className="font-serif text-xl font-bold text-cream-border/90 group-hover:text-brand transition-colors w-6 flex-shrink-0">
+                    <span className="font-serif text-xl font-bold text-charcoal/45 group-hover:text-brand transition-colors w-6 flex-shrink-0">
                       0{i + 1}
                     </span>
                     <Link href={`/book/${book.id}`} className="flex-shrink-0">
@@ -156,12 +156,12 @@ export default function HomeFeed() {
                       >
                         {book.title}
                       </Link>
-                      <p className="text-[10px] text-charcoal-muted truncate">
+                      <p className="text-[10px] text-charcoal/70 truncate">
                         {book.author}
                       </p>
-                      <div className="flex items-center gap-1 mt-1 text-yellow-500">
+                      <div className="flex items-center gap-1 mt-1 text-amber-600">
                         <Star className="w-2.5 h-2.5 fill-current" />
-                        <span className="text-[9px] font-bold text-charcoal-light">
+                        <span className="text-[9px] font-bold text-charcoal">
                           {book.averageRating.toFixed(1)}
                         </span>
                       </div>
