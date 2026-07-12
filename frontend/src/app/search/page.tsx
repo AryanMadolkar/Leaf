@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import Header from "@/components/Header";
 import BookCard from "@/components/BookCard";
 import { Search, Sparkles, BookOpen, Calendar, ArrowRight, Loader2 } from "lucide-react";
@@ -9,7 +9,6 @@ import { useLeaf } from "@/context/LeafContext";
 import { Book } from "@/data/mockData";
 
 export default function SearchPage() {
-  const router = useRouter();
   const { addCachedBookToContext } = useLeaf();
   
   const [query, setQuery] = useState("");
@@ -111,10 +110,11 @@ export default function SearchPage() {
           ) : results.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {results.map((book) => (
-                <div
+                <Link
                   key={book.id}
-                  onClick={() => router.push(`/book/${book.id}`)}
-                  className="flex gap-4 p-4 bg-cream-card border border-cream-border hover:border-brand hover:shadow-md rounded-xl cursor-pointer transition-all duration-300 group text-left"
+                  href={`/book/${book.id}`}
+                  onClick={() => addCachedBookToContext(book)}
+                  className="flex gap-4 p-4 bg-cream-card border border-cream-border hover:border-brand hover:shadow-md rounded-xl transition-all duration-300 group text-left no-underline"
                 >
                   {/* Left Side: Book Cover (sm size) */}
                   <div className="relative w-20 h-28 rounded-md overflow-hidden book-shadow flex-shrink-0 bg-cream-dark">
@@ -166,7 +166,7 @@ export default function SearchPage() {
                       </span>
                     </div>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           ) : (
