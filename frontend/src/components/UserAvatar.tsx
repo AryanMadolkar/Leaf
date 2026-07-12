@@ -8,6 +8,12 @@ interface UserAvatarProps {
   className?: string;
 }
 
+/** Deterministic Dylan avatar from DiceBear, seeded by display name. */
+export function getDiceBearAvatarUrl(name: string) {
+  const seed = encodeURIComponent(name.trim() || "Reader");
+  return `https://api.dicebear.com/10.x/dylan/svg?seed=${seed}`;
+}
+
 export default function UserAvatar({ avatarUrl, name, size = "md", className = "" }: UserAvatarProps) {
   let sizeClass = "w-8 h-8";
   let fontSizeClass = "text-xs";
@@ -44,35 +50,21 @@ export default function UserAvatar({ avatarUrl, name, size = "md", className = "
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   };
 
-  const getGradient = (nameStr: string) => {
-    // Elegant warm-toned gradients matching Leaf design language
-    const colors = [
-      "from-[#E6EBE4] to-[#C2CFBC] text-[#3A4F39]", // Sage Green
-      "from-[#F5EBE6] to-[#E5D5C8] text-[#634E3C]", // Warm Peach Cream
-      "from-[#EADCD6] to-[#D5C2BA] text-[#5A4339]", // Terracotta Sand
-      "from-[#E3ECEB] to-[#C0D1D0] text-[#344F4E]", // Soft Teal
-      "from-[#EAE5ED] to-[#D0C2D6] text-[#523A5E]", // Muted Lavender
-    ];
-    let hash = 0;
-    for (let i = 0; i < nameStr.length; i++) {
-      hash = nameStr.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const index = Math.abs(hash) % colors.length;
-    return colors[index];
-  };
-
   const isDeprecated = avatarUrl && avatarUrl.includes("photo-1534528741775-53994a69daeb");
-  const hasAvatar = avatarUrl && avatarUrl !== "" && !isDeprecated;
+  const hasCustomAvatar = Boolean(avatarUrl && avatarUrl !== "" && !isDeprecated);
+  const displayName = name?.trim() || "";
+  const src = hasCustomAvatar ? avatarUrl! : displayName ? getDiceBearAvatarUrl(displayName) : "";
+  const showImage = Boolean(src);
 
   return (
     <div
       className={`relative rounded-full overflow-hidden border border-cream-border flex items-center justify-center flex-shrink-0 select-none ${sizeClass} ${className}`}
       style={customStyle}
     >
-      {hasAvatar ? (
+      {showImage ? (
         <img
-          src={avatarUrl}
-          alt={name || "User Avatar"}
+          src={src}
+          alt={displayName || "User Avatar"}
           className="w-full h-full object-cover"
           onError={(e) => {
             e.currentTarget.style.display = "none";
@@ -83,10 +75,10 @@ export default function UserAvatar({ avatarUrl, name, size = "md", className = "
       ) : null}
       
       <div 
-        className={`${hasAvatar ? "hidden" : ""} w-full h-full flex items-center justify-center bg-gradient-to-br ${getGradient(name || "Reader")} font-serif font-bold ${fontSizeClass}`}
+        className={`${showImage ? "hidden" : ""} w-full h-full flex items-center justify-center bg-sage/15 text-forest font-serif font-bold ${fontSizeClass}`}
       >
-        {name && name.trim() !== "" ? (
-          <span className="tracking-wider">{getInitials(name)}</span>
+        {displayName ? (
+          <span className="tracking-wider">{getInitials(displayName)}</span>
         ) : (
           <User className="w-1/2 h-1/2 opacity-70" />
         )}
