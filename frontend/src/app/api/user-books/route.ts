@@ -5,6 +5,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { getRequestUser } from "@/utils/auth/getRequestUser";
 import { recalculateUserStats } from "@/utils/supabaseStats";
 import { getBookById } from "@/utils/booksApi";
+import { mapUserBookToDiaryLog } from "@/utils/diaryLogs";
 
 // 1. Environment verification helper
 function verifyEnv() {
@@ -239,6 +240,10 @@ export async function POST(request: Request) {
       if (mappedStatus === "reading" && !existingUserBook.started_at) {
         updatePayload.started_at = today;
       }
+      if (mappedStatus === "reading" || mappedStatus === "want_to_read") {
+        // Re-shelving off Finished should clear completion date
+        updatePayload.finished_at = null;
+      }
       if (mappedStatus === "finished") {
         updatePayload.finished_at = today;
         updatePayload.current_page = totalPages;
@@ -338,6 +343,7 @@ export async function POST(request: Request) {
       .from("user_books")
       .select(`
         id,
+        book_id,
         status,
         rating,
         review,
@@ -354,24 +360,9 @@ export async function POST(request: Request) {
       throw fetchUserBooksError;
     }
 
-    const diaryLogs = userBooks ? userBooks.map((ub: any) => {
-      let clientStatus: "Want to Read" | "Currently Reading" | "Finished" = "Finished";
-      if (ub.status === "want_to_read") clientStatus = "Want to Read";
-      else if (ub.status === "reading") clientStatus = "Currently Reading";
-
-      const dateStr = ub.finished_at || ub.started_at || ub.created_at || new Date().toISOString();
-      const dateLogged = dateStr.includes("T") ? dateStr.split("T")[0] : dateStr;
-
-      return {
-        id: ub.id,
-        userId: user.id,
-        bookId: ub.book?.id || "",
-        status: clientStatus,
-        dateLogged,
-        rating: ub.rating !== null ? ub.rating : undefined,
-        currentPage: ub.current_page || 0,
-      };
-    }) : [];
+    const diaryLogs = userBooks
+      ? userBooks.map((ub: any) => mapUserBookToDiaryLog(ub, user.id))
+      : [];
 
     // Fetch Community Reviews
     const { data: dbReviews, error: reviewsErr } = await dbClient

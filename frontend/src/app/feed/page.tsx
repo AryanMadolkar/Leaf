@@ -78,7 +78,21 @@ export default function HomeFeed() {
         return db.localeCompare(da);
       })
       .map((log) => {
-        const book = books.find((b) => b.id === log.bookId);
+        const book =
+          books.find((b) => b.id === log.bookId) ||
+          (log.bookTitle
+            ? {
+                id: log.bookId,
+                title: log.bookTitle,
+                author: log.bookAuthor || "Unknown Author",
+                coverImage: log.bookCover || "",
+                year: 0,
+                description: "",
+                averageRating: 0,
+                genres: [] as string[],
+                pages: 0,
+              }
+            : null);
         const review = reviewsByBook.get(log.bookId);
         const content = review?.content || log.review;
         return {

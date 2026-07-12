@@ -62,11 +62,14 @@ export function mapDbBookToClientBook(dbBook: any, avgRating?: number): Book {
     }
   }
 
-  const canonicalId = getCanonicalBookId({
-    open_library_key: dbBook.open_library_key,
-    isbn_13: dbBook.isbn_13,
-    isbn_10: dbBook.isbn_10,
-  }) || dbBook.id;
+  // Prefer the DB primary key so diary/library lookups by user_books.book_id match.
+  const canonicalId =
+    dbBook.id ||
+    getCanonicalBookId({
+      open_library_key: dbBook.open_library_key,
+      isbn_13: dbBook.isbn_13,
+      isbn_10: dbBook.isbn_10,
+    });
 
   const isbnKey = dbBook.isbn_13 || dbBook.isbn_10 || canonicalId;
   const coverId = COVER_ID_BY_ISBN[isbnKey] || COVER_ID_BY_ISBN[canonicalId];

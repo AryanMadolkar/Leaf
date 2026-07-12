@@ -856,6 +856,40 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     rating?: number,
     reviewContent?: string
   ) => {
+    // Optimistic update so Diary/Library show the shelf change immediately
+    const dateLogged = new Date().toISOString().split("T")[0];
+    const book = books.find((b) => b.id === bookId);
+    setDiaryLogs((prev) => {
+      const existingIndex = prev.findIndex((log) => log.bookId === bookId && log.userId === currentUser.id);
+      const nextEntry = {
+        id: existingIndex >= 0 ? prev[existingIndex].id : `optimistic-${bookId}`,
+        userId: currentUser.id,
+        bookId,
+        status,
+        dateLogged,
+        rating: rating !== undefined ? rating : existingIndex >= 0 ? prev[existingIndex].rating : undefined,
+        currentPage:
+          status === "Finished"
+            ? book?.pages || 300
+            : existingIndex >= 0
+              ? prev[existingIndex].currentPage || 0
+              : 0,
+        review: reviewContent || (existingIndex >= 0 ? prev[existingIndex].review : undefined),
+        bookTitle: book?.title,
+        bookAuthor: book?.author,
+        bookCover: book?.coverImage,
+      };
+      if (existingIndex >= 0) {
+        const copy = [...prev];
+        copy[existingIndex] = { ...prev[existingIndex], ...nextEntry };
+        return copy;
+      }
+      return [nextEntry, ...prev];
+    });
+    if (book) {
+      setBooks((prev) => (prev.some((b) => b.id === book.id) ? prev : [...prev, book]));
+    }
+
     const isGuest = session?.user?.id === "guest-user-id";
     if (isGuest) {
       await saveBookLocally(bookId, status, rating, reviewContent);
@@ -882,16 +916,19 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setReadingSessions(data.sessions || []);
           setUserStats(data.stats || null);
           
-          // Trigger hot reload of profile catalog
+          // Ensure logged books are in the client catalog (fixes diary row vanishing)
           const initRes = await authFetch("/api/init");
           if (initRes.ok) {
             const initData = await initRes.json();
-            if (initData.success && initData.books?.length) {
-              setBooks((prev) => {
-                const merged = new Map(prev.map((b) => [b.id, b]));
-                initData.books.forEach((b: Book) => merged.set(b.id, b));
-                return Array.from(merged.values());
-              });
+            if (initData.success) {
+              if (initData.diaryLogs) setDiaryLogs(initData.diaryLogs);
+              if (initData.books?.length) {
+                setBooks((prev) => {
+                  const merged = new Map(prev.map((b) => [b.id, b]));
+                  initData.books.forEach((b: Book) => merged.set(b.id, b));
+                  return Array.from(merged.values());
+                });
+              }
             }
           }
           return;

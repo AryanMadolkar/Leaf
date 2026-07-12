@@ -365,13 +365,16 @@ export default function Header() {
     }
   };
 
-  const handleLogSubmit = (e: React.FormEvent) => {
+  const handleLogSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedBook) return;
 
-    logBook(selectedBook.id, logStatus, logStatus === "Finished" ? logRating : undefined, logReview);
+    const book = selectedBook;
+    const status = logStatus;
+    const rating = logStatus === "Finished" ? logRating : undefined;
+    const review = logReview;
 
-    // Reset states
+    // Reset UI first so the modal closes instantly
     setIsLogOpen(false);
     setSelectedBook(null);
     setLogSearch("");
@@ -379,6 +382,7 @@ export default function Header() {
     setLogReview("");
     setLogStatus("Finished");
 
+    await logBook(book.id, status, rating, review);
     router.push("/diary");
   };
 

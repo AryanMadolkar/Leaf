@@ -4,6 +4,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { getRequestUser } from "@/utils/auth/getRequestUser";
 import { mapDbBookToClientBook } from "@/utils/booksApi";
 import { INITIAL_BOOKS } from "@/data/mockData";
+import { mapUserBookToDiaryLog } from "@/utils/diaryLogs";
 
 export async function GET() {
   try {
@@ -107,6 +108,7 @@ export async function GET() {
       .from("user_books")
       .select(`
         id,
+        book_id,
         status,
         rating,
         review,
@@ -118,25 +120,9 @@ export async function GET() {
       `)
       .eq("user_id", user.id);
 
-    const diaryLogs = userBooks ? userBooks.map((ub: any) => {
-      let clientStatus: "Want to Read" | "Currently Reading" | "Finished" = "Finished";
-      if (ub.status === "want_to_read") clientStatus = "Want to Read";
-      else if (ub.status === "reading") clientStatus = "Currently Reading";
-
-      const dateStr = ub.finished_at || ub.started_at || ub.created_at || new Date().toISOString();
-      const dateLogged = dateStr.includes("T") ? dateStr.split("T")[0] : dateStr;
-
-      return {
-        id: ub.id,
-        userId: user.id,
-        bookId: ub.book?.id || ub.book_id || "",
-        status: clientStatus,
-        dateLogged,
-        rating: ub.rating !== null ? ub.rating : undefined,
-        currentPage: ub.current_page || 0,
-        review: ub.review || undefined,
-      };
-    }) : [];
+    const diaryLogs = userBooks
+      ? userBooks.map((ub: any) => mapUserBookToDiaryLog(ub, user.id))
+      : [];
 
     // Gather only books referenced in the user's library (not the full catalog)
     const userBookIds = diaryLogs.map((log: { bookId: string }) => log.bookId).filter(Boolean);
@@ -156,10 +142,19 @@ export async function GET() {
     // Merge user library books with INITIAL_BOOKS bootstrap for any missing refs
     const booksMap = new Map<string, any>();
     userLibraryBooks.forEach((b: any) => booksMap.set(b.id, b));
+    // Also index by raw book_id from diary logs (same key after mapDbBookToClientBook fix)
     userBookIds.forEach((bookId: string) => {
       if (!booksMap.has(bookId)) {
         const local = INITIAL_BOOKS.find((b) => b.id === bookId);
         if (local) booksMap.set(bookId, local);
+      }
+    });
+    // Embed fallbacks from diary joins so reading books never vanish from UI
+    (userBooks || []).forEach((ub: any) => {
+      const bookId = ub.book_id || ub.book?.id;
+      if (!bookId || booksMap.has(bookId)) return;
+      if (ub.book) {
+        booksMap.set(bookId, mapDbBookToClientBook({ ...ub.book, id: bookId }));
       }
     });
     const books = Array.from(booksMap.values());

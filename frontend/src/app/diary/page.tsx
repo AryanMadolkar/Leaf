@@ -11,14 +11,20 @@ import Link from "next/link";
 export default function ReadingDiaryPage() {
   const { diaryLogs, books, currentUser } = useLeaf();
 
-  // Finished + currently reading (want-to-read stays on the shelf only)
+  // All shelved books: reading, finished, and want-to-read
   const userDiaryLogs = diaryLogs
-    .filter(
-      (log) =>
-        log.userId === currentUser.id &&
-        (log.status === "Finished" || log.status === "Currently Reading"),
-    )
+    .filter((log) => log.userId === currentUser.id && !!log.bookId)
     .sort((a, b) => new Date(b.dateLogged).getTime() - new Date(a.dateLogged).getTime());
+
+  const statusMeta = (status: string) => {
+    if (status === "Currently Reading") {
+      return { label: "Reading", className: "bg-brand/10 text-brand border-brand/20" };
+    }
+    if (status === "Want to Read") {
+      return { label: "Want to Read", className: "bg-amber-50 text-amber-800 border-amber-200/80" };
+    }
+    return { label: "Finished", className: "bg-cream-dark text-charcoal-muted border-cream-border" };
+  };
 
   return (
     <div className="min-h-screen bg-cream flex flex-col">
@@ -32,7 +38,7 @@ export default function ReadingDiaryPage() {
             Reading Diary
           </h1>
           <p className="text-xs text-charcoal-muted">
-            A chronological timeline of books you&apos;re reading and have finished on Leaf.
+            A chronological timeline of every book you&apos;ve shelved on Leaf.
           </p>
         </div>
 
@@ -51,9 +57,13 @@ export default function ReadingDiaryPage() {
               </thead>
               <tbody className="divide-y divide-cream-border/60">
                 {userDiaryLogs.map((log) => {
-                  const book = books.find((b) => b.id === log.bookId);
-                  if (!book) return null;
-                  const isReading = log.status === "Currently Reading";
+                  const catalogBook = books.find((b) => b.id === log.bookId);
+                  const title = catalogBook?.title || log.bookTitle;
+                  const author = catalogBook?.author || log.bookAuthor || "Unknown Author";
+                  const cover = catalogBook?.coverImage || log.bookCover || "";
+                  const bookId = log.bookId || catalogBook?.id;
+                  if (!title || !bookId) return null;
+                  const meta = statusMeta(log.status);
 
                   return (
                     <tr key={log.id} className="hover:bg-cream-dark/15 transition-all">
@@ -73,37 +83,33 @@ export default function ReadingDiaryPage() {
 
                       <td className="p-4">
                         <span
-                          className={`inline-block text-[9px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
-                            isReading
-                              ? "bg-brand/10 text-brand border-brand/20"
-                              : "bg-cream-dark text-charcoal-muted border-cream-border"
-                          }`}
+                          className={`inline-block text-[9px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border ${meta.className}`}
                         >
-                          {isReading ? "Reading" : "Finished"}
+                          {meta.label}
                         </span>
                       </td>
 
                       {/* Cover & Title */}
                       <td className="p-4 font-bold text-charcoal">
                         <div className="flex items-center gap-3.5">
-                          <Link href={`/book/${book.id}`} className="flex-shrink-0">
+                          <Link href={`/book/${bookId}`} className="flex-shrink-0">
                             <CoverImage
-                              src={book.coverImage}
-                              title={book.title}
-                              author={book.author}
-                              bookId={book.id}
+                              src={cover}
+                              title={title}
+                              author={author}
+                              bookId={bookId}
                               className="w-9 h-14 rounded shadow-sm border border-cream-border hover:scale-95 transition-transform"
                               imgClassName="w-full h-full object-cover"
                             />
                           </Link>
-                          <Link href={`/book/${book.id}`} className="hover:text-brand hover:underline transition-colors text-xs font-serif font-bold">
-                            {book.title}
+                          <Link href={`/book/${bookId}`} className="hover:text-brand hover:underline transition-colors text-xs font-serif font-bold">
+                            {title}
                           </Link>
                         </div>
                       </td>
 
                       {/* Author */}
-                      <td className="p-4 text-charcoal-light font-medium">{book.author}</td>
+                      <td className="p-4 text-charcoal-light font-medium">{author}</td>
 
                       {/* Rating */}
                       <td className="p-4">
@@ -111,7 +117,11 @@ export default function ReadingDiaryPage() {
                           <StarDisplay rating={log.rating} size={11} />
                         ) : (
                           <span className="text-[10px] text-charcoal-muted italic">
-                            {isReading ? "In progress" : "Shelved only"}
+                            {log.status === "Currently Reading"
+                              ? "In progress"
+                              : log.status === "Want to Read"
+                                ? "On shelf"
+                                : "Shelved only"}
                           </span>
                         )}
                       </td>
@@ -126,7 +136,7 @@ export default function ReadingDiaryPage() {
               <div className="space-y-1">
                 <p className="font-serif text-lg font-bold text-charcoal">Your diary is empty</p>
                 <p className="text-xs text-charcoal-muted max-w-sm mx-auto">
-                  Log a book as Currently Reading or Finished using the + Log button above.
+                  Log a book with + Log — Want to Read, Reading, and Finished all appear here.
                 </p>
               </div>
             </div>

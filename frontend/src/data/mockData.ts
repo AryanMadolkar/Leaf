@@ -51,6 +51,10 @@ export interface ReadingLog {
   rating?: number;
   currentPage?: number;
   review?: string;
+  /** Embedded book fields so diary rows still render if catalog lookup misses */
+  bookTitle?: string;
+  bookAuthor?: string;
+  bookCover?: string;
 }
 
 export interface CuratedList {

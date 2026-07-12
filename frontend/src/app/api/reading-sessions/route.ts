@@ -4,6 +4,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { getRequestUser } from "@/utils/auth/getRequestUser";
 import { recalculateUserStats } from "@/utils/supabaseStats";
 import { getBookById } from "@/utils/booksApi";
+import { mapUserBookToDiaryLog } from "@/utils/diaryLogs";
 
 export async function GET(request: Request) {
   try {
@@ -153,6 +154,7 @@ export async function POST(request: Request) {
       .from("user_books")
       .select(`
         id,
+        book_id,
         status,
         rating,
         review,
@@ -164,24 +166,9 @@ export async function POST(request: Request) {
       `)
       .eq("user_id", user.id);
 
-    const diaryLogs = userBooks ? userBooks.map((ub: any) => {
-      let clientStatus: "Want to Read" | "Currently Reading" | "Finished" = "Finished";
-      if (ub.status === "want_to_read") clientStatus = "Want to Read";
-      else if (ub.status === "reading") clientStatus = "Currently Reading";
-
-      const dateStr = ub.finished_at || ub.started_at || ub.created_at || new Date().toISOString();
-      const dateLogged = dateStr.includes("T") ? dateStr.split("T")[0] : dateStr;
-
-      return {
-        id: ub.id,
-        userId: user.id,
-        bookId: ub.book?.id || "",
-        status: clientStatus,
-        dateLogged,
-        rating: ub.rating !== null ? ub.rating : undefined,
-        currentPage: ub.current_page || 0,
-      };
-    }) : [];
+    const diaryLogs = userBooks
+      ? userBooks.map((ub: any) => mapUserBookToDiaryLog(ub, user.id))
+      : [];
 
     // Fetch Community Reviews
     const { data: dbReviews } = await supabase
