@@ -10,10 +10,8 @@ import {
   Clock, 
   Flame, 
   TrendingUp, 
-  Sparkles, 
   Map, 
   BookOpenCheck,
-  ChevronRight,
   ArrowUpRight,
   Book,
   Heart
@@ -698,8 +696,8 @@ export default function StatsPage() {
 
       <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-8 space-y-10">
         
-        {/* Flagship Header: Title & Recap Card Teaser */}
-        <section className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 pb-6 border-b border-cream-border">
+        {/* Flagship Header */}
+        <section className="pb-6 border-b border-cream-border">
           <div className="space-y-1">
             <h1 className="font-serif text-4xl md:text-5xl font-bold text-charcoal tracking-tight">
               Reading Insights
@@ -708,21 +706,6 @@ export default function StatsPage() {
               An analytical breakdown of your pages read, streaks, and seasonal literary habits.
             </p>
           </div>
-
-          {/* Premium Recap Slideshow Call To Action (Spotify Wrapped Teaser) */}
-          <Link
-            href="/recap"
-            className="flex items-center gap-4 bg-brand hover:bg-brand-light text-cream p-4 rounded-2xl shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group max-w-sm"
-          >
-            <div className="w-10 h-10 bg-cream-card/10 text-cream rounded-full flex items-center justify-center flex-shrink-0 border border-white/20">
-              <Sparkles className="w-5 h-5 group-hover:rotate-12 transition-transform" />
-            </div>
-            <div className="min-w-0 pr-2">
-              <h3 className="font-serif text-sm font-bold leading-tight">Your Reading Recap</h3>
-              <p className="text-[10px] text-cream-dark opacity-90 mt-0.5 truncate">Review your year in books in slides!</p>
-            </div>
-            <ChevronRight className="w-4 h-4 text-cream/70 group-hover:translate-x-1 transition-transform flex-shrink-0" />
-          </Link>
         </section>
 
         {/* Counts/Streak Metrics Widgets */}
