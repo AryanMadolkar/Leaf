@@ -20,6 +20,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { Book } from "@/data/mockData";
 import UserAvatar from "@/components/UserAvatar";
+import { authFetch } from "@/utils/auth/client";
 
 export default function OnboardingPage() {
   const { session, profile, logBook, toggleFollowUser } = useLeaf();
@@ -54,7 +55,7 @@ export default function OnboardingPage() {
     let cancelled = false;
     async function loadReaders() {
       try {
-        const res = await fetch("/api/users/search?limit=12");
+        const res = await authFetch("/api/users/search?limit=12");
         const data = await res.json();
         if (!cancelled && data.success) {
           setSuggestedReaders(data.users || []);
@@ -152,9 +153,8 @@ export default function OnboardingPage() {
 
     try {
       // 1. Update Profile via Leaf auth API
-      const res = await fetch("/api/profile", {
+      const res = await authFetch("/api/profile", {
         method: "PATCH",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           favorite_genres: selectedGenres,
@@ -169,9 +169,8 @@ export default function OnboardingPage() {
 
       // 2. Add Pinned Favorites to Library as Completed (5 stars seed)
       for (const favBook of favoriteBooks) {
-        await fetch("/api/user-books", {
+        await authFetch("/api/user-books", {
           method: "POST",
-          credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             bookId: favBook.id,

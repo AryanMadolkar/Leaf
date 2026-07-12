@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { hashPassword } from "@/utils/auth/password";
-import { attachSessionCookie, createSessionToken } from "@/utils/auth/session";
+import { createSessionToken } from "@/utils/auth/session";
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
@@ -111,11 +111,11 @@ export async function POST(request: Request) {
     }
 
     const token = await createSessionToken({ id: userId, email });
-    const response = NextResponse.json({
+    return NextResponse.json({
       success: true,
+      token,
       user: { id: userId, email, username, display_name: name, onboarding_completed: false },
     });
-    return attachSessionCookie(response, token);
   } catch (error: any) {
     console.error("[auth/register]", error);
     return NextResponse.json(
