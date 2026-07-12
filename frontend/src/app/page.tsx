@@ -88,7 +88,7 @@ export default function LandingPage() {
     {
       icon: <Sparkles className="w-5 h-5 text-brand" />,
       title: "Share Beautiful Reviews",
-      desc: "Write clean, typography-focused notes. Like and comment on other readers' thoughts to sparks dialogue.",
+      desc: "Write clean, typography-focused notes. Like and comment on other readers' thoughts to spark dialogue.",
     },
     {
       icon: <Layers className="w-5 h-5 text-brand" />,
