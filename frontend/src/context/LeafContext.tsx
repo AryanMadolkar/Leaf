@@ -406,11 +406,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   };
 
-  // Setup Auth + load user data in one pass. /api/init performs its own
-  // session check server-side (401 if unauthenticated), so we can call it
-  // directly instead of gating behind a separate /api/auth/me round trip —
-  // that extra hop was the main cause of the diary/feed briefly rendering
-  // empty on refresh before data appeared.
+  // Setup Auth — custom session cookie via /api/auth/me
   useEffect(() => {
     const isGuest = localStorage.getItem("leaf_guest_session") === "true";
     if (isGuest) {
@@ -428,70 +424,28 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/init", { credentials: "include" });
+        const res = await fetch("/api/auth/me", { credentials: "include" });
         if (!res.ok) {
           if (!cancelled) {
             setSession(null);
             setIsAuthenticated(false);
-            loadLocalStorageData();
           }
           return;
         }
-
         const data = await res.json();
-        if (cancelled || !data.success) {
-          if (!cancelled) loadLocalStorageData();
-          return;
-        }
-
+        if (cancelled || !data.success || !data.user) return;
         setSession({
           user: {
-            id: data.profile?.id,
-            email: data.profile?.email,
+            id: data.user.id,
+            email: data.user.email,
           },
         });
         setIsAuthenticated(true);
-
-        // Merge user library books into the full catalog instead of replacing it
-        if (data.books?.length) {
-          setBooks((prev) => {
-            const merged = new Map(prev.map((b) => [b.id, b]));
-            data.books.forEach((b: Book) => merged.set(b.id, b));
-            return Array.from(merged.values());
-          });
-        }
-        setDiaryLogs(data.diaryLogs);
-        setReviews(data.reviews);
-        setReadingSessions(data.sessions || []);
-        setUserStats(data.stats || null);
-
-        // Map profile details to the Client currentUser interface for layout compatibility
-        if (data.profile) {
-          const cleanedAvatar = isDeprecatedAvatar(data.profile.avatar_url) ? "" : (data.profile.avatar_url || "");
-          const cleanedProfile = { ...data.profile, avatar_url: cleanedAvatar };
-          setProfile(cleanedProfile);
-
-          const mappedUser = {
-            id: data.profile.id,
-            username: data.profile.username,
-            name: data.profile.display_name || "Reader",
-            avatar: cleanedAvatar,
-            bio: data.profile.bio || "",
-            followersCount: data.profile.followersCount || 0,
-            followingCount: data.profile.followingCount || 0,
-            favoriteBookIds: data.profile.favoriteBookIds || [],
-            email: data.profile.email || "",
-            created_at: data.profile.created_at || data.profile.joined_at || "",
-          };
-          setCurrentUser(mappedUser);
-          localStorage.setItem("leaf_local_profile", JSON.stringify(mappedUser));
-        }
-      } catch (err) {
-        console.error("Failed to load authenticated user profile details:", err);
+        setProfile((prev: any) => prev || data.user);
+      } catch {
         if (!cancelled) {
           setSession(null);
           setIsAuthenticated(false);
-          loadLocalStorageData();
         }
       }
     })();
@@ -500,6 +454,69 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
       cancelled = true;
     };
   }, []);
+
+  // Load user data dynamically from active session
+  useEffect(() => {
+    if (!session?.user) return;
+
+    if (session.user.id === "guest-user-id") {
+      loadLocalStorageData();
+      return;
+    }
+
+    async function fetchUserData() {
+      try {
+        const res = await fetch("/api/init");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) {
+            // Merge user library books into the full catalog instead of replacing it
+            if (data.books?.length) {
+              setBooks((prev) => {
+                const merged = new Map(prev.map((b) => [b.id, b]));
+                data.books.forEach((b: Book) => merged.set(b.id, b));
+                return Array.from(merged.values());
+              });
+            }
+            setDiaryLogs(data.diaryLogs);
+            setReviews(data.reviews);
+            setReadingSessions(data.sessions || []);
+            setUserStats(data.stats || null);
+            
+            // Map profile details to the Client currentUser interface for layout compatibility
+            if (data.profile) {
+              const cleanedAvatar = isDeprecatedAvatar(data.profile.avatar_url) ? "" : (data.profile.avatar_url || "");
+              const cleanedProfile = { ...data.profile, avatar_url: cleanedAvatar };
+              setProfile(cleanedProfile);
+              
+              const mappedUser = {
+                id: data.profile.id,
+                username: data.profile.username,
+                name: data.profile.display_name || "Reader",
+                avatar: cleanedAvatar,
+                bio: data.profile.bio || "",
+                followersCount: data.profile.followersCount || 0,
+                followingCount: data.profile.followingCount || 0,
+                favoriteBookIds: data.profile.favoriteBookIds || [],
+                email: data.profile.email || session.user.email || "",
+                created_at: data.profile.created_at || data.profile.joined_at || session.user.created_at || "",
+              };
+              setCurrentUser(mappedUser);
+              localStorage.setItem("leaf_local_profile", JSON.stringify(mappedUser));
+            }
+          }
+        } else {
+          console.warn("API init failed, falling back to localStorage data.");
+          loadLocalStorageData();
+        }
+      } catch (err) {
+        console.error("Failed to load authenticated user profile details:", err);
+        loadLocalStorageData();
+      }
+    }
+
+    fetchUserData();
+  }, [session]);
 
   const signIn = (email: string) => {
     // Legacy fallback, do nothing or mock signin

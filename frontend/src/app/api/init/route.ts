@@ -15,64 +15,18 @@ export async function GET() {
 
     const supabase = createAdminClient();
 
-    // 1. Fetch profile + stats + library + community reviews in parallel —
-    // these are independent reads and don't need to block one another.
-    const [
-      { data: existingProfile, error: profileError },
-      { data: existingStats, error: statsError },
-      { data: userBooks },
-      { data: dbReviews },
-      { data: dbSessions },
-    ] = await Promise.all([
-      supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
-      supabase.from("user_stats").select("*").eq("user_id", user.id).maybeSingle(),
-      supabase
-        .from("user_books")
-        .select(`
-          id,
-          status,
-          rating,
-          review,
-          current_page,
-          started_at,
-          finished_at,
-          created_at,
-          book:books(*)
-        `)
-        .eq("user_id", user.id),
-      supabase
-        .from("reviews")
-        .select(`
-          id,
-          user_id,
-          book_id,
-          rating,
-          review_text,
-          likes_count,
-          created_at,
-          profile:profiles(display_name, avatar_url, username),
-          book:books(title, author_name, cover_url)
-        `)
-        .order("created_at", { ascending: false })
-        .limit(20),
-      supabase
-        .from("reading_sessions")
-        .select(`
-          *,
-          book:books(title, author_name, cover_url)
-        `)
-        .eq("user_id", user.id)
-        .order("logged_at", { ascending: false }),
-    ]);
+    // 1. Fetch or dynamically create User Profile
+    let profile = null;
+    const { data: existingProfile, error: profileError } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id)
+      .maybeSingle();
 
     if (profileError) {
       console.error("[DEBUG] [init] Error fetching profile:", profileError);
     }
-    if (statsError) {
-      console.error("[DEBUG] [init] Error fetching stats:", statsError);
-    }
 
-    let profile: any = existingProfile;
     if (!existingProfile) {
       console.log("[DEBUG] [init] Profile not found for authenticated user. Creating fallback profile.");
       const fallbackProfile = {
@@ -96,9 +50,40 @@ export async function GET() {
         profile = insertedProfile;
         console.log("[DEBUG] [init] Fallback profile created successfully:", profile);
       }
+    } else {
+      profile = existingProfile;
     }
 
-    let stats: any = existingStats;
+    if (profile) {
+      profile.email = user.email || (profile as any).email || "";
+      profile.created_at = (profile as any).created_at || (profile as any).joined_at || new Date().toISOString();
+
+      const { count: followersCount } = await supabase
+        .from("follows")
+        .select("follower_id", { count: "exact", head: true })
+        .eq("following_id", profile.id);
+
+      const { count: followingCount } = await supabase
+        .from("follows")
+        .select("following_id", { count: "exact", head: true })
+        .eq("follower_id", profile.id);
+
+      (profile as any).followersCount = followersCount || 0;
+      (profile as any).followingCount = followingCount || 0;
+    }
+
+    // 2. Fetch or dynamically create User Stats
+    let stats = null;
+    const { data: existingStats, error: statsError } = await supabase
+      .from("user_stats")
+      .select("*")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (statsError) {
+      console.error("[DEBUG] [init] Error fetching stats:", statsError);
+    }
+
     if (!existingStats && profile) {
       console.log("[DEBUG] [init] Stats row not found for user. Creating default stats row.");
       const { data: insertedStats, error: insertStatsError } = await supabase
@@ -113,26 +98,25 @@ export async function GET() {
         stats = insertedStats;
         console.log("[DEBUG] [init] Default stats row created successfully:", stats);
       }
+    } else {
+      stats = existingStats;
     }
 
-    if (profile) {
-      profile.email = user.email || profile.email || "";
-      profile.created_at = profile.created_at || profile.joined_at || new Date().toISOString();
-
-      const [{ count: followersCount }, { count: followingCount }] = await Promise.all([
-        supabase
-          .from("follows")
-          .select("follower_id", { count: "exact", head: true })
-          .eq("following_id", profile.id),
-        supabase
-          .from("follows")
-          .select("following_id", { count: "exact", head: true })
-          .eq("follower_id", profile.id),
-      ]);
-
-      profile.followersCount = followersCount || 0;
-      profile.followingCount = followingCount || 0;
-    }
+    // 3. Fetch User Library (user_books joined with cached books)
+    const { data: userBooks } = await supabase
+      .from("user_books")
+      .select(`
+        id,
+        status,
+        rating,
+        review,
+        current_page,
+        started_at,
+        finished_at,
+        created_at,
+        book:books(*)
+      `)
+      .eq("user_id", user.id);
 
     const diaryLogs = userBooks ? userBooks.map((ub: any) => {
       let clientStatus: "Want to Read" | "Currently Reading" | "Finished" = "Finished";
@@ -179,7 +163,23 @@ export async function GET() {
     });
     const books = Array.from(booksMap.values());
 
-    // Community Reviews (fetched in the parallel batch above)
+    // 4. Fetch Community Reviews (join profiles & books)
+    const { data: dbReviews } = await supabase
+      .from("reviews")
+      .select(`
+        id,
+        user_id,
+        book_id,
+        rating,
+        review_text,
+        likes_count,
+        created_at,
+        profile:profiles(display_name, avatar_url, username),
+        book:books(title, author_name, cover_url)
+      `)
+      .order("created_at", { ascending: false })
+      .limit(20);
+
     const reviews = dbReviews ? dbReviews.map((r: any) => {
       const dateObj = new Date(r.created_at);
       const dateString = dateObj.toLocaleDateString("en-US", {
@@ -209,7 +209,16 @@ export async function GET() {
       };
     }) : [];
 
-    // User Reading Sessions (fetched in the parallel batch above)
+    // 5. Fetch User Reading Sessions
+    const { data: dbSessions } = await supabase
+      .from("reading_sessions")
+      .select(`
+        *,
+        book:books(title, author_name, cover_url)
+      `)
+      .eq("user_id", user.id)
+      .order("logged_at", { ascending: false });
+
     const sessions = dbSessions ? dbSessions.map((s: any) => ({
       id: s.id,
       userId: s.user_id,

@@ -205,43 +205,6 @@ export async function saveBookToDatabase(book: Omit<NormalizedBook, "id">): Prom
   }
 }
 
-// Ensure a locally-seeded mock book also exists as a row in the `books`
-// table, since callers (e.g. user_books inserts) treat Book.id as a valid
-// foreign key. Without this, "cache HIT" from INITIAL_BOOKS never touches
-// Supabase and downstream inserts fail FK validation.
-async function ensureLocalBookPersisted(book: Book): Promise<void> {
-  const supabase = await createClient();
-
-  const { data: existing } = await supabase
-    .from("books")
-    .select("id")
-    .eq("id", book.id)
-    .maybeSingle();
-
-  if (existing) return;
-
-  const isIsbn13 = /^\d{13}$/.test(book.id);
-  const isIsbn10 = /^\d{9}[\dXx]$/.test(book.id);
-
-  const { error } = await supabase.from("books").insert({
-    id: book.id,
-    open_library_key: null,
-    isbn_10: isIsbn10 ? book.id : null,
-    isbn_13: isIsbn13 ? book.id : null,
-    title: book.title,
-    author_name: book.author,
-    cover_url: book.coverImage || null,
-    page_count: book.pages || 0,
-    subjects: JSON.stringify(book.genres || []),
-    first_publish_year: book.year || null,
-  });
-
-  if (error && error.code !== "23505") {
-    // 23505 = unique_violation from a concurrent insert; otherwise surface it
-    console.error(`Failed to persist local mock book "${book.id}" to Supabase:`, error);
-  }
-}
-
 // Get Cached Book by various keys (using single query or filter)
 export async function getCachedBook(query: string): Promise<Book | null> {
   // 1. Try local INITIAL_BOOKS first
@@ -250,10 +213,7 @@ export async function getCachedBook(query: string): Promise<Book | null> {
     const bookId = b.id.toLowerCase();
     return bookId === queryClean || bookId === query.toLowerCase();
   });
-  if (localMatch) {
-    await ensureLocalBookPersisted(localMatch);
-    return localMatch;
-  }
+  if (localMatch) return localMatch;
 
   const supabase = await createClient();
   const cleanKey = query.startsWith("/works/") ? query : `/works/${query}`;
