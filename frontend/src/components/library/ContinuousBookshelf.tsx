@@ -33,8 +33,8 @@ const SIDE_W = 12;
 const TOP_H = 14;
 const BOOK_GAP = 3; // 2–4px tight packing
 const MIN_SHELVES = 4;
-/** Empty bays stay short so wood doesn't dominate */
-const EMPTY_SHELF_H = 72;
+/** Fallback when the case is empty — matches a typical filled bay */
+const EMPTY_SHELF_H = 260;
 const BOOK_INSET = 6;
 
 function packIntoRows(books: Book[], containerWidth: number): Book[][] {
@@ -210,6 +210,15 @@ const ContinuousBookshelf = memo(function ContinuousBookshelf({
     return next;
   }, [packedRows]);
 
+  // One bay height for every shelf — tallest book in the collection + breathing room
+  const shelfBayH = useMemo(() => {
+    if (!displayBooks.length) return EMPTY_SHELF_H;
+    const tallest = Math.max(
+      ...displayBooks.map((b) => spineHeightFromSeed(`${b.id}:${b.title}`, b.pages)),
+    );
+    return tallest + BREATHING;
+  }, [displayBooks]);
+
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
@@ -288,20 +297,14 @@ const ContinuousBookshelf = memo(function ContinuousBookshelf({
 
                 <div className="flex-1 min-w-0 flex flex-col">
                   {rows.map((row, rowIndex) => {
-                    const tallest = row.length
-                      ? Math.max(
-                          ...row.map((b) => spineHeightFromSeed(`${b.id}:${b.title}`, b.pages)),
-                        )
-                      : 0;
-                    // Tight wrap: tallest book + small breathing room only
-                    const bayH = row.length ? tallest + BREATHING : EMPTY_SHELF_H;
+                    // Uniform bay height across the whole bookcase
                     const isLast = rowIndex === rows.length - 1;
                     return (
                       <div key={`row-${rowIndex}`} className="relative w-full">
                         <div
                           className="relative flex items-end justify-start min-h-0"
                           style={{
-                            height: bayH,
+                            height: shelfBayH,
                             gap: BOOK_GAP,
                             paddingLeft: BOOK_INSET,
                             paddingRight: BOOK_INSET,
