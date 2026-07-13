@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useEffect, useMemo, useState, memo } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, memo } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import CoverImage from "@/components/CoverImage";
 import type { Book } from "@/data/mockData";
@@ -25,6 +26,13 @@ type StandingBookProps = {
   dragHandleProps?: React.HTMLAttributes<HTMLElement>;
 };
 
+const CARD_W = 224;
+const CARD_EST_H = 280;
+const GAP = 12;
+/** Clear sticky Header (64) + Library toolbar (~52) */
+const TOP_SAFE = 130;
+const EDGE = 12;
+
 function textureOverlay(texture: SpinePalette["texture"]): string {
   if (texture === "leather") {
     return "repeating-linear-gradient(90deg, transparent 0 2px, rgba(0,0,0,0.06) 2px 3px), radial-gradient(circle at 30% 20%, rgba(255,255,255,0.08), transparent 40%)";
@@ -38,6 +46,24 @@ function textureOverlay(texture: SpinePalette["texture"]): string {
   return "linear-gradient(180deg, rgba(255,255,255,0.06), transparent 30%, rgba(0,0,0,0.08))";
 }
 
+function placeCard(rect: DOMRect): { top: number; left: number } {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  const spaceRight = vw - rect.right - EDGE;
+  const spaceLeft = rect.left - EDGE;
+  const preferRight = spaceRight >= CARD_W + GAP || spaceRight >= spaceLeft;
+
+  let left = preferRight ? rect.right + GAP : rect.left - CARD_W - GAP;
+  left = Math.max(EDGE, Math.min(left, vw - CARD_W - EDGE));
+
+  // Prefer aligning near the top of the spine, then clamp into the viewport
+  let top = rect.top;
+  top = Math.max(TOP_SAFE, Math.min(top, vh - CARD_EST_H - EDGE));
+
+  return { top, left };
+}
+
 const StandingBook = memo(function StandingBook({
   book,
   editable,
@@ -49,13 +75,21 @@ const StandingBook = memo(function StandingBook({
   dragHandleProps,
 }: StandingBookProps) {
   const seed = `${book.id}:${book.title}`;
+  const rootRef = useRef<HTMLDivElement>(null);
   const [palette, setPalette] = useState<SpinePalette>(() => paletteFromSeed(seed));
+  const [hovered, setHovered] = useState(false);
+  const [cardPos, setCardPos] = useState<{ top: number; left: number } | null>(null);
+  const [mounted, setMounted] = useState(false);
 
   const dims = useMemo(() => {
     const w = spineWidthFromPages(book.pages);
     const h = spineHeightFromSeed(seed, book.pages);
     return { w, h };
   }, [book.pages, seed]);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,7 +106,24 @@ const StandingBook = memo(function StandingBook({
     };
   }, [book.coverImage, seed]);
 
-  // Title scales with spine width/height for denser, premium look
+  useLayoutEffect(() => {
+    if (!hovered || !rootRef.current) {
+      setCardPos(null);
+      return;
+    }
+    const update = () => {
+      if (!rootRef.current) return;
+      setCardPos(placeCard(rootRef.current.getBoundingClientRect()));
+    };
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [hovered]);
+
   const titleSize =
     dims.w < 26
       ? 10
@@ -85,16 +136,125 @@ const StandingBook = memo(function StandingBook({
             : 14;
   const authorShort = (book.author || "").split(",")[0].trim();
 
+  const card = hovered && cardPos && mounted
+    ? createPortal(
+        <div
+          className="fixed z-[200] w-56 pointer-events-auto"
+          style={{ top: cardPos.top, left: cardPos.left }}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
+        >
+          <div className="bg-cream border border-cream-border rounded-xl shadow-2xl overflow-hidden">
+            <div className="flex gap-2.5 p-2.5">
+              <CoverImage
+                src={book.coverImage}
+                title={book.title}
+                author={book.author}
+                bookId={book.id}
+                className="w-[72px] h-[108px] rounded shadow-sm flex-shrink-0"
+                imgClassName="w-full h-full object-cover"
+              />
+              <div className="min-w-0 flex-1 space-y-1">
+                <p className="font-serif text-xs font-bold text-charcoal leading-snug line-clamp-3">
+                  {book.title}
+                </p>
+                <p className="text-[10px] text-charcoal-muted truncate">{book.author}</p>
+                <div className="flex items-center gap-1 text-[10px] text-brand font-semibold">
+                  <Star className="w-2.5 h-2.5 fill-current" />
+                  {book.averageRating?.toFixed(1) ?? "—"}
+                </div>
+                {status && (
+                  <p className="text-[9px] uppercase tracking-wider font-bold text-charcoal-muted">
+                    {status}
+                  </p>
+                )}
+              </div>
+            </div>
+            {editable && (
+              <div className="border-t border-cream-border/70 p-1.5 grid grid-cols-2 gap-0.5 text-[10px]">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onStatus?.(book.id, "Finished");
+                  }}
+                  className="flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-cream-dark/50 font-semibold text-charcoal"
+                >
+                  <Star className="w-3 h-3 text-brand" /> Finished
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onStatus?.(book.id, "Currently Reading");
+                  }}
+                  className="flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-cream-dark/50 font-semibold text-charcoal"
+                >
+                  <BookOpen className="w-3 h-3 text-brand" /> Reading
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onStatus?.(book.id, "Want to Read");
+                  }}
+                  className="flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-cream-dark/50 font-semibold text-charcoal"
+                >
+                  <Bookmark className="w-3 h-3 text-brand" /> Wishlist
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onFavorite?.(book.id);
+                  }}
+                  className="flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-cream-dark/50 font-semibold text-charcoal"
+                >
+                  <Heart className="w-3 h-3 text-brand" /> Favorite
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onRemove?.(book.id);
+                  }}
+                  className="col-span-2 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg hover:bg-red-50 font-semibold text-red-700"
+                >
+                  <Trash2 className="w-3 h-3" /> Remove
+                </button>
+                <Link
+                  href={`/book/${book.id}`}
+                  className="col-span-2 text-center py-1.5 rounded-lg bg-brand/10 text-brand font-bold hover:bg-brand/15"
+                >
+                  Open book
+                </Link>
+              </div>
+            )}
+          </div>
+        </div>,
+        document.body,
+      )
+    : null;
+
   return (
     <div
-      className="relative flex-shrink-0 group/book z-0 hover:z-50"
+      ref={rootRef}
+      className="relative flex-shrink-0 z-0 hover:z-50"
       style={{ width: dims.w, height: dims.h }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
       <div className="absolute inset-0" {...dragHandleProps}>
         <Link
           href={`/book/${book.id}`}
-          className="absolute inset-0 origin-bottom focus:outline-none cursor-pointer transition-transform duration-200 ease-out group-hover/book:-translate-y-2 group-hover/book:z-25 group-hover/book:shadow-[3px_10px_18px_rgba(0,0,0,0.32)]"
-          style={{ boxShadow: "1px 3px 6px rgba(0,0,0,0.26)" }}
+          className="absolute inset-0 origin-bottom focus:outline-none cursor-pointer transition-transform duration-200 ease-out"
+          style={{
+            boxShadow: hovered
+              ? "3px 10px 18px rgba(0,0,0,0.32)"
+              : "1px 3px 6px rgba(0,0,0,0.26)",
+            transform: hovered ? "translateY(-8px)" : "translateY(0)",
+            zIndex: hovered ? 25 : 1,
+          }}
           title={book.title}
           aria-label={`${book.title} by ${book.author}`}
           draggable={false}
@@ -190,96 +350,7 @@ const StandingBook = memo(function StandingBook({
         </Link>
       </div>
 
-      {/* Cover preview — escapes shelf bay; parent bookcase must be overflow-visible */}
-      <div className="absolute left-1/2 -translate-x-1/2 bottom-[calc(100%+10px)] z-[60] w-56 pointer-events-none opacity-0 translate-y-1 scale-[0.97] transition-[opacity,transform] duration-150 group-hover/book:opacity-100 group-hover/book:translate-y-0 group-hover/book:scale-100 group-hover/book:pointer-events-auto">
-        <div className="bg-cream border border-cream-border rounded-xl shadow-2xl overflow-hidden">
-          <div className="flex gap-2.5 p-2.5">
-            <CoverImage
-              src={book.coverImage}
-              title={book.title}
-              author={book.author}
-              bookId={book.id}
-              className="w-[72px] h-[108px] rounded shadow-sm flex-shrink-0"
-              imgClassName="w-full h-full object-cover"
-            />
-            <div className="min-w-0 flex-1 space-y-1">
-              <p className="font-serif text-xs font-bold text-charcoal leading-snug line-clamp-3">
-                {book.title}
-              </p>
-              <p className="text-[10px] text-charcoal-muted truncate">{book.author}</p>
-              <div className="flex items-center gap-1 text-[10px] text-brand font-semibold">
-                <Star className="w-2.5 h-2.5 fill-current" />
-                {book.averageRating?.toFixed(1) ?? "—"}
-              </div>
-              {status && (
-                <p className="text-[9px] uppercase tracking-wider font-bold text-charcoal-muted">
-                  {status}
-                </p>
-              )}
-            </div>
-          </div>
-          {editable && (
-            <div className="border-t border-cream-border/70 p-1.5 grid grid-cols-2 gap-0.5 text-[10px]">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  onStatus?.(book.id, "Finished");
-                }}
-                className="flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-cream-dark/50 font-semibold text-charcoal"
-              >
-                <Star className="w-3 h-3 text-brand" /> Finished
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  onStatus?.(book.id, "Currently Reading");
-                }}
-                className="flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-cream-dark/50 font-semibold text-charcoal"
-              >
-                <BookOpen className="w-3 h-3 text-brand" /> Reading
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  onStatus?.(book.id, "Want to Read");
-                }}
-                className="flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-cream-dark/50 font-semibold text-charcoal"
-              >
-                <Bookmark className="w-3 h-3 text-brand" /> Wishlist
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  onFavorite?.(book.id);
-                }}
-                className="flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-cream-dark/50 font-semibold text-charcoal"
-              >
-                <Heart className="w-3 h-3 text-brand" /> Favorite
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  onRemove?.(book.id);
-                }}
-                className="col-span-2 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg hover:bg-red-50 font-semibold text-red-700"
-              >
-                <Trash2 className="w-3 h-3" /> Remove
-              </button>
-              <Link
-                href={`/book/${book.id}`}
-                className="col-span-2 text-center py-1.5 rounded-lg bg-brand/10 text-brand font-bold hover:bg-brand/15"
-              >
-                Open book
-              </Link>
-            </div>
-          )}
-        </div>
-      </div>
+      {card}
     </div>
   );
 });
