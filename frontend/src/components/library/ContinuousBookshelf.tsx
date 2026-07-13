@@ -26,14 +26,15 @@ import {
   type ReadingStatus,
 } from "./spineUtils";
 import type { Book } from "@/data/mockData";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
-const BREATHING = 20; // 16–24px above tallest book
+const BREATHING = 20;
 const PLANK_H = 10;
 const SIDE_W = 12;
 const TOP_H = 14;
-const BOOK_GAP = 3; // 2–4px tight packing
-const MIN_SHELVES = 4;
-/** Fallback when the case is empty — matches a typical filled bay */
+const BOOK_GAP = 3;
+/** Fixed shelves per physical bookcase — overflow opens a new case */
+export const SHELVES_PER_CASE = 4;
 const EMPTY_SHELF_H = 260;
 const BOOK_INSET = 6;
 
@@ -57,6 +58,19 @@ function packIntoRows(books: Book[], containerWidth: number): Book[][] {
   }
   if (current.length) rows.push(current);
   return rows;
+}
+
+function chunkIntoCases(rows: Book[][]): Book[][][] {
+  const cases: Book[][][] = [];
+  if (!rows.length) {
+    return [Array.from({ length: SHELVES_PER_CASE }, () => [] as Book[])];
+  }
+  for (let i = 0; i < rows.length; i += SHELVES_PER_CASE) {
+    const chunk = rows.slice(i, i + SHELVES_PER_CASE);
+    while (chunk.length < SHELVES_PER_CASE) chunk.push([]);
+    cases.push(chunk);
+  }
+  return cases;
 }
 
 function WoodBar({
@@ -170,6 +184,7 @@ const ContinuousBookshelf = memo(function ContinuousBookshelf({
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [caseIndex, setCaseIndex] = useState(0);
 
   const bookMap = useMemo(() => {
     const m = new Map<string, Book>();
@@ -186,13 +201,10 @@ const ContinuousBookshelf = memo(function ContinuousBookshelf({
     return orderedBooks.filter((b) => visibleIds.has(b.id));
   }, [orderedBooks, visibleIds]);
 
-  const sortableIds = useMemo(() => displayBooks.map((b) => b.id), [displayBooks]);
-
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const measure = () => {
-      // Pack into the bay between side rails, minus book inset
       setWidth(Math.max(0, el.clientWidth - SIDE_W * 2 - BOOK_INSET * 2));
     };
     measure();
@@ -202,22 +214,25 @@ const ContinuousBookshelf = memo(function ContinuousBookshelf({
   }, []);
 
   const packedRows = useMemo(() => packIntoRows(displayBooks, width), [displayBooks, width]);
+  const bookcases = useMemo(() => chunkIntoCases(packedRows), [packedRows]);
 
-  // Always render a full bookcase (4 shelves); grow beyond that when books overflow
-  const rows = useMemo(() => {
-    const next = [...packedRows];
-    while (next.length < MIN_SHELVES) next.push([]);
-    return next;
-  }, [packedRows]);
+  // Keep switcher on a valid case when packing changes
+  useEffect(() => {
+    setCaseIndex((i) => Math.min(i, Math.max(0, bookcases.length - 1)));
+  }, [bookcases.length]);
 
-  // One bay height for every shelf — tallest book in the collection + breathing room
+  const activeCase = bookcases[Math.min(caseIndex, bookcases.length - 1)] || bookcases[0];
+  const caseBooks = useMemo(() => activeCase.flat(), [activeCase]);
+  const sortableIds = useMemo(() => caseBooks.map((b) => b.id), [caseBooks]);
+
   const shelfBayH = useMemo(() => {
-    if (!displayBooks.length) return EMPTY_SHELF_H;
+    const pool = caseBooks.length ? caseBooks : displayBooks;
+    if (!pool.length) return EMPTY_SHELF_H;
     const tallest = Math.max(
-      ...displayBooks.map((b) => spineHeightFromSeed(`${b.id}:${b.title}`, b.pages)),
+      ...pool.map((b) => spineHeightFromSeed(`${b.id}:${b.title}`, b.pages)),
     );
     return tallest + BREATHING;
-  }, [displayBooks]);
+  }, [caseBooks, displayBooks]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
@@ -232,12 +247,24 @@ const ContinuousBookshelf = memo(function ContinuousBookshelf({
       const { active, over } = event;
       if (!over || active.id === over.id) return;
 
-      const displayIds = displayBooks.map((b) => b.id);
-      const oldIndex = displayIds.indexOf(String(active.id));
-      const newIndex = displayIds.indexOf(String(over.id));
+      const caseIds = caseBooks.map((b) => b.id);
+      const oldIndex = caseIds.indexOf(String(active.id));
+      const newIndex = caseIds.indexOf(String(over.id));
       if (oldIndex < 0 || newIndex < 0) return;
 
-      const nextDisplay = arrayMove(displayIds, oldIndex, newIndex);
+      const nextCase = arrayMove(caseIds, oldIndex, newIndex);
+      const caseSet = new Set(caseIds);
+
+      // Splice reordered case books back into the full display order
+      const nextDisplay: string[] = [];
+      let ci = 0;
+      for (const id of displayBooks.map((b) => b.id)) {
+        if (caseSet.has(id)) {
+          nextDisplay.push(nextCase[ci++]);
+        } else {
+          nextDisplay.push(id);
+        }
+      }
 
       if (!visibleIds) {
         onReorder(nextDisplay);
@@ -255,158 +282,197 @@ const ContinuousBookshelf = memo(function ContinuousBookshelf({
       }
       onReorder(nextFull);
     },
-    [reorderDisabled, editable, onReorder, displayBooks, visibleIds, bookIds],
+    [reorderDisabled, editable, onReorder, caseBooks, displayBooks, visibleIds, bookIds],
   );
 
   const activeBook = activeId ? bookMap.get(activeId) : null;
   const canDrag = editable && !reorderDisabled;
+  const multiCase = bookcases.length > 1;
 
   return (
-    <div ref={containerRef} className="w-full">
-      {width <= 0 ? (
-        <div className="h-48" aria-hidden />
-      ) : (
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext items={sortableIds} strategy={horizontalListSortingStrategy}>
-            <div
-              className="relative w-full overflow-visible"
-              style={{
-                boxShadow: `0 12px 28px ${themeStyles.shadow}`,
-              }}
-            >
-              {/* Top crown — full width */}
-              <WoodBar themeStyles={themeStyles} height={TOP_H} className="w-full" />
+    <div className="w-full space-y-4">
+      {multiCase && (
+        <div className="flex items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => setCaseIndex((i) => Math.max(0, i - 1))}
+            disabled={caseIndex <= 0}
+            className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-cream-border bg-cream-card text-charcoal disabled:opacity-30 hover:bg-cream-dark/40 transition-colors"
+            aria-label="Previous bookcase"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
 
-              {/* Sides + shelves as one connected frame */}
-              <div className="flex w-full items-stretch">
-                <div
-                  className="flex-shrink-0 self-stretch"
-                  style={{
-                    width: SIDE_W,
-                    background: themeStyles.plank,
-                    boxShadow: `inset -1px 0 0 ${themeStyles.edge}`,
-                  }}
-                  aria-hidden
-                />
+          <div className="flex items-center gap-2">
+            {bookcases.map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setCaseIndex(i)}
+                className={`h-2 rounded-full transition-all ${
+                  i === caseIndex ? "w-6 bg-brand" : "w-2 bg-charcoal/20 hover:bg-charcoal/35"
+                }`}
+                aria-label={`Bookcase ${i + 1}`}
+                aria-current={i === caseIndex ? "true" : undefined}
+              />
+            ))}
+          </div>
 
-                <div
-                  className="flex-1 min-w-0 flex flex-col relative"
-                  style={{
-                    background: themeStyles.wall,
-                    // Ambient occlusion where backing meets wood frame
-                    boxShadow:
-                      "inset 10px 0 14px -10px rgba(90,70,40,0.08), inset -10px 0 14px -10px rgba(90,70,40,0.08), inset 0 8px 12px -10px rgba(90,70,40,0.07), inset 0 -6px 10px -8px rgba(90,70,40,0.06)",
-                  }}
-                >
-                  {/* Soft radial depth — center light, warmer edges */}
+          <p className="text-[11px] font-bold text-charcoal-muted tabular-nums min-w-[7.5rem] text-center">
+            Bookcase {caseIndex + 1} of {bookcases.length}
+          </p>
+
+          <button
+            type="button"
+            onClick={() => setCaseIndex((i) => Math.min(bookcases.length - 1, i + 1))}
+            disabled={caseIndex >= bookcases.length - 1}
+            className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-cream-border bg-cream-card text-charcoal disabled:opacity-30 hover:bg-cream-dark/40 transition-colors"
+            aria-label="Next bookcase"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      <div ref={containerRef} className="w-full">
+        {width <= 0 ? (
+          <div className="h-48" aria-hidden />
+        ) : (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext items={sortableIds} strategy={horizontalListSortingStrategy}>
+              <div
+                className="relative w-full overflow-visible"
+                style={{
+                  boxShadow: `0 12px 28px ${themeStyles.shadow}`,
+                }}
+              >
+                <WoodBar themeStyles={themeStyles} height={TOP_H} className="w-full" />
+
+                <div className="flex w-full items-stretch">
                   <div
-                    className="pointer-events-none absolute inset-0 z-0"
+                    className="flex-shrink-0 self-stretch"
                     style={{
-                      background:
-                        "radial-gradient(ellipse 75% 65% at 50% 45%, rgba(255,248,235,0.9) 0%, rgba(225,210,185,0.55) 55%, rgba(225,210,185,0.95) 100%)",
+                      width: SIDE_W,
+                      background: themeStyles.plank,
+                      boxShadow: `inset -1px 0 0 ${themeStyles.edge}`,
                     }}
                     aria-hidden
                   />
-                  {/* Linen/paper grain — 2–3% opacity */}
+
                   <div
-                    className="pointer-events-none absolute inset-0 z-0"
+                    className="flex-1 min-w-0 flex flex-col relative"
                     style={{
-                      opacity: 0.025,
-                      backgroundImage: `
+                      background: themeStyles.wall,
+                      boxShadow:
+                        "inset 10px 0 14px -10px rgba(90,70,40,0.08), inset -10px 0 14px -10px rgba(90,70,40,0.08), inset 0 8px 12px -10px rgba(90,70,40,0.07), inset 0 -6px 10px -8px rgba(90,70,40,0.06)",
+                    }}
+                  >
+                    <div
+                      className="pointer-events-none absolute inset-0 z-0"
+                      style={{
+                        background:
+                          "radial-gradient(ellipse 75% 65% at 50% 45%, rgba(255,248,235,0.9) 0%, rgba(225,210,185,0.55) 55%, rgba(225,210,185,0.95) 100%)",
+                      }}
+                      aria-hidden
+                    />
+                    <div
+                      className="pointer-events-none absolute inset-0 z-0"
+                      style={{
+                        opacity: 0.025,
+                        backgroundImage: `
                         url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E")
                       `,
-                      backgroundSize: "220px 220px",
-                      mixBlendMode: "multiply",
-                    }}
-                    aria-hidden
-                  />
-                  {/* Edge vignette */}
-                  <div
-                    className="pointer-events-none absolute inset-0 z-0"
-                    style={{
-                      background:
-                        "radial-gradient(ellipse 88% 82% at 50% 50%, transparent 50%, rgba(120,95,60,0.045) 100%)",
-                    }}
-                    aria-hidden
-                  />
+                        backgroundSize: "220px 220px",
+                        mixBlendMode: "multiply",
+                      }}
+                      aria-hidden
+                    />
+                    <div
+                      className="pointer-events-none absolute inset-0 z-0"
+                      style={{
+                        background:
+                          "radial-gradient(ellipse 88% 82% at 50% 50%, transparent 50%, rgba(120,95,60,0.045) 100%)",
+                      }}
+                      aria-hidden
+                    />
 
-                  {rows.map((row, rowIndex) => {
-                    const isLast = rowIndex === rows.length - 1;
-                    return (
-                      <div key={`row-${rowIndex}`} className="relative w-full z-[1]">
-                        <div
-                          className="relative flex items-end justify-start min-h-0"
-                          style={{
-                            height: shelfBayH,
-                            gap: BOOK_GAP,
-                            paddingLeft: BOOK_INSET,
-                            paddingRight: BOOK_INSET,
-                          }}
-                        >
-                          {row.map((book) => (
-                            <SortableBook
-                              key={book.id}
-                              book={book}
-                              editable={editable}
-                              disabled={!canDrag}
-                              status={statusByBookId?.[book.id]}
-                              isFavorite={favoriteIds?.has(book.id)}
-                              onStatus={onStatus}
-                              onFavorite={onFavorite}
-                              onRemove={onRemove}
-                            />
-                          ))}
+                    {activeCase.map((row, rowIndex) => {
+                      const isLast = rowIndex === activeCase.length - 1;
+                      return (
+                        <div key={`row-${caseIndex}-${rowIndex}`} className="relative w-full z-[1]">
+                          <div
+                            className="relative flex items-end justify-start min-h-0"
+                            style={{
+                              height: shelfBayH,
+                              gap: BOOK_GAP,
+                              paddingLeft: BOOK_INSET,
+                              paddingRight: BOOK_INSET,
+                            }}
+                          >
+                            {row.map((book) => (
+                              <SortableBook
+                                key={book.id}
+                                book={book}
+                                editable={editable}
+                                disabled={!canDrag}
+                                status={statusByBookId?.[book.id]}
+                                isFavorite={favoriteIds?.has(book.id)}
+                                onStatus={onStatus}
+                                onFavorite={onFavorite}
+                                onRemove={onRemove}
+                              />
+                            ))}
+                          </div>
+                          <div
+                            className="pointer-events-none absolute left-0 right-0 z-[2]"
+                            style={{
+                              bottom: isLast ? PLANK_H + 4 : PLANK_H,
+                              height: 14,
+                              background:
+                                "linear-gradient(180deg, transparent 0%, rgba(90,70,40,0.05) 70%, rgba(90,70,40,0.09) 100%)",
+                            }}
+                            aria-hidden
+                          />
+                          <WoodBar
+                            themeStyles={themeStyles}
+                            height={isLast ? PLANK_H + 4 : PLANK_H}
+                            className="relative z-[3] w-full"
+                          />
                         </div>
-                        {/* AO where shelf plank meets the backing */}
-                        <div
-                          className="pointer-events-none absolute left-0 right-0 z-[2]"
-                          style={{
-                            bottom: isLast ? PLANK_H + 4 : PLANK_H,
-                            height: 14,
-                            background:
-                              "linear-gradient(180deg, transparent 0%, rgba(90,70,40,0.05) 70%, rgba(90,70,40,0.09) 100%)",
-                          }}
-                          aria-hidden
-                        />
-                        <WoodBar
-                          themeStyles={themeStyles}
-                          height={isLast ? PLANK_H + 4 : PLANK_H}
-                          className="relative z-[3] w-full"
-                        />
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
+
+                  <div
+                    className="flex-shrink-0 self-stretch"
+                    style={{
+                      width: SIDE_W,
+                      background: themeStyles.plank,
+                      boxShadow: `inset 1px 0 0 ${themeStyles.edge}`,
+                    }}
+                    aria-hidden
+                  />
                 </div>
-
-                <div
-                  className="flex-shrink-0 self-stretch"
-                  style={{
-                    width: SIDE_W,
-                    background: themeStyles.plank,
-                    boxShadow: `inset 1px 0 0 ${themeStyles.edge}`,
-                  }}
-                  aria-hidden
-                />
               </div>
-            </div>
-          </SortableContext>
+            </SortableContext>
 
-          <DragOverlay dropAnimation={null}>
-            {activeBook ? (
-              <StandingBook
-                book={activeBook}
-                status={statusByBookId?.[activeBook.id]}
-                isFavorite={favoriteIds?.has(activeBook.id)}
-              />
-            ) : null}
-          </DragOverlay>
-        </DndContext>
-      )}
+            <DragOverlay dropAnimation={null}>
+              {activeBook ? (
+                <StandingBook
+                  book={activeBook}
+                  status={statusByBookId?.[activeBook.id]}
+                  isFavorite={favoriteIds?.has(activeBook.id)}
+                />
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+        )}
+      </div>
     </div>
   );
 });
