@@ -1,324 +1,481 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Header from "@/components/Header";
-import BookCard from "@/components/BookCard";
-import { StarDisplay } from "@/components/ReviewCard";
+import CoverImage from "@/components/CoverImage";
+import BookshelfUnit, { CreateShelfButton } from "@/components/library/BookshelfUnit";
+import AddBooksModal from "@/components/library/AddBooksModal";
+import { SHELF_THEMES, type ShelfThemeId } from "@/components/library/shelfThemes";
 import { useLeaf } from "@/context/LeafContext";
-import { BookOpen, Sparkles, Eye, ArrowRight, Star, Heart, CheckCircle2, RefreshCw } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { authFetch } from "@/utils/auth/client";
+import type { LibraryPayload, LibraryShelf, LibraryViewMode } from "@/utils/library";
+import type { Book } from "@/data/mockData";
 import Link from "next/link";
-import UserAvatar from "@/components/UserAvatar";
+import {
+  Plus,
+  Share2,
+  LayoutGrid,
+  Columns3,
+  List,
+  BookOpen,
+  Users,
+  ScrollText,
+  Sparkles,
+  Globe,
+  Lock,
+  Copy,
+  Check,
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function UserLibraryPage() {
-  const { books, diaryLogs, currentUser, logBook } = useLeaf();
-  
-  // States for migration rating/review overlay
-  const [selectedBookId, setSelectedBookId] = useState<string | null>(null);
-  const [rating, setRating] = useState(0);
-  const [reviewText, setReviewText] = useState("");
-  const [showReviewModal, setShowReviewModal] = useState(false);
+  const { currentUser, logBook, isProfileLoading } = useLeaf();
+  const [library, setLibrary] = useState<LibraryPayload | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [addOpen, setAddOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [createShelfOpen, setCreateShelfOpen] = useState(false);
+  const [newShelfName, setNewShelfName] = useState("");
+  const [moveTarget, setMoveTarget] = useState<{ bookId: string; fromShelfId: string } | null>(null);
+  const [copied, setCopied] = useState(false);
 
-  // Group books by reading status for current user
-  const userLogs = diaryLogs.filter((log) => log.userId === currentUser.id);
-
-  // Helper to get book object for a log
-  const getBookForLog = (log: any) => {
-    return books.find((b) => b.id === log.bookId);
-  };
-
-  // Want to Read shelf
-  const wantToRead = userLogs
-    .filter((log) => log.status === "Want to Read")
-    .map(getBookForLog)
-    .filter((b): b is any => b !== undefined);
-
-  // Currently Reading shelf
-  const currentlyReading = userLogs
-    .filter((log) => log.status === "Currently Reading")
-    .map(getBookForLog)
-    .filter((b): b is any => b !== undefined);
-
-  // Finished shelf (with optional ratings)
-  const finished = userLogs
-    .filter((log) => log.status === "Finished")
-    .map((log) => {
-      const book = books.find((b) => b.id === log.bookId);
-      return book ? { ...book, userRating: log.rating, dateLogged: log.dateLogged } : null;
-    })
-    .filter((b): b is any => b !== null)
-    .sort((a, b) => new Date(b.dateLogged).getTime() - new Date(a.dateLogged).getTime());
-
-  // Move a book to a new shelf
-  const handleMoveShelf = (bookId: string, newStatus: "Want to Read" | "Currently Reading" | "Finished") => {
-    if (newStatus === "Finished") {
-      setSelectedBookId(bookId);
-      setRating(0);
-      setReviewText("");
-      setShowReviewModal(true);
-    } else {
-      logBook(bookId, newStatus);
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await authFetch("/api/library");
+      const data = await res.json();
+      if (data.success) setLibrary(data.library);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    if (!currentUser?.id || isProfileLoading) return;
+    load();
+  }, [currentUser?.id, isProfileLoading, load]);
+
+  const bookMap = useMemo(() => {
+    const m = new Map<string, Book>();
+    (library?.books || []).forEach((b) => m.set(b.id, b));
+    return m;
+  }, [library?.books]);
+
+  const applyLibrary = (next: LibraryPayload) => setLibrary(next);
+
+  const patch = async (body: Record<string, unknown>) => {
+    const res = await authFetch("/api/library", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.error || "Update failed");
+    applyLibrary(data.library);
   };
 
-  const handleReviewSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedBookId) return;
-
-    logBook(selectedBookId, "Finished", rating, reviewText);
-    setSelectedBookId(null);
-    setShowReviewModal(false);
+  const post = async (body: Record<string, unknown>) => {
+    const res = await authFetch("/api/library", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.error || "Request failed");
+    applyLibrary(data.library);
+    return data;
   };
+
+  const shareUrl =
+    typeof window !== "undefined" && currentUser?.username
+      ? `${window.location.origin}/u/${currentUser.username}/library`
+      : currentUser?.username
+        ? `/u/${currentUser.username}/library`
+        : "";
+
+  const theme = (library?.settings.theme || "walnut") as ShelfThemeId;
+  const viewMode = library?.settings.viewMode || "bookshelf";
+  const stats = library?.stats;
+
+  if (loading || isProfileLoading || !library) {
+    return (
+      <div className="min-h-screen bg-cream flex flex-col">
+        <Header />
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-xs text-charcoal-muted font-medium">Opening your shelves…</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-cream flex flex-col">
       <Header />
 
-      <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-10 space-y-12">
-        
-        {/* Profile Header */}
-        <div className="flex flex-col md:flex-row items-center justify-between border-b border-cream-border/60 pb-6 gap-4">
-          <div className="flex items-center gap-4 text-center md:text-left">
-            <UserAvatar avatarUrl={currentUser.avatar} name={currentUser.name} size={56} className="border border-cream-border shadow-sm" />
-            <div>
-              <h1 className="font-serif text-3xl font-bold text-charcoal">
-                {currentUser.name}&rsquo;s Library
-              </h1>
-              <p className="text-xs text-charcoal-muted mt-0.5">
-                Curating a digital bookshelf of {userLogs.length} logged{" "}
-                {userLogs.length === 1 ? "work" : "works"}
-              </p>
-            </div>
+      <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-10 space-y-10">
+        {/* Hero */}
+        <section className="space-y-5 pb-8 border-b border-cream-border">
+          <div className="space-y-2 max-w-2xl">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-brand">Collection</p>
+            <h1 className="font-serif text-4xl md:text-5xl font-bold text-charcoal tracking-tight">
+              My Library
+            </h1>
+            <p className="text-sm text-charcoal-muted leading-relaxed">
+              A collection of every book that tells your story. Organize your books, build beautiful
+              shelves, and share your library with friends.
+            </p>
           </div>
-          
-          <div className="flex gap-4">
-            <Link
-              href="/search"
-              className="px-4 py-2 border border-cream-border bg-cream-card hover:bg-cream-dark/30 text-charcoal text-xs font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1.5"
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setAddOpen(true)}
+              className="inline-flex items-center gap-2 px-5 h-11 bg-brand hover:bg-brand-light text-cream text-xs font-bold rounded-xl shadow-md transition-colors"
             >
-              Add Books to Library <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
-        </div>
-
-        {/* 1. Currently Reading Shelf */}
-        <section className="space-y-6">
-          <div className="flex items-center gap-2">
-            <BookOpen className="w-4 h-4 text-brand" />
-            <h2 className="font-serif text-xl font-bold text-charcoal">
-              Currently Reading ({currentlyReading.length})
-            </h2>
-          </div>
-
-          {currentlyReading.length > 0 ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
-              {currentlyReading.map((book) => (
-                <div key={book.id} className="space-y-3 flex flex-col items-center group relative">
-                  <BookCard book={book} size="md" />
-                  
-                  {/* Quick Shelves Migration Control */}
-                  <div className="text-center w-full max-w-[130px]">
-                    <p className="text-xs font-semibold text-charcoal truncate">{book.title}</p>
-                    <div className="flex items-center justify-center gap-1.5 mt-2 bg-cream-card border border-cream-border rounded-lg p-1">
-                      <button
-                        onClick={() => handleMoveShelf(book.id, "Finished")}
-                        className="text-[9px] font-bold text-brand hover:underline px-1.5 py-0.5 rounded hover:bg-brand/10 transition-colors"
-                        title="Mark as Finished"
-                      >
-                        Finish
-                      </button>
-                      <span className="text-cream-border">|</span>
-                      <button
-                        onClick={() => handleMoveShelf(book.id, "Want to Read")}
-                        className="text-[9px] font-bold text-charcoal-muted hover:text-charcoal px-1.5 py-0.5 rounded hover:bg-cream-dark/50 transition-colors"
-                        title="Move to Want to Read"
-                      >
-                        Shelve
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-10 bg-cream-card border border-cream-border rounded-xl">
-              <p className="text-xs text-charcoal-muted">You are not reading any books right now.</p>
-              <Link href="/search" className="text-[10px] text-brand hover:underline font-bold mt-1 inline-block">
-                Find a book to start reading →
-              </Link>
-            </div>
-          )}
-        </section>
-
-        {/* 2. Want to Read Shelf */}
-        <section className="space-y-6 pt-6 border-t border-cream-border/60">
-          <div className="flex items-center gap-2">
-            <Heart className="w-4 h-4 text-brand" />
-            <h2 className="font-serif text-xl font-bold text-charcoal">
-              Want to Read ({wantToRead.length})
-            </h2>
-          </div>
-
-          {wantToRead.length > 0 ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
-              {wantToRead.map((book) => (
-                <div key={book.id} className="space-y-3 flex flex-col items-center group relative">
-                  <BookCard book={book} size="md" />
-
-                  <div className="text-center w-full max-w-[130px]">
-                    <p className="text-xs font-semibold text-charcoal truncate">{book.title}</p>
-                    <div className="flex items-center justify-center gap-1.5 mt-2 bg-cream-card border border-cream-border rounded-lg p-1">
-                      <button
-                        onClick={() => handleMoveShelf(book.id, "Currently Reading")}
-                        className="text-[9px] font-bold text-brand hover:underline px-1.5 py-0.5 rounded hover:bg-brand/10 transition-colors"
-                        title="Start Reading"
-                      >
-                        Read
-                      </button>
-                      <span className="text-cream-border">|</span>
-                      <button
-                        onClick={() => handleMoveShelf(book.id, "Finished")}
-                        className="text-[9px] font-bold text-charcoal-muted hover:text-charcoal px-1.5 py-0.5 rounded hover:bg-cream-dark/50 transition-colors"
-                        title="Mark as Finished"
-                      >
-                        Finish
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-10 bg-cream-card border border-cream-border rounded-xl">
-              <p className="text-xs text-charcoal-muted">No books shelved in Want to Read.</p>
-            </div>
-          )}
-        </section>
-
-        {/* 3. Finished Shelf */}
-        <section className="space-y-6 pt-6 border-t border-cream-border/60">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-brand" />
-            <h2 className="font-serif text-xl font-bold text-charcoal">
-              Finished Reading ({finished.length})
-            </h2>
-          </div>
-
-          {finished.length > 0 ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
-              {finished.map((book) => (
-                <div key={book.id} className="space-y-3 flex flex-col items-center group relative">
-                  <BookCard book={book} size="md" />
-
-                  <div className="text-center w-full max-w-[130px] space-y-1">
-                    <p className="text-xs font-semibold text-charcoal truncate">{book.title}</p>
-                    {book.userRating ? (
-                      <div className="flex justify-center">
-                        <StarDisplay rating={book.userRating} size={10} />
-                      </div>
-                    ) : (
-                      <p className="text-[10px] text-charcoal-muted italic">Shelved only</p>
-                    )}
-                    
-                    <div className="flex items-center justify-center gap-1.5 mt-2 opacity-0 group-hover:opacity-100 transition-opacity bg-cream-card border border-cream-border rounded-lg p-1">
-                      <button
-                        onClick={() => handleMoveShelf(book.id, "Currently Reading")}
-                        className="text-[9px] font-bold text-brand hover:underline px-1.5 py-0.5 rounded hover:bg-brand/10 transition-colors"
-                      >
-                        Reread
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-10 bg-cream-card border border-cream-border rounded-xl">
-              <p className="text-xs text-charcoal-muted">You haven&rsquo;t logged any finished books yet.</p>
-            </div>
-          )}
-        </section>
-
-      </main>
-
-      {/* Finished Review / Rating Modal overlay */}
-      <AnimatePresence>
-        {showReviewModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowReviewModal(false)}
-              className="absolute inset-0 bg-charcoal/30 backdrop-blur-sm"
-            />
-
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 15 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              className="relative w-full max-w-md bg-cream border border-cream-border p-6 rounded-2xl shadow-2xl z-10 space-y-6"
+              <Plus className="w-4 h-4" /> Add Books
+            </button>
+            <button
+              type="button"
+              onClick={() => setShareOpen(true)}
+              className="inline-flex items-center gap-2 px-5 h-11 bg-cream-card border border-cream-border hover:bg-cream-dark/40 text-charcoal text-xs font-bold rounded-xl transition-colors"
             >
-              <div className="flex items-center justify-between border-b border-cream-border/60 pb-3">
-                <span className="font-serif text-lg font-bold text-charcoal">
-                  Finish Reading Log
-                </span>
-                <button
-                  onClick={() => setShowReviewModal(false)}
-                  className="text-xs font-bold text-charcoal-muted hover:text-charcoal"
-                >
-                  Cancel
-                </button>
+              <Share2 className="w-4 h-4" /> Share Library
+            </button>
+          </div>
+
+          {/* Stats */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 pt-2">
+            {[
+              { label: "Books", value: stats?.books ?? 0, icon: BookOpen },
+              { label: "Authors", value: stats?.authors ?? 0, icon: Users },
+              { label: "Pages", value: (stats?.pages ?? 0).toLocaleString(), icon: ScrollText },
+              { label: "Genres", value: stats?.genres ?? 0, icon: Sparkles },
+              { label: "Years", value: stats?.years ?? 0, icon: Globe },
+            ].map((s) => (
+              <div
+                key={s.label}
+                className="bg-cream-card border border-cream-border rounded-2xl px-4 py-3 shadow-xs"
+              >
+                <div className="flex items-center justify-between text-charcoal-muted mb-1">
+                  <span className="text-[9px] font-bold uppercase tracking-widest">{s.label}</span>
+                  <s.icon className="w-3.5 h-3.5 text-brand" />
+                </div>
+                <p className="font-serif text-2xl font-bold text-charcoal">{s.value}</p>
               </div>
+            ))}
+          </div>
+        </section>
 
-              <form onSubmit={handleReviewSubmit} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-charcoal uppercase tracking-wider block">
-                    Rating (Optional)
-                  </label>
-                  <div className="flex items-center gap-1">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <button
-                        type="button"
-                        key={star}
-                        onClick={() => setRating(star)}
-                        onMouseEnter={() => setRating(star)}
-                        className="p-1 hover:scale-110 transition-transform"
-                      >
-                        <Star
-                          className={`w-6 h-6 ${
-                            rating >= star ? "fill-brand stroke-brand" : "text-cream-border"
-                          }`}
-                        />
-                      </button>
-                    ))}
-                  </div>
-                </div>
+        {/* Toolbar: views + themes */}
+        <section className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="inline-flex p-1 bg-cream-card border border-cream-border rounded-xl">
+            {(
+              [
+                { id: "bookshelf", label: "Bookshelf", icon: Columns3 },
+                { id: "covers", label: "Covers", icon: LayoutGrid },
+                { id: "compact", label: "Compact", icon: List },
+              ] as const
+            ).map((v) => (
+              <button
+                key={v.id}
+                type="button"
+                onClick={() => post({ action: "update_settings", viewMode: v.id })}
+                className={`inline-flex items-center gap-1.5 px-3 h-8 rounded-lg text-[10px] font-bold transition-colors ${
+                  viewMode === v.id
+                    ? "bg-brand text-cream shadow-sm"
+                    : "text-charcoal-muted hover:text-charcoal"
+                }`}
+              >
+                <v.icon className="w-3.5 h-3.5" /> {v.label}
+              </button>
+            ))}
+          </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-charcoal uppercase tracking-wider block">
-                    Write review (Optional)
-                  </label>
-                  <textarea
-                    rows={4}
-                    placeholder="Reflect on this book, key quotes, or thoughts in the margin..."
-                    value={reviewText}
-                    onChange={(e) => setReviewText(e.target.value)}
-                    className="w-full p-3 text-xs bg-cream-card border border-cream-border rounded-lg text-charcoal focus:outline-none focus:border-brand-muted placeholder-charcoal-muted"
-                  />
-                </div>
-
+          {viewMode === "bookshelf" && (
+            <div className="flex flex-wrap gap-1.5">
+              {(Object.keys(SHELF_THEMES) as ShelfThemeId[]).map((id) => (
                 <button
-                  type="submit"
-                  className="w-full py-2.5 bg-brand hover:bg-brand-light text-cream font-semibold text-xs rounded-lg shadow transition-colors"
+                  key={id}
+                  type="button"
+                  onClick={() => post({ action: "update_settings", theme: id })}
+                  title={SHELF_THEMES[id].label}
+                  className={`px-2.5 h-8 rounded-lg text-[9px] font-bold border transition-all ${
+                    theme === id
+                      ? "border-brand text-brand bg-brand/5"
+                      : "border-cream-border text-charcoal-muted hover:border-charcoal/30"
+                  }`}
                 >
-                  Save Entry & Move to Finished
+                  {SHELF_THEMES[id].label}
                 </button>
-              </form>
-            </motion.div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Views */}
+        {viewMode === "bookshelf" && (
+          <div className="space-y-10">
+            {library.shelves.map((shelf) => (
+              <BookshelfUnit
+                key={shelf.id}
+                shelf={shelf}
+                books={library.books}
+                theme={theme}
+                editable
+                onRename={(name, note) =>
+                  patch({ action: "rename_shelf", shelfId: shelf.id, name, note }).catch((e) =>
+                    alert(e.message),
+                  )
+                }
+                onStatus={(bookId, status) => logBook(bookId, status)}
+                onFavorite={(bookId) => {
+                  const fav = library.shelves.find((s) => s.isFavorites);
+                  if (!fav) return;
+                  patch({
+                    action: "move_book",
+                    bookId,
+                    fromShelfId: shelf.id,
+                    toShelfId: fav.id,
+                    toIndex: 0,
+                  }).catch((e) => alert(e.message));
+                }}
+                onMoveRequest={(bookId, fromShelfId) => setMoveTarget({ bookId, fromShelfId })}
+                onRemove={(bookId, shelfId) =>
+                  patch({ action: "remove_book", bookId, shelfId }).catch((e) => alert(e.message))
+                }
+                onReorder={(shelfId, bookIds) => {
+                  setLibrary((prev) => {
+                    if (!prev) return prev;
+                    return {
+                      ...prev,
+                      shelves: prev.shelves.map((s) =>
+                        s.id === shelfId ? { ...s, bookIds } : s,
+                      ),
+                    };
+                  });
+                  patch({ action: "reorder_books", shelfId, bookIds }).catch(() => load());
+                }}
+                onCrossShelfMove={(bookId, fromShelfId, toShelfId, toIndex) =>
+                  patch({ action: "move_book", bookId, fromShelfId, toShelfId, toIndex }).catch((e) =>
+                    alert(e.message),
+                  )
+                }
+              />
+            ))}
+            <CreateShelfButton onClick={() => setCreateShelfOpen(true)} />
           </div>
         )}
+
+        {viewMode === "covers" && (
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4">
+            {library.books.map((book) => (
+              <Link key={book.id} href={`/book/${book.id}`} className="group space-y-2">
+                <div className="aspect-[2/3] rounded-lg overflow-hidden shadow-md border border-cream-border group-hover:-translate-y-1 transition-transform bg-cream-dark">
+                  <CoverImage
+                    src={book.coverImage}
+                    title={book.title}
+                    author={book.author}
+                    bookId={book.id}
+                    className="w-full h-full"
+                    imgClassName="w-full h-full object-cover"
+                  />
+                </div>
+                <p className="text-[10px] font-bold text-charcoal truncate">{book.title}</p>
+              </Link>
+            ))}
+          </div>
+        )}
+
+        {viewMode === "compact" && (
+          <div className="bg-cream-card border border-cream-border rounded-2xl overflow-hidden divide-y divide-cream-border/60">
+            {library.books.map((book) => (
+              <Link
+                key={book.id}
+                href={`/book/${book.id}`}
+                className="flex items-center gap-3 px-4 py-2.5 hover:bg-cream-dark/30 transition-colors"
+              >
+                <CoverImage
+                  src={book.coverImage}
+                  title={book.title}
+                  author={book.author}
+                  bookId={book.id}
+                  className="w-8 h-11 rounded shadow-sm flex-shrink-0"
+                  imgClassName="w-full h-full object-cover"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-charcoal truncate">{book.title}</p>
+                  <p className="text-[10px] text-charcoal-muted truncate">{book.author}</p>
+                </div>
+                <span className="text-[10px] text-charcoal-muted">{book.pages}p</span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </main>
+
+      <AddBooksModal
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        onAdded={applyLibrary}
+      />
+
+      {/* Create shelf */}
+      <AnimatePresence>
+        {createShelfOpen && (
+          <ModalShell onClose={() => setCreateShelfOpen(false)} title="New shelf">
+            <form
+              className="space-y-4"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                try {
+                  await post({ action: "create_shelf", name: newShelfName });
+                  setNewShelfName("");
+                  setCreateShelfOpen(false);
+                } catch (err: any) {
+                  alert(err.message);
+                }
+              }}
+            >
+              <input
+                autoFocus
+                value={newShelfName}
+                onChange={(e) => setNewShelfName(e.target.value)}
+                placeholder="e.g. Fantasy, 2026 Reads, Signed Editions"
+                className="w-full h-11 px-3 text-sm bg-cream-card border border-cream-border rounded-xl focus:outline-none focus:border-brand-muted"
+              />
+              <button
+                type="submit"
+                className="w-full h-10 bg-brand text-cream text-xs font-bold rounded-xl"
+              >
+                Create shelf
+              </button>
+            </form>
+          </ModalShell>
+        )}
       </AnimatePresence>
+
+      {/* Move to shelf */}
+      <AnimatePresence>
+        {moveTarget && (
+          <ModalShell onClose={() => setMoveTarget(null)} title="Move to shelf">
+            <div className="space-y-1.5 max-h-64 overflow-y-auto">
+              {library.shelves.map((s: LibraryShelf) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await patch({
+                        action: "move_book",
+                        bookId: moveTarget.bookId,
+                        fromShelfId: moveTarget.fromShelfId,
+                        toShelfId: s.id,
+                        toIndex: 0,
+                      });
+                      setMoveTarget(null);
+                    } catch (err: any) {
+                      alert(err.message);
+                    }
+                  }}
+                  className="w-full text-left px-3 py-2.5 rounded-xl border border-cream-border hover:border-brand-muted text-xs font-semibold text-charcoal"
+                >
+                  {s.name}
+                </button>
+              ))}
+            </div>
+          </ModalShell>
+        )}
+      </AnimatePresence>
+
+      {/* Share */}
+      <AnimatePresence>
+        {shareOpen && (
+          <ModalShell onClose={() => setShareOpen(false)} title="Share Library">
+            <div className="space-y-4">
+              <p className="text-xs text-charcoal-muted leading-relaxed">
+                Anyone with the link can browse your collection when privacy is Public.
+              </p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-[11px] bg-cream-dark/40 border border-cream-border rounded-lg px-3 py-2 truncate">
+                  {shareUrl}
+                </code>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(shareUrl);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 1500);
+                  }}
+                  className="h-9 px-3 rounded-lg bg-brand text-cream text-[10px] font-bold inline-flex items-center gap-1"
+                >
+                  {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copied ? "Copied" : "Copy"}
+                </button>
+              </div>
+              <div className="flex gap-2">
+                {(
+                  [
+                    { id: "public", label: "Public", icon: Globe },
+                    { id: "friends", label: "Friends", icon: Users },
+                    { id: "private", label: "Private", icon: Lock },
+                  ] as const
+                ).map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => post({ action: "update_settings", privacy: p.id })}
+                    className={`flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-lg text-[10px] font-bold border ${
+                      library.settings.privacy === p.id
+                        ? "bg-brand text-cream border-brand"
+                        : "border-cream-border text-charcoal-muted"
+                    }`}
+                  >
+                    <p.icon className="w-3.5 h-3.5" /> {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </ModalShell>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function ModalShell({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+        className="absolute inset-0 bg-charcoal/40 backdrop-blur-sm"
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 12 }}
+        className="relative w-full max-w-md bg-cream border border-cream-border rounded-2xl shadow-2xl z-10 p-5 space-y-4"
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="font-serif text-lg font-bold text-charcoal">{title}</h3>
+          <button type="button" onClick={onClose} className="text-xs font-bold text-charcoal-muted">
+            Close
+          </button>
+        </div>
+        {children}
+      </motion.div>
     </div>
   );
 }
