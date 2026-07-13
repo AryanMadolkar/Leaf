@@ -109,7 +109,7 @@ export default function PublicLibraryClient() {
           <section className="max-w-6xl mx-auto px-6 pt-2 pb-16 border-t border-cream-border">
             <h2 className="font-serif text-lg font-bold text-charcoal mb-4">All covers</h2>
             <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3">
-              {(library.collectionOrder || library.books.map((b) => b.id)).slice(0, 24).map((id) => {
+              {(library.collectionOrder || library.books.map((b) => b.id)).map((id) => {
                 const book = library.books.find((b) => b.id === id);
                 if (!book) return null;
                 return (
