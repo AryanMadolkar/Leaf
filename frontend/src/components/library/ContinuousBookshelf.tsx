@@ -276,7 +276,6 @@ const ContinuousBookshelf = memo(function ContinuousBookshelf({
             <div
               className="relative w-full overflow-visible"
               style={{
-                backgroundColor: "rgba(46, 40, 30, 0.035)",
                 boxShadow: `0 12px 28px ${themeStyles.shadow}`,
               }}
             >
@@ -295,12 +294,27 @@ const ContinuousBookshelf = memo(function ContinuousBookshelf({
                   aria-hidden
                 />
 
-                <div className="flex-1 min-w-0 flex flex-col">
+                <div
+                  className="flex-1 min-w-0 flex flex-col relative"
+                  style={{ background: themeStyles.wall }}
+                >
+                  {/* Soft wood grain on the back panel */}
+                  <div
+                    className="pointer-events-none absolute inset-0 opacity-40 mix-blend-multiply"
+                    style={{
+                      backgroundImage: `
+                        repeating-linear-gradient(90deg, transparent 0 13px, rgba(0,0,0,0.04) 13px 14px),
+                        repeating-linear-gradient(0deg, transparent 0 47px, rgba(255,255,255,0.03) 47px 48px),
+                        radial-gradient(ellipse at 30% 20%, rgba(255,255,255,0.06), transparent 50%)
+                      `,
+                    }}
+                    aria-hidden
+                  />
                   {rows.map((row, rowIndex) => {
                     // Uniform bay height across the whole bookcase
                     const isLast = rowIndex === rows.length - 1;
                     return (
-                      <div key={`row-${rowIndex}`} className="relative w-full">
+                      <div key={`row-${rowIndex}`} className="relative w-full z-[1]">
                         <div
                           className="relative flex items-end justify-start min-h-0"
                           style={{
