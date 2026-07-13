@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import BookshelfUnit from "@/components/library/BookshelfUnit";
+import ContinuousBookshelf from "@/components/library/ContinuousBookshelf";
 import CoverImage from "@/components/CoverImage";
 import type { LibraryPayload } from "@/utils/library";
 import type { ShelfThemeId } from "@/components/library/shelfThemes";
@@ -38,6 +38,8 @@ export default function PublicLibraryClient() {
       cancelled = true;
     };
   }, [username]);
+
+  const favoriteIds = useMemo(() => new Set(library?.favoriteIds || []), [library?.favoriteIds]);
 
   if (loading) {
     return (
@@ -79,8 +81,8 @@ export default function PublicLibraryClient() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-6 py-10 space-y-10">
-        <section className="space-y-2 max-w-2xl">
+      <main className="w-full">
+        <section className="max-w-6xl mx-auto px-6 pt-10 pb-4 space-y-2">
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-brand">Shared collection</p>
           <h1 className="font-serif text-4xl font-bold text-charcoal tracking-tight">
             @{username}&rsquo;s Library
@@ -91,38 +93,48 @@ export default function PublicLibraryClient() {
           </p>
         </section>
 
-        <div className="space-y-10">
-          {library.shelves.map((shelf) => (
-            <BookshelfUnit
-              key={shelf.id}
-              shelf={shelf}
+        <div
+          className="w-full px-4 sm:px-8 md:px-12 lg:px-16 pb-16 pt-6"
+          style={{
+            background:
+              "linear-gradient(180deg, rgba(46,77,56,0.04) 0%, transparent 120px), radial-gradient(ellipse at 50% 0%, rgba(90,60,30,0.06), transparent 55%)",
+          }}
+        >
+          <div className="max-w-6xl mx-auto">
+            <ContinuousBookshelf
+              bookIds={library.collectionOrder || []}
               books={library.books}
               theme={theme}
               editable={false}
+              favoriteIds={favoriteIds}
             />
-          ))}
+          </div>
         </div>
 
         {library.books.length > 0 && (
-          <section className="pt-6 border-t border-cream-border">
+          <section className="max-w-6xl mx-auto px-6 pt-2 pb-16 border-t border-cream-border">
             <h2 className="font-serif text-lg font-bold text-charcoal mb-4">All covers</h2>
             <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3">
-              {library.books.slice(0, 24).map((book) => (
-                <Link
-                  key={book.id}
-                  href={`/book/${book.id}`}
-                  className="aspect-[2/3] rounded overflow-hidden shadow border border-cream-border"
-                >
-                  <CoverImage
-                    src={book.coverImage}
-                    title={book.title}
-                    author={book.author}
-                    bookId={book.id}
-                    className="w-full h-full"
-                    imgClassName="w-full h-full object-cover"
-                  />
-                </Link>
-              ))}
+              {(library.collectionOrder || library.books.map((b) => b.id)).slice(0, 24).map((id) => {
+                const book = library.books.find((b) => b.id === id);
+                if (!book) return null;
+                return (
+                  <Link
+                    key={book.id}
+                    href={`/book/${book.id}`}
+                    className="aspect-[2/3] rounded overflow-hidden shadow border border-cream-border"
+                  >
+                    <CoverImage
+                      src={book.coverImage}
+                      title={book.title}
+                      author={book.author}
+                      bookId={book.id}
+                      className="w-full h-full"
+                      imgClassName="w-full h-full object-cover"
+                    />
+                  </Link>
+                );
+              })}
             </div>
           </section>
         )}

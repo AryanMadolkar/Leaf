@@ -32,10 +32,8 @@ function SortableStandingBook({
   editable,
   status,
   isFavorite,
-  index,
   onStatus,
   onFavorite,
-  onMove,
   onRemove,
 }: {
   book: Book;
@@ -43,11 +41,9 @@ function SortableStandingBook({
   editable: boolean;
   status?: ReadingStatus;
   isFavorite?: boolean;
-  index: number;
-  onStatus: (status: "Want to Read" | "Currently Reading" | "Finished") => void;
-  onFavorite: () => void;
-  onMove: () => void;
-  onRemove: () => void;
+  onStatus?: (bookId: string, status: "Want to Read" | "Currently Reading" | "Finished") => void;
+  onFavorite?: (bookId: string) => void;
+  onRemove?: (bookId: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `${shelfId}::${book.id}`,
@@ -68,10 +64,8 @@ function SortableStandingBook({
         editable={editable}
         status={status}
         isFavorite={isFavorite}
-        index={index}
         onStatus={onStatus}
         onFavorite={onFavorite}
-        onMove={onMove}
         onRemove={onRemove}
         dragHandleProps={editable ? { ...attributes, ...listeners } : undefined}
       />
@@ -256,7 +250,7 @@ export default function BookshelfUnit({
                   </p>
                 </div>
               ) : (
-                orderedBooks.map((book, i) => (
+                orderedBooks.map((book) => (
                   <SortableStandingBook
                     key={`${shelf.id}-${book.id}`}
                     book={book}
@@ -264,11 +258,9 @@ export default function BookshelfUnit({
                     editable={!!editable}
                     status={statusByBookId?.[book.id]}
                     isFavorite={favoriteBookIds?.has(book.id)}
-                    index={i}
-                    onStatus={(s) => onStatus?.(book.id, s)}
-                    onFavorite={() => onFavorite?.(book.id)}
-                    onMove={() => onMoveRequest?.(book.id, shelf.id)}
-                    onRemove={() => onRemove?.(book.id, shelf.id)}
+                    onStatus={onStatus}
+                    onFavorite={onFavorite}
+                    onRemove={(bookId) => onRemove?.(bookId, shelf.id)}
                   />
                 ))
               )}

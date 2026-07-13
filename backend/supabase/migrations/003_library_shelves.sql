@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS public.library_shelves (
   is_favorites BOOLEAN NOT NULL DEFAULT FALSE,
   is_system BOOLEAN NOT NULL DEFAULT FALSE,
   system_key TEXT CHECK (
-    system_key IS NULL OR system_key IN ('favorites', 'reading', 'want_to_read', 'finished')
+    system_key IS NULL OR system_key IN ('favorites', 'reading', 'want_to_read', 'finished', 'collection')
   ),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (user_id, slug)

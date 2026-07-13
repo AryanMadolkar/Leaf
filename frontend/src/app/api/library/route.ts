@@ -129,37 +129,19 @@ export async function POST(request: Request) {
         });
       }
 
+      // Always add to the continuous collection shelf
       let targetShelfId = shelfId;
       if (!targetShelfId) {
-        const { data: want } = await admin
+        const { data: collection } = await admin
           .from("library_shelves")
           .select("id")
           .eq("user_id", user.id)
-          .eq("system_key", "want_to_read")
+          .eq("slug", "collection")
           .maybeSingle();
-        targetShelfId = want?.id;
+        targetShelfId = collection?.id;
       }
       if (!targetShelfId) {
-        return NextResponse.json({ success: false, error: "No shelf available" }, { status: 400 });
-      }
-
-      const { data: shelfMeta } = await admin
-        .from("library_shelves")
-        .select("is_favorites")
-        .eq("id", targetShelfId)
-        .maybeSingle();
-
-      if (shelfMeta?.is_favorites) {
-        const { count } = await admin
-          .from("library_shelf_books")
-          .select("id", { count: "exact", head: true })
-          .eq("shelf_id", targetShelfId);
-        if ((count || 0) >= 10) {
-          return NextResponse.json(
-            { success: false, error: "Favorites holds at most 10 books." },
-            { status: 400 },
-          );
-        }
+        return NextResponse.json({ success: false, error: "No collection shelf available" }, { status: 400 });
       }
 
       const { data: last } = await admin
@@ -381,6 +363,121 @@ export async function PATCH(request: Request) {
             .eq("book_id", bookId),
         ),
       );
+      const library = await fetchLibraryPayload(user.id);
+      return NextResponse.json({ success: true, library });
+    }
+
+    if (action === "reorder_collection") {
+      const bookIds = body.bookIds as string[];
+      if (!Array.isArray(bookIds)) {
+        return NextResponse.json({ success: false, error: "bookIds required" }, { status: 400 });
+      }
+      const { data: collection } = await admin
+        .from("library_shelves")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("slug", "collection")
+        .maybeSingle();
+      if (!collection) {
+        return NextResponse.json({ success: false, error: "Collection shelf not found" }, { status: 404 });
+      }
+
+      await Promise.all(
+        bookIds.map((bookId, position) =>
+          admin.from("library_shelf_books").upsert(
+            { shelf_id: collection.id, book_id: bookId, position },
+            { onConflict: "shelf_id,book_id" },
+          ),
+        ),
+      );
+
+      const library = await fetchLibraryPayload(user.id);
+      return NextResponse.json({ success: true, library });
+    }
+
+    if (action === "toggle_favorite") {
+      const bookId = String(body.bookId || "");
+      if (!bookId) {
+        return NextResponse.json({ success: false, error: "bookId required" }, { status: 400 });
+      }
+
+      const [{ data: favorites }, { data: collection }] = await Promise.all([
+        admin
+          .from("library_shelves")
+          .select("id")
+          .eq("user_id", user.id)
+          .eq("system_key", "favorites")
+          .maybeSingle(),
+        admin
+          .from("library_shelves")
+          .select("id")
+          .eq("user_id", user.id)
+          .eq("slug", "collection")
+          .maybeSingle(),
+      ]);
+
+      if (!favorites) {
+        return NextResponse.json({ success: false, error: "Favorites shelf not found" }, { status: 404 });
+      }
+
+      const { data: existing } = await admin
+        .from("library_shelf_books")
+        .select("id")
+        .eq("shelf_id", favorites.id)
+        .eq("book_id", bookId)
+        .maybeSingle();
+
+      if (existing) {
+        await admin.from("library_shelf_books").delete().eq("id", existing.id);
+      } else {
+        const { count } = await admin
+          .from("library_shelf_books")
+          .select("id", { count: "exact", head: true })
+          .eq("shelf_id", favorites.id);
+        if ((count || 0) >= 10) {
+          return NextResponse.json(
+            { success: false, error: "Favorites holds at most 10 books." },
+            { status: 400 },
+          );
+        }
+        await admin.from("library_shelf_books").insert({
+          shelf_id: favorites.id,
+          book_id: bookId,
+          position: count || 0,
+        });
+
+        // Pin to the front of the continuous collection
+        if (collection) {
+          const { data: collectionBooks } = await admin
+            .from("library_shelf_books")
+            .select("id, book_id, position")
+            .eq("shelf_id", collection.id)
+            .order("position", { ascending: true });
+
+          const ordered = (collectionBooks || []).filter((b) => b.book_id !== bookId);
+          const pinned = (collectionBooks || []).find((b) => b.book_id === bookId);
+          if (pinned) {
+            ordered.unshift(pinned);
+            await Promise.all(
+              ordered.map((b, i) =>
+                admin.from("library_shelf_books").update({ position: i }).eq("id", b.id),
+              ),
+            );
+          } else {
+            await admin.from("library_shelf_books").insert({
+              shelf_id: collection.id,
+              book_id: bookId,
+              position: 0,
+            });
+            await Promise.all(
+              ordered.map((b, i) =>
+                admin.from("library_shelf_books").update({ position: i + 1 }).eq("id", b.id),
+              ),
+            );
+          }
+        }
+      }
+
       const library = await fetchLibraryPayload(user.id);
       return NextResponse.json({ success: true, library });
     }

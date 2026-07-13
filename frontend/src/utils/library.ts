@@ -34,6 +34,11 @@ export type LibrarySettings = {
 export type LibraryPayload = {
   settings: LibrarySettings;
   shelves: LibraryShelf[];
+  /** Flat display order for the continuous bookshelf */
+  collectionOrder: string[];
+  favoriteIds: string[];
+  collectionShelfId: string | null;
+  favoritesShelfId: string | null;
   books: Book[];
   stats: {
     books: number;
@@ -56,25 +61,13 @@ const DEFAULT_SHELVES: Array<{
     slug: "favorites",
     systemKey: "favorites",
     isFavorites: true,
-    note: "Books that changed how I think.",
+    note: "Pinned to the front of your collection.",
   },
   {
-    name: "Currently Reading",
-    slug: "currently-reading",
-    systemKey: "reading",
-    note: "Open on the nightstand.",
-  },
-  {
-    name: "Want to Read",
-    slug: "want-to-read",
-    systemKey: "want_to_read",
-    note: "Waiting their turn on the shelf.",
-  },
-  {
-    name: "Finished",
-    slug: "finished",
-    systemKey: "finished",
-    note: "Stories I've lived through.",
+    name: "Collection",
+    slug: "collection",
+    systemKey: "collection",
+    note: "Your continuous home library.",
   },
 ];
 
@@ -112,51 +105,116 @@ export async function ensureLibraryForUser(userId: string) {
     .eq("user_id", userId)
     .order("position", { ascending: true });
 
-  if (!existingShelves || existingShelves.length === 0) {
-    const rows = DEFAULT_SHELVES.map((s, i) => ({
-      user_id: userId,
-      name: s.name,
-      slug: s.slug,
-      note: s.note,
-      position: i,
-      is_favorites: Boolean(s.isFavorites),
-      is_system: true,
-      system_key: s.systemKey,
-    }));
-    const { error } = await admin.from("library_shelves").insert(rows);
-    if (error) throw error;
+  let shelves = existingShelves || [];
 
-    // Seed shelf membership from existing user_books statuses
+  // Ensure favorites + collection exist (continuous bookshelf model)
+  const hasFavorites = shelves.some((s: any) => s.system_key === "favorites" || s.is_favorites);
+  const hasCollection = shelves.some(
+    (s: any) => s.system_key === "collection" || s.slug === "collection",
+  );
+
+  if (!hasFavorites) {
+    await admin.from("library_shelves").insert({
+      user_id: userId,
+      name: "Favorites",
+      slug: "favorites",
+      note: "Pinned to the front of your collection.",
+      position: 0,
+      is_favorites: true,
+      is_system: true,
+      system_key: "favorites",
+    });
+  }
+  if (!hasCollection) {
+    // Prefer system_key=collection when allowed; fall back to slug-only if CHECK blocks it
+    const collectionRow = {
+      user_id: userId,
+      name: "Collection",
+      slug: "collection",
+      note: "Your continuous home library.",
+      position: 1,
+      is_favorites: false,
+      is_system: true,
+      system_key: "collection" as string | null,
+    };
+    let { error: collErr } = await admin.from("library_shelves").insert(collectionRow);
+    if (collErr) {
+      collectionRow.system_key = null;
+      const retry = await admin.from("library_shelves").insert(collectionRow);
+      if (retry.error) throw retry.error;
+    }
+  }
+
+  if (!existingShelves || existingShelves.length === 0) {
+    // Seed collection from user_books
     const { data: userBooks } = await admin
       .from("user_books")
-      .select("book_id, status")
+      .select("book_id")
       .eq("user_id", userId);
 
-    const { data: shelves } = await admin
+    const { data: refreshed } = await admin
       .from("library_shelves")
-      .select("id, system_key")
+      .select("id, system_key, slug")
       .eq("user_id", userId);
-
-    const byKey = new Map((shelves || []).map((s: any) => [s.system_key, s.id]));
-    const membership: any[] = [];
-    const counters: Record<string, number> = {};
-
-    for (const ub of userBooks || []) {
-      let key = "finished";
-      if (ub.status === "reading") key = "reading";
-      else if (ub.status === "want_to_read") key = "want_to_read";
-      const shelfId = byKey.get(key);
-      if (!shelfId || !ub.book_id) continue;
-      const pos = counters[shelfId] || 0;
-      counters[shelfId] = pos + 1;
-      membership.push({ shelf_id: shelfId, book_id: ub.book_id, position: pos });
-    }
-
-    if (membership.length) {
+    shelves = refreshed || [];
+    const collectionId = shelves.find(
+      (s: any) => s.system_key === "collection" || s.slug === "collection",
+    )?.id;
+    if (collectionId && userBooks?.length) {
+      const membership = userBooks
+        .filter((ub: any) => ub.book_id)
+        .map((ub: any, i: number) => ({
+          shelf_id: collectionId,
+          book_id: ub.book_id,
+          position: i,
+        }));
       await admin.from("library_shelf_books").upsert(membership, {
         onConflict: "shelf_id,book_id",
         ignoreDuplicates: true,
       });
+    }
+  } else if (!hasCollection) {
+    // Migrate legacy multi-shelf libraries into one collection order
+    const { data: refreshed } = await admin
+      .from("library_shelves")
+      .select("id, system_key, slug, is_favorites")
+      .eq("user_id", userId);
+    shelves = refreshed || [];
+    const collectionId = shelves.find(
+      (s: any) => s.system_key === "collection" || s.slug === "collection",
+    )?.id;
+    const shelfIds = shelves.map((s: any) => s.id);
+    const { data: allMembership } = await admin
+      .from("library_shelf_books")
+      .select("shelf_id, book_id, position")
+      .in("shelf_id", shelfIds)
+      .order("position", { ascending: true });
+
+    const seen = new Set<string>();
+    const order: string[] = [];
+    for (const row of allMembership || []) {
+      if (!row.book_id || seen.has(row.book_id)) continue;
+      seen.add(row.book_id);
+      order.push(row.book_id);
+    }
+
+    // Also pull any user_books not yet on a shelf
+    const { data: userBooks } = await admin
+      .from("user_books")
+      .select("book_id")
+      .eq("user_id", userId);
+    for (const ub of userBooks || []) {
+      if (ub.book_id && !seen.has(ub.book_id)) {
+        seen.add(ub.book_id);
+        order.push(ub.book_id);
+      }
+    }
+
+    if (collectionId && order.length) {
+      await admin.from("library_shelf_books").upsert(
+        order.map((book_id, position) => ({ shelf_id: collectionId, book_id, position })),
+        { onConflict: "shelf_id,book_id" },
+      );
     }
   }
 
@@ -213,6 +271,46 @@ export async function fetchLibraryPayload(userId: string): Promise<LibraryPayloa
     bookIds: booksByShelf.get(s.id) || [],
   }));
 
+  const favoritesShelf = mappedShelves.find((s) => s.isFavorites || s.systemKey === "favorites");
+  const collectionShelf = mappedShelves.find(
+    (s) => s.systemKey === "collection" || s.slug === "collection",
+  );
+  const favoriteIds = favoritesShelf?.bookIds || [];
+
+  // Collection shelf is the physical order. Favorites are pins/stars only.
+  const seen = new Set<string>();
+  const collectionOrder: string[] = [];
+  for (const id of collectionShelf?.bookIds || []) {
+    if (!seen.has(id)) {
+      seen.add(id);
+      collectionOrder.push(id);
+    }
+  }
+  // If collection is empty (legacy), flatten other shelves once
+  if (!collectionOrder.length) {
+    for (const s of mappedShelves) {
+      if (s.systemKey === "favorites") continue;
+      for (const id of s.bookIds) {
+        if (!seen.has(id)) {
+          seen.add(id);
+          collectionOrder.push(id);
+        }
+      }
+    }
+  }
+  for (const id of favoriteIds) {
+    if (!seen.has(id)) {
+      seen.add(id);
+      collectionOrder.push(id);
+    }
+  }
+  for (const b of books) {
+    if (!seen.has(b.id)) {
+      seen.add(b.id);
+      collectionOrder.push(b.id);
+    }
+  }
+
   const authors = new Set(books.map((b) => b.author).filter(Boolean));
   const genres = new Set(books.flatMap((b) => b.genres || []));
   const years = new Set(books.map((b) => b.year).filter((y) => y && y > 0));
@@ -225,6 +323,10 @@ export async function fetchLibraryPayload(userId: string): Promise<LibraryPayloa
       viewMode: (settings?.view_mode as LibraryViewMode) || "bookshelf",
     },
     shelves: mappedShelves,
+    collectionOrder,
+    favoriteIds,
+    collectionShelfId: collectionShelf?.id || null,
+    favoritesShelfId: favoritesShelf?.id || null,
     books,
     stats: {
       books: books.length,
