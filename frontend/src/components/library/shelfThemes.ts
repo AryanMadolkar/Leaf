@@ -1,8 +1,8 @@
 export type ShelfThemeId = "walnut" | "oak" | "dark" | "minimal" | "modern" | "vintage";
 
-/** Shared parchment wall — quiet luxury bookstore backdrop */
+/** Luxury built-in bookshelf backing — warm parchment/linen */
 export const BOOKCASE_WALL =
-  "linear-gradient(180deg, #F7F4EE 0%, #F4F0E8 48%, #EFE8DD 100%)";
+  "linear-gradient(180deg, #F2ECDD 0%, #EEE6D6 52%, #E8DECC 100%)";
 
 export const SHELF_THEMES: Record<
   ShelfThemeId,

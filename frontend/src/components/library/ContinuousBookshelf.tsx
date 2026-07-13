@@ -296,37 +296,41 @@ const ContinuousBookshelf = memo(function ContinuousBookshelf({
 
                 <div
                   className="flex-1 min-w-0 flex flex-col relative"
-                  style={{ background: themeStyles.wall }}
+                  style={{
+                    background: themeStyles.wall,
+                    // Ambient occlusion where backing meets wood frame
+                    boxShadow:
+                      "inset 10px 0 14px -10px rgba(90,70,40,0.08), inset -10px 0 14px -10px rgba(90,70,40,0.08), inset 0 8px 12px -10px rgba(90,70,40,0.07), inset 0 -6px 10px -8px rgba(90,70,40,0.06)",
+                  }}
                 >
-                  {/* Parchment texture — barely visible paper/plaster */}
+                  {/* Soft radial depth — center light, warmer edges */}
                   <div
                     className="pointer-events-none absolute inset-0 z-0"
                     style={{
-                      opacity: 0.35,
+                      background:
+                        "radial-gradient(ellipse 75% 65% at 50% 45%, rgba(255,248,235,0.9) 0%, rgba(225,210,185,0.55) 55%, rgba(225,210,185,0.95) 100%)",
+                    }}
+                    aria-hidden
+                  />
+                  {/* Linen/paper grain — 2–3% opacity */}
+                  <div
+                    className="pointer-events-none absolute inset-0 z-0"
+                    style={{
+                      opacity: 0.025,
                       backgroundImage: `
-                        url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.55 0 0 0 0 0.5 0 0 0 0 0.42 0 0 0 0.45 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")
+                        url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E")
                       `,
-                      backgroundSize: "180px 180px",
+                      backgroundSize: "220px 220px",
                       mixBlendMode: "multiply",
                     }}
                     aria-hidden
                   />
-                  {/* Soft radial light at center */}
+                  {/* Edge vignette */}
                   <div
                     className="pointer-events-none absolute inset-0 z-0"
                     style={{
                       background:
-                        "radial-gradient(ellipse 70% 55% at 50% 42%, rgba(255,252,246,0.55) 0%, rgba(255,252,246,0.12) 42%, transparent 72%)",
-                    }}
-                    aria-hidden
-                  />
-                  {/* Gentle vignette — edges only */}
-                  <div
-                    className="pointer-events-none absolute inset-0 z-0"
-                    style={{
-                      background:
-                        "radial-gradient(ellipse 85% 80% at 50% 50%, transparent 55%, rgba(90,70,45,0.04) 100%)",
-                      boxShadow: "inset 0 0 48px rgba(70,55,35,0.035)",
+                        "radial-gradient(ellipse 88% 82% at 50% 50%, transparent 50%, rgba(120,95,60,0.045) 100%)",
                     }}
                     aria-hidden
                   />
@@ -358,14 +362,14 @@ const ContinuousBookshelf = memo(function ContinuousBookshelf({
                             />
                           ))}
                         </div>
-                        {/* Ambient contact shadow where shelf meets the wall */}
+                        {/* AO where shelf plank meets the backing */}
                         <div
                           className="pointer-events-none absolute left-0 right-0 z-[2]"
                           style={{
                             bottom: isLast ? PLANK_H + 4 : PLANK_H,
-                            height: 10,
+                            height: 14,
                             background:
-                              "linear-gradient(180deg, transparent 0%, rgba(55,40,25,0.06) 100%)",
+                              "linear-gradient(180deg, transparent 0%, rgba(90,70,40,0.05) 70%, rgba(90,70,40,0.09) 100%)",
                           }}
                           aria-hidden
                         />

@@ -250,8 +250,8 @@ const StandingBook = memo(function StandingBook({
           className="absolute inset-0 origin-bottom focus:outline-none cursor-pointer transition-transform duration-200 ease-out"
           style={{
             boxShadow: hovered
-              ? "3px 10px 18px rgba(0,0,0,0.32)"
-              : "1px 3px 6px rgba(0,0,0,0.26)",
+              ? "2px 8px 16px rgba(70,55,35,0.22), 0 2px 4px rgba(70,55,35,0.1)"
+              : "1px 2px 5px rgba(70,55,35,0.16), 0 1px 2px rgba(70,55,35,0.08)",
             transform: hovered ? "translateY(-8px)" : "translateY(0)",
             zIndex: hovered ? 25 : 1,
           }}
