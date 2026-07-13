@@ -29,7 +29,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function UserLibraryPage() {
-  const { currentUser, logBook, isProfileLoading } = useLeaf();
+  const { currentUser, logBook, isProfileLoading, diaryLogs } = useLeaf();
   const [library, setLibrary] = useState<LibraryPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
@@ -62,6 +62,21 @@ export default function UserLibraryPage() {
     (library?.books || []).forEach((b) => m.set(b.id, b));
     return m;
   }, [library?.books]);
+
+  const statusByBookId = useMemo(() => {
+    const map: Record<string, "Want to Read" | "Currently Reading" | "Finished"> = {};
+    diaryLogs
+      .filter((l) => l.userId === currentUser.id)
+      .forEach((l) => {
+        map[l.bookId] = l.status;
+      });
+    return map;
+  }, [diaryLogs, currentUser.id]);
+
+  const favoriteBookIds = useMemo(() => {
+    const fav = library?.shelves.find((s) => s.isFavorites);
+    return new Set(fav?.bookIds || []);
+  }, [library?.shelves]);
 
   const applyLibrary = (next: LibraryPayload) => setLibrary(next);
 
@@ -224,6 +239,8 @@ export default function UserLibraryPage() {
                 books={library.books}
                 theme={theme}
                 editable
+                statusByBookId={statusByBookId}
+                favoriteBookIds={favoriteBookIds}
                 onRename={(name, note) =>
                   patch({ action: "rename_shelf", shelfId: shelf.id, name, note }).catch((e) =>
                     alert(e.message),
