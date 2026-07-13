@@ -122,7 +122,7 @@ const SortableBook = memo(function SortableBook({
   };
 
   return (
-    <div ref={setNodeRef} style={style}>
+    <div ref={setNodeRef} style={style} className="relative hover:z-50">
       <StandingBook
         book={book}
         editable={editable}
@@ -274,7 +274,7 @@ const ContinuousBookshelf = memo(function ContinuousBookshelf({
         >
           <SortableContext items={sortableIds} strategy={horizontalListSortingStrategy}>
             <div
-              className="relative w-full overflow-hidden"
+              className="relative w-full overflow-visible"
               style={{
                 backgroundColor: "rgba(46, 40, 30, 0.035)",
                 boxShadow: `0 12px 28px ${themeStyles.shadow}`,

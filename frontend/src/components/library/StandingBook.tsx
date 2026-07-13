@@ -87,7 +87,7 @@ const StandingBook = memo(function StandingBook({
 
   return (
     <div
-      className="relative flex-shrink-0 group/book"
+      className="relative flex-shrink-0 group/book z-0 hover:z-50"
       style={{ width: dims.w, height: dims.h }}
     >
       <div className="absolute inset-0" {...dragHandleProps}>
@@ -190,8 +190,8 @@ const StandingBook = memo(function StandingBook({
         </Link>
       </div>
 
-      {/* Cover preview — CSS only, no JS hover state */}
-      <div className="absolute left-1/2 -translate-x-1/2 bottom-[calc(100%+12px)] z-40 w-56 pointer-events-none opacity-0 translate-y-1 scale-[0.97] transition-[opacity,transform] duration-150 group-hover/book:opacity-100 group-hover/book:translate-y-0 group-hover/book:scale-100 group-hover/book:pointer-events-auto">
+      {/* Cover preview — escapes shelf bay; parent bookcase must be overflow-visible */}
+      <div className="absolute left-1/2 -translate-x-1/2 bottom-[calc(100%+10px)] z-[60] w-56 pointer-events-none opacity-0 translate-y-1 scale-[0.97] transition-[opacity,transform] duration-150 group-hover/book:opacity-100 group-hover/book:translate-y-0 group-hover/book:scale-100 group-hover/book:pointer-events-auto">
         <div className="bg-cream border border-cream-border rounded-xl shadow-2xl overflow-hidden">
           <div className="flex gap-2.5 p-2.5">
             <CoverImage
