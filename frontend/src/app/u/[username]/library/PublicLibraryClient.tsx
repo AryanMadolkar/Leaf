@@ -7,7 +7,7 @@ import ContinuousBookshelf from "@/components/library/ContinuousBookshelf";
 import CoverImage from "@/components/CoverImage";
 import type { LibraryPayload } from "@/utils/library";
 import type { ShelfThemeId } from "@/components/library/shelfThemes";
-import { BookOpen, ArrowLeft } from "lucide-react";
+import { BookOpen } from "lucide-react";
 
 export default function PublicLibraryClient() {
   const params = useParams();
@@ -67,16 +67,10 @@ export default function PublicLibraryClient() {
   return (
     <div className="min-h-screen bg-cream">
       <header className="border-b border-cream-border bg-cream/90 backdrop-blur sticky top-0 z-20">
-        <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-6 h-14 flex items-center">
           <Link href="/" className="flex items-center gap-2 group">
             <BookOpen className="w-4 h-4 text-brand" />
             <span className="font-serif text-lg font-bold text-charcoal">Leaf</span>
-          </Link>
-          <Link
-            href={`/profile/${username}`}
-            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-charcoal-muted hover:text-charcoal"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" /> @{username}
           </Link>
         </div>
       </header>
