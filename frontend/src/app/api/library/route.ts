@@ -23,19 +23,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });
       }
       targetUserId = profile.id;
-
-      const { data: settings } = await admin
-        .from("library_settings")
-        .select("privacy")
-        .eq("user_id", profile.id)
-        .maybeSingle();
-
-      const privacy = settings?.privacy || "public";
-      const isOwner = user?.id === profile.id;
-      if (!isOwner && privacy === "private") {
-        return NextResponse.json({ success: false, error: "This library is private." }, { status: 403 });
-      }
-      // friends privacy: treat as public for now (no friends graph gating yet)
+      // Shared /u/[username]/library links are always viewable
     }
 
     if (!targetUserId) {

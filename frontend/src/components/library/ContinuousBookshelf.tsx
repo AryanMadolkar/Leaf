@@ -27,11 +27,14 @@ import {
 } from "./spineUtils";
 import type { Book } from "@/data/mockData";
 
-const ROW_GAP = 56;
-const PLANK_H = 14;
+const ROW_GAP = 48;
+const PLANK_H = 12;
+const SIDE_W = 14;
+const TOP_H = 16;
 const BOOK_GAP = 1;
 const MIN_SHELVES = 4;
-const EMPTY_SHELF_H = 200;
+const EMPTY_SHELF_H = 190;
+const BOOK_INSET = 10;
 
 function packIntoRows(books: Book[], containerWidth: number): Book[][] {
   if (!books.length || containerWidth <= 0) return [];
@@ -55,24 +58,28 @@ function packIntoRows(books: Book[], containerWidth: number): Book[][] {
   return rows;
 }
 
-function ShelfPlank({
+function WoodBar({
   themeStyles,
+  height,
+  className = "",
 }: {
   themeStyles: (typeof SHELF_THEMES)[ShelfThemeId];
+  height: number;
+  className?: string;
 }) {
   return (
     <div
-      className="relative w-full rounded-[1px] overflow-hidden"
+      className={`relative overflow-hidden ${className}`}
       style={{
-        height: PLANK_H,
+        height,
         background: themeStyles.plank,
-        boxShadow: `0 6px 14px ${themeStyles.shadow}, inset 0 1px 0 rgba(255,255,255,0.18)`,
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.18), 0 2px 6px ${themeStyles.shadow}`,
       }}
       aria-hidden
     >
-      <div className="absolute inset-x-0 bottom-0 h-[3px]" style={{ background: themeStyles.edge }} />
+      <div className="absolute inset-x-0 bottom-0 h-[2px]" style={{ background: themeStyles.edge }} />
       <div
-        className="absolute inset-0 opacity-30 pointer-events-none"
+        className="absolute inset-0 opacity-25 pointer-events-none"
         style={{
           backgroundImage:
             "repeating-linear-gradient(90deg, transparent 0 11px, rgba(0,0,0,0.06) 11px 12px)",
@@ -183,7 +190,10 @@ const ContinuousBookshelf = memo(function ContinuousBookshelf({
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    const measure = () => setWidth(el.clientWidth);
+    const measure = () => {
+      // Pack into the bay between side rails, minus book inset
+      setWidth(Math.max(0, el.clientWidth - SIDE_W * 2 - BOOK_INSET * 2));
+    };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
@@ -241,11 +251,6 @@ const ContinuousBookshelf = memo(function ContinuousBookshelf({
   const activeBook = activeId ? bookMap.get(activeId) : null;
   const canDrag = editable && !reorderDisabled;
 
-  const bookcaseFrame = {
-    background: `linear-gradient(90deg, ${themeStyles.edge} 0%, transparent 12px, transparent calc(100% - 12px), ${themeStyles.edge} 100%)`,
-    boxShadow: `inset 0 0 0 1px ${themeStyles.edge}55`,
-  };
-
   return (
     <div ref={containerRef} className="w-full">
       {width <= 0 ? (
@@ -259,65 +264,79 @@ const ContinuousBookshelf = memo(function ContinuousBookshelf({
         >
           <SortableContext items={sortableIds} strategy={horizontalListSortingStrategy}>
             <div
-              className="relative rounded-sm px-3 pt-4 pb-3"
+              className="relative w-full overflow-hidden"
               style={{
-                ...bookcaseFrame,
-                backgroundColor: "rgba(46, 40, 30, 0.04)",
+                backgroundColor: "rgba(46, 40, 30, 0.035)",
+                boxShadow: `0 12px 28px ${themeStyles.shadow}`,
               }}
             >
-              {/* Side rails */}
-              <div
-                className="pointer-events-none absolute inset-y-2 left-0 w-2.5 rounded-sm"
-                style={{ background: themeStyles.plank, boxShadow: `2px 0 6px ${themeStyles.shadow}` }}
-                aria-hidden
-              />
-              <div
-                className="pointer-events-none absolute inset-y-2 right-0 w-2.5 rounded-sm"
-                style={{ background: themeStyles.plank, boxShadow: `-2px 0 6px ${themeStyles.shadow}` }}
-                aria-hidden
-              />
+              {/* Top crown — full width */}
+              <WoodBar themeStyles={themeStyles} height={TOP_H} className="w-full" />
 
-              <div className="flex flex-col px-2" style={{ gap: ROW_GAP }}>
-                {rows.map((row, rowIndex) => {
-                  const maxH = row.length
-                    ? Math.max(...row.map((b) => spineHeightFromSeed(`${b.id}:${b.title}`)), 170)
-                    : EMPTY_SHELF_H;
-                  return (
-                    <div key={`row-${rowIndex}`} className="relative w-full">
-                      <div
-                        className="relative flex items-end justify-start min-h-0"
-                        style={{ height: maxH, gap: BOOK_GAP }}
-                      >
-                        {row.map((book) => (
-                          <SortableBook
-                            key={book.id}
-                            book={book}
-                            editable={editable}
-                            disabled={!canDrag}
-                            status={statusByBookId?.[book.id]}
-                            isFavorite={favoriteIds?.has(book.id)}
-                            onStatus={onStatus}
-                            onFavorite={onFavorite}
-                            onRemove={onRemove}
-                          />
-                        ))}
+              {/* Sides + shelves as one connected frame */}
+              <div className="flex w-full items-stretch">
+                <div
+                  className="flex-shrink-0 self-stretch"
+                  style={{
+                    width: SIDE_W,
+                    background: themeStyles.plank,
+                    boxShadow: `inset -1px 0 0 ${themeStyles.edge}`,
+                  }}
+                  aria-hidden
+                />
+
+                <div className="flex-1 min-w-0 flex flex-col" style={{ gap: ROW_GAP }}>
+                  {rows.map((row, rowIndex) => {
+                    const maxH = row.length
+                      ? Math.max(...row.map((b) => spineHeightFromSeed(`${b.id}:${b.title}`)), 170)
+                      : EMPTY_SHELF_H;
+                    const isLast = rowIndex === rows.length - 1;
+                    return (
+                      <div key={`row-${rowIndex}`} className="relative w-full">
+                        <div
+                          className="relative flex items-end justify-start min-h-0"
+                          style={{
+                            height: maxH,
+                            gap: BOOK_GAP,
+                            paddingLeft: BOOK_INSET,
+                            paddingRight: BOOK_INSET,
+                          }}
+                        >
+                          {row.map((book) => (
+                            <SortableBook
+                              key={book.id}
+                              book={book}
+                              editable={editable}
+                              disabled={!canDrag}
+                              status={statusByBookId?.[book.id]}
+                              isFavorite={favoriteIds?.has(book.id)}
+                              onStatus={onStatus}
+                              onFavorite={onFavorite}
+                              onRemove={onRemove}
+                            />
+                          ))}
+                        </div>
+                        {/* Shelf spans full bay width — flush to both sides */}
+                        <WoodBar
+                          themeStyles={themeStyles}
+                          height={isLast ? PLANK_H + 4 : PLANK_H}
+                          className="w-full"
+                        />
                       </div>
-                      <ShelfPlank themeStyles={themeStyles} />
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
 
-              {/* Base plinth */}
-              <div
-                className="mt-3 h-4 rounded-[1px] mx-0"
-                style={{
-                  background: themeStyles.plank,
-                  boxShadow: `0 8px 16px ${themeStyles.shadow}`,
-                  borderBottom: `3px solid ${themeStyles.edge}`,
-                }}
-                aria-hidden
-              />
+                <div
+                  className="flex-shrink-0 self-stretch"
+                  style={{
+                    width: SIDE_W,
+                    background: themeStyles.plank,
+                    boxShadow: `inset 1px 0 0 ${themeStyles.edge}`,
+                  }}
+                  aria-hidden
+                />
+              </div>
             </div>
           </SortableContext>
 
