@@ -3,7 +3,7 @@ import crypto from "crypto";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { getRequestUser } from "@/utils/auth/getRequestUser";
 import { recalculateUserStats } from "@/utils/supabaseStats";
-import { getBookById } from "@/utils/booksApi";
+import { getBookById, ensureBookRow } from "@/utils/booksApi";
 import { mapUserBookToDiaryLog } from "@/utils/diaryLogs";
 
 export async function GET(request: Request) {
@@ -70,14 +70,16 @@ export async function POST(request: Request) {
 
     const today = new Date().toISOString().split("T")[0];
 
-    // 1. Get book page count and ensure it is cached
+    // 1. Get book page count and ensure it is cached in `books` (FK required)
     let totalPages = 300;
+    let resolvedBookId = bookId;
     try {
       const book = await getBookById(bookId);
       if (!book) {
         return NextResponse.json({ success: false, error: "Book not found or could not be cached" }, { status: 404 });
       }
       totalPages = book.pages || 300;
+      resolvedBookId = await ensureBookRow(book);
     } catch (err: any) {
       console.error(`Error resolving book details for reading session:`, err);
       return NextResponse.json({ success: false, error: "Database integration error caching book details" }, { status: 500 });
@@ -90,7 +92,7 @@ export async function POST(request: Request) {
       .insert({
         id: sessionId,
         user_id: user.id,
-        book_id: bookId,
+        book_id: resolvedBookId,
         pages_read: pagesRead,
         start_page: startPage,
         end_page: endPage,
@@ -106,7 +108,7 @@ export async function POST(request: Request) {
       .from("user_books")
       .select("id, status")
       .eq("user_id", user.id)
-      .eq("book_id", bookId)
+      .eq("book_id", resolvedBookId)
       .maybeSingle();
     
     const isCompleted = endPage >= totalPages;
@@ -136,7 +138,7 @@ export async function POST(request: Request) {
         .insert({
           id: crypto.randomUUID(),
           user_id: user.id,
-          book_id: bookId,
+          book_id: resolvedBookId,
           status: nextStatus,
           started_at: today,
           finished_at: isCompleted ? today : null,

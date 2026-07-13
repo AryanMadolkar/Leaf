@@ -933,12 +933,15 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
           return;
         }
+        throw new Error(data.error || "Could not save book to your shelf.");
       }
-      console.warn("Server logBook failed, falling back to local storage.");
-      await saveBookLocally(bookId, status, rating, reviewContent);
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.error || `Could not save book (${res.status}).`);
     } catch (err) {
-      console.error("Failed to log book shelf update, falling back to local storage:", err);
-      await saveBookLocally(bookId, status, rating, reviewContent);
+      console.error("Failed to log book shelf update:", err);
+      // Authenticated users must not silently fall back to localStorage — refresh would wipe it.
+      // Keep the optimistic row visible but rethrow so callers can surface the failure.
+      throw err instanceof Error ? err : new Error("Failed to save book to your shelf.");
     }
   };
 

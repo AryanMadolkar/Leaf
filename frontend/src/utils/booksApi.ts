@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { createClient } from "@/utils/supabase/server";
 import { createPublicClient } from "@/utils/supabase/public";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { Book, INITIAL_BOOKS } from "@/data/mockData";
 import { COVER_ID_BY_ISBN } from "@/data/coverOverrides";
 import { coverUrlFromCoverId, coverUrlFromIsbn, withOpenLibraryDefaultFalse } from "@/utils/covers";
@@ -156,14 +157,12 @@ async function getSupportedColumns(supabaseClient: any): Promise<Set<string>> {
   return cols;
 }
 
-// Save a normalized book record to Supabase
+// Save a normalized book record to Supabase (service role — RLS blocks anon inserts under custom JWT auth)
 export async function saveBookToDatabase(book: Omit<NormalizedBook, "id">): Promise<string> {
-  const supabase = await createClient();
-  
-  // Decide the ID to use: prefer open_library_key or ISBN, otherwise generate a UUID
   const bookId = getCanonicalBookId(book);
 
   try {
+    const supabase = createAdminClient();
     const supportedCols = await getSupportedColumns(supabase);
 
     // Check if book already exists in DB
@@ -212,8 +211,53 @@ export async function saveBookToDatabase(book: Omit<NormalizedBook, "id">): Prom
     }
   } catch (error) {
     console.error("Failed to save book to Supabase:", error);
-    return bookId;
+    throw error instanceof Error ? error : new Error("Failed to save book to database");
   }
+}
+
+/**
+ * Guarantee a `books` row exists for a client Book before writing user_books
+ * (FK requires books.id). Uses service role so custom-JWT auth still works.
+ */
+export async function ensureBookRow(book: Book): Promise<string> {
+  const id = book.id;
+  if (!id) throw new Error("Cannot ensure book row without an id");
+
+  const supabase = createAdminClient();
+  const { data: existing } = await supabase.from("books").select("id").eq("id", id).maybeSingle();
+  if (existing?.id) return existing.id;
+
+  // Also try matching by open library key / isbn variants of this id
+  const cleanKey = id.replace(/^\/works\//, "");
+  const { data: byKey } = await supabase
+    .from("books")
+    .select("id")
+    .or(
+      `id.eq."${cleanKey}",open_library_key.eq."${cleanKey}",open_library_key.eq."/works/${cleanKey}",isbn_13.eq."${id}",isbn_10.eq."${id}"`,
+    )
+    .maybeSingle();
+  if (byKey?.id) return byKey.id;
+
+  const openLibraryKey = /^OL/i.test(cleanKey) ? `/works/${cleanKey}` : null;
+  const payload: Record<string, unknown> = {
+    id: cleanKey,
+    open_library_key: openLibraryKey,
+    title: book.title || "Untitled",
+    author_name: book.author || "Unknown Author",
+    cover_url: book.coverImage || null,
+    page_count: book.pages || 300,
+    description: book.description || null,
+    first_publish_year: book.year || null,
+    subjects: JSON.stringify(book.genres || ["Fiction"]),
+    language: "eng",
+  };
+
+  const { error } = await supabase.from("books").upsert(payload, { onConflict: "id" });
+  if (error) {
+    console.error("[ensureBookRow] upsert failed:", error);
+    throw new Error(`Could not cache book "${book.title}": ${error.message}`);
+  }
+  return cleanKey;
 }
 
 // Get Cached Book by various keys (using single query or filter)

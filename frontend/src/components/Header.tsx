@@ -382,8 +382,13 @@ export default function Header() {
     setLogReview("");
     setLogStatus("Finished");
 
-    await logBook(book.id, status, rating, review);
-    router.push("/diary");
+    try {
+      await logBook(book.id, status, rating, review);
+      router.push("/diary");
+    } catch (err: any) {
+      console.error("Log submit failed:", err);
+      alert(err?.message || "Could not save this book. Please try again.");
+    }
   };
 
   // Get active "Currently Reading" books

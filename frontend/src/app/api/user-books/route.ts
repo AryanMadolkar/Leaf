@@ -4,7 +4,7 @@ import { createServerClient } from "@supabase/ssr";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { getRequestUser } from "@/utils/auth/getRequestUser";
 import { recalculateUserStats } from "@/utils/supabaseStats";
-import { getBookById } from "@/utils/booksApi";
+import { getBookById, ensureBookRow } from "@/utils/booksApi";
 import { mapUserBookToDiaryLog } from "@/utils/diaryLogs";
 
 // 1. Environment verification helper
@@ -196,8 +196,9 @@ export async function POST(request: Request) {
 
     const today = new Date().toISOString().split("T")[0];
 
-    // 6. Resolve / Cache book
+    // 6. Resolve / Cache book — must exist in `books` before user_books FK insert
     let totalPages = 300;
+    let resolvedBookId = bookId;
     try {
       console.log("[DEBUG] [user-books] Resolving book metadata for bookId:", bookId);
       const book = await getBookById(bookId);
@@ -206,7 +207,8 @@ export async function POST(request: Request) {
         return NextResponse.json({ success: false, error: "Book not found or could not be cached" }, { status: 404 });
       }
       totalPages = book.pages || 300;
-      console.log(`[DEBUG] [user-books] Resolved book: "${book.title}", page count: ${totalPages}`);
+      resolvedBookId = await ensureBookRow(book);
+      console.log(`[DEBUG] [user-books] Resolved book: "${book.title}", db id: ${resolvedBookId}, pages: ${totalPages}`);
     } catch (err: any) {
       console.error(`[DEBUG] [user-books] Error caching/resolving book detail:`, err);
       console.error(err.stack);
@@ -219,7 +221,7 @@ export async function POST(request: Request) {
       .from("user_books")
       .select("id, started_at, finished_at, current_page")
       .eq("user_id", user.id)
-      .eq("book_id", bookId)
+      .eq("book_id", resolvedBookId)
       .maybeSingle();
 
     if (fetchError) {
@@ -266,7 +268,7 @@ export async function POST(request: Request) {
       const insertPayload: any = {
         id: crypto.randomUUID(),
         user_id: user.id,
-        book_id: bookId,
+        book_id: resolvedBookId,
         status: mappedStatus,
         rating: rating !== undefined ? rating : null,
         review: review !== undefined ? review : null,
@@ -294,7 +296,7 @@ export async function POST(request: Request) {
         .from("reviews")
         .select("id")
         .eq("user_id", user.id)
-        .eq("book_id", bookId)
+        .eq("book_id", resolvedBookId)
         .maybeSingle();
 
       if (reviewFetchError) {
@@ -319,7 +321,7 @@ export async function POST(request: Request) {
       } else {
         const payload = {
           user_id: user.id,
-          book_id: bookId,
+          book_id: resolvedBookId,
           rating: rating !== undefined ? rating : 5,
           review_text: review,
           created_at: new Date().toISOString(),
