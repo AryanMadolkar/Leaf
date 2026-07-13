@@ -30,9 +30,11 @@ import type { Book } from "@/data/mockData";
 const ROW_GAP = 56;
 const PLANK_H = 14;
 const BOOK_GAP = 1;
+const MIN_SHELVES = 4;
+const EMPTY_SHELF_H = 200;
 
 function packIntoRows(books: Book[], containerWidth: number): Book[][] {
-  if (!books.length || containerWidth <= 0) return books.length ? [books] : [];
+  if (!books.length || containerWidth <= 0) return [];
   const rows: Book[][] = [];
   let current: Book[] = [];
   let used = 0;
@@ -51,6 +53,33 @@ function packIntoRows(books: Book[], containerWidth: number): Book[][] {
   }
   if (current.length) rows.push(current);
   return rows;
+}
+
+function ShelfPlank({
+  themeStyles,
+}: {
+  themeStyles: (typeof SHELF_THEMES)[ShelfThemeId];
+}) {
+  return (
+    <div
+      className="relative w-full rounded-[1px] overflow-hidden"
+      style={{
+        height: PLANK_H,
+        background: themeStyles.plank,
+        boxShadow: `0 6px 14px ${themeStyles.shadow}, inset 0 1px 0 rgba(255,255,255,0.18)`,
+      }}
+      aria-hidden
+    >
+      <div className="absolute inset-x-0 bottom-0 h-[3px]" style={{ background: themeStyles.edge }} />
+      <div
+        className="absolute inset-0 opacity-30 pointer-events-none"
+        style={{
+          backgroundImage:
+            "repeating-linear-gradient(90deg, transparent 0 11px, rgba(0,0,0,0.06) 11px 12px)",
+        }}
+      />
+    </div>
+  );
 }
 
 const SortableBook = memo(function SortableBook({
@@ -161,7 +190,14 @@ const ContinuousBookshelf = memo(function ContinuousBookshelf({
     return () => ro.disconnect();
   }, []);
 
-  const rows = useMemo(() => packIntoRows(displayBooks, width), [displayBooks, width]);
+  const packedRows = useMemo(() => packIntoRows(displayBooks, width), [displayBooks, width]);
+
+  // Always render a full bookcase (4 shelves); grow beyond that when books overflow
+  const rows = useMemo(() => {
+    const next = [...packedRows];
+    while (next.length < MIN_SHELVES) next.push([]);
+    return next;
+  }, [packedRows]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
@@ -205,15 +241,15 @@ const ContinuousBookshelf = memo(function ContinuousBookshelf({
   const activeBook = activeId ? bookMap.get(activeId) : null;
   const canDrag = editable && !reorderDisabled;
 
+  const bookcaseFrame = {
+    background: `linear-gradient(90deg, ${themeStyles.edge} 0%, transparent 12px, transparent calc(100% - 12px), ${themeStyles.edge} 100%)`,
+    boxShadow: `inset 0 0 0 1px ${themeStyles.edge}55`,
+  };
+
   return (
     <div ref={containerRef} className="w-full">
       {width <= 0 ? (
         <div className="h-48" aria-hidden />
-      ) : !displayBooks.length ? (
-        <div className="py-16 text-center">
-          <p className="font-serif text-xl text-charcoal/70">Your shelves are waiting.</p>
-          <p className="text-xs text-charcoal-muted mt-2">Add a book to begin your study wall.</p>
-        </div>
       ) : (
         <DndContext
           sensors={sensors}
@@ -222,57 +258,66 @@ const ContinuousBookshelf = memo(function ContinuousBookshelf({
           onDragEnd={handleDragEnd}
         >
           <SortableContext items={sortableIds} strategy={horizontalListSortingStrategy}>
-            <div className="flex flex-col" style={{ gap: ROW_GAP }}>
-              {rows.map((row, rowIndex) => {
-                const maxH = Math.max(
-                  ...row.map((b) => spineHeightFromSeed(`${b.id}:${b.title}`)),
-                  170,
-                );
-                return (
-                  <div key={`row-${rowIndex}`} className="relative w-full">
-                    <div
-                      className="relative flex items-end justify-start"
-                      style={{ height: maxH, gap: BOOK_GAP }}
-                    >
-                      {row.map((book) => (
-                        <SortableBook
-                          key={book.id}
-                          book={book}
-                          editable={editable}
-                          disabled={!canDrag}
-                          status={statusByBookId?.[book.id]}
-                          isFavorite={favoriteIds?.has(book.id)}
-                          onStatus={onStatus}
-                          onFavorite={onFavorite}
-                          onRemove={onRemove}
-                        />
-                      ))}
-                    </div>
+            <div
+              className="relative rounded-sm px-3 pt-4 pb-3"
+              style={{
+                ...bookcaseFrame,
+                backgroundColor: "rgba(46, 40, 30, 0.04)",
+              }}
+            >
+              {/* Side rails */}
+              <div
+                className="pointer-events-none absolute inset-y-2 left-0 w-2.5 rounded-sm"
+                style={{ background: themeStyles.plank, boxShadow: `2px 0 6px ${themeStyles.shadow}` }}
+                aria-hidden
+              />
+              <div
+                className="pointer-events-none absolute inset-y-2 right-0 w-2.5 rounded-sm"
+                style={{ background: themeStyles.plank, boxShadow: `-2px 0 6px ${themeStyles.shadow}` }}
+                aria-hidden
+              />
 
-                    <div
-                      className="relative w-full rounded-[1px] overflow-hidden"
-                      style={{
-                        height: PLANK_H,
-                        background: themeStyles.plank,
-                        boxShadow: `0 6px 14px ${themeStyles.shadow}, inset 0 1px 0 rgba(255,255,255,0.18)`,
-                      }}
-                      aria-hidden
-                    >
+              <div className="flex flex-col px-2" style={{ gap: ROW_GAP }}>
+                {rows.map((row, rowIndex) => {
+                  const maxH = row.length
+                    ? Math.max(...row.map((b) => spineHeightFromSeed(`${b.id}:${b.title}`)), 170)
+                    : EMPTY_SHELF_H;
+                  return (
+                    <div key={`row-${rowIndex}`} className="relative w-full">
                       <div
-                        className="absolute inset-x-0 bottom-0 h-[3px]"
-                        style={{ background: themeStyles.edge }}
-                      />
-                      <div
-                        className="absolute inset-0 opacity-30 pointer-events-none"
-                        style={{
-                          backgroundImage:
-                            "repeating-linear-gradient(90deg, transparent 0 11px, rgba(0,0,0,0.06) 11px 12px)",
-                        }}
-                      />
+                        className="relative flex items-end justify-start min-h-0"
+                        style={{ height: maxH, gap: BOOK_GAP }}
+                      >
+                        {row.map((book) => (
+                          <SortableBook
+                            key={book.id}
+                            book={book}
+                            editable={editable}
+                            disabled={!canDrag}
+                            status={statusByBookId?.[book.id]}
+                            isFavorite={favoriteIds?.has(book.id)}
+                            onStatus={onStatus}
+                            onFavorite={onFavorite}
+                            onRemove={onRemove}
+                          />
+                        ))}
+                      </div>
+                      <ShelfPlank themeStyles={themeStyles} />
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
+
+              {/* Base plinth */}
+              <div
+                className="mt-3 h-4 rounded-[1px] mx-0"
+                style={{
+                  background: themeStyles.plank,
+                  boxShadow: `0 8px 16px ${themeStyles.shadow}`,
+                  borderBottom: `3px solid ${themeStyles.edge}`,
+                }}
+                aria-hidden
+              />
             </div>
           </SortableContext>
 

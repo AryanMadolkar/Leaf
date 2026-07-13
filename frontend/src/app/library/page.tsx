@@ -12,10 +12,10 @@ import LibraryToolbar, {
 import type { ShelfThemeId } from "@/components/library/shelfThemes";
 import { useLeaf } from "@/context/LeafContext";
 import { authFetch } from "@/utils/auth/client";
-import type { LibraryPayload, LibraryPrivacy, LibraryViewMode } from "@/utils/library";
+import type { LibraryPayload, LibraryViewMode } from "@/utils/library";
 import type { Book } from "@/data/mockData";
 import Link from "next/link";
-import { Users, Globe, Lock, Copy, Check } from "lucide-react";
+import { Copy, Check } from "lucide-react";
 
 export default function UserLibraryPage() {
   const { currentUser, logBook, isProfileLoading, diaryLogs } = useLeaf();
@@ -129,7 +129,7 @@ export default function UserLibraryPage() {
   }, []);
 
   const updateSettings = useCallback(
-    (patch: Partial<{ viewMode: LibraryViewMode; theme: ShelfThemeId; privacy: LibraryPrivacy }>) => {
+    (patch: Partial<{ viewMode: LibraryViewMode; theme: ShelfThemeId }>) => {
       setLibrary((prev) => {
         if (!prev) return prev;
         return {
@@ -138,7 +138,6 @@ export default function UserLibraryPage() {
             ...prev.settings,
             ...(patch.viewMode ? { viewMode: patch.viewMode } : {}),
             ...(patch.theme ? { theme: patch.theme } : {}),
-            ...(patch.privacy ? { privacy: patch.privacy } : {}),
           },
         };
       });
@@ -270,9 +269,6 @@ export default function UserLibraryPage() {
           <h1 className="font-serif text-3xl md:text-4xl font-bold text-charcoal tracking-tight">
             My Library
           </h1>
-          <p className="mt-1.5 text-sm text-charcoal-muted max-w-xl">
-            One continuous shelf — {library.stats.books} volumes, arranged as they live in your study.
-          </p>
         </div>
 
         {viewMode === "bookshelf" && (
@@ -392,7 +388,7 @@ export default function UserLibraryPage() {
               </button>
             </div>
             <p className="text-xs text-charcoal-muted leading-relaxed">
-              Anyone with the link can browse your collection when privacy is Public.
+              Share this link so others can browse your collection.
             </p>
             <div className="flex items-center gap-2">
               <code className="flex-1 text-[11px] bg-cream-dark/40 border border-cream-border rounded-lg px-3 py-2 truncate">
@@ -410,28 +406,6 @@ export default function UserLibraryPage() {
                 {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                 {copied ? "Copied" : "Copy"}
               </button>
-            </div>
-            <div className="flex gap-2">
-              {(
-                [
-                  { id: "public" as const, label: "Public", icon: Globe },
-                  { id: "friends" as const, label: "Friends", icon: Users },
-                  { id: "private" as const, label: "Private", icon: Lock },
-                ] as const
-              ).map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => updateSettings({ privacy: p.id })}
-                  className={`flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-lg text-[10px] font-bold border ${
-                    library.settings.privacy === p.id
-                      ? "bg-brand text-cream border-brand"
-                      : "border-cream-border text-charcoal-muted"
-                  }`}
-                >
-                  <p.icon className="w-3.5 h-3.5" /> {p.label}
-                </button>
-              ))}
             </div>
           </div>
         </div>
