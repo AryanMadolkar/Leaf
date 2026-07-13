@@ -298,20 +298,40 @@ const ContinuousBookshelf = memo(function ContinuousBookshelf({
                   className="flex-1 min-w-0 flex flex-col relative"
                   style={{ background: themeStyles.wall }}
                 >
-                  {/* Soft wood grain on the back panel */}
+                  {/* Parchment texture — barely visible paper/plaster */}
                   <div
-                    className="pointer-events-none absolute inset-0 opacity-40 mix-blend-multiply"
+                    className="pointer-events-none absolute inset-0 z-0"
                     style={{
+                      opacity: 0.35,
                       backgroundImage: `
-                        repeating-linear-gradient(90deg, transparent 0 13px, rgba(0,0,0,0.04) 13px 14px),
-                        repeating-linear-gradient(0deg, transparent 0 47px, rgba(255,255,255,0.03) 47px 48px),
-                        radial-gradient(ellipse at 30% 20%, rgba(255,255,255,0.06), transparent 50%)
+                        url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.55 0 0 0 0 0.5 0 0 0 0 0.42 0 0 0 0.45 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")
                       `,
+                      backgroundSize: "180px 180px",
+                      mixBlendMode: "multiply",
                     }}
                     aria-hidden
                   />
+                  {/* Soft radial light at center */}
+                  <div
+                    className="pointer-events-none absolute inset-0 z-0"
+                    style={{
+                      background:
+                        "radial-gradient(ellipse 70% 55% at 50% 42%, rgba(255,252,246,0.55) 0%, rgba(255,252,246,0.12) 42%, transparent 72%)",
+                    }}
+                    aria-hidden
+                  />
+                  {/* Gentle vignette — edges only */}
+                  <div
+                    className="pointer-events-none absolute inset-0 z-0"
+                    style={{
+                      background:
+                        "radial-gradient(ellipse 85% 80% at 50% 50%, transparent 55%, rgba(90,70,45,0.04) 100%)",
+                      boxShadow: "inset 0 0 48px rgba(70,55,35,0.035)",
+                    }}
+                    aria-hidden
+                  />
+
                   {rows.map((row, rowIndex) => {
-                    // Uniform bay height across the whole bookcase
                     const isLast = rowIndex === rows.length - 1;
                     return (
                       <div key={`row-${rowIndex}`} className="relative w-full z-[1]">
@@ -338,10 +358,21 @@ const ContinuousBookshelf = memo(function ContinuousBookshelf({
                             />
                           ))}
                         </div>
+                        {/* Ambient contact shadow where shelf meets the wall */}
+                        <div
+                          className="pointer-events-none absolute left-0 right-0 z-[2]"
+                          style={{
+                            bottom: isLast ? PLANK_H + 4 : PLANK_H,
+                            height: 10,
+                            background:
+                              "linear-gradient(180deg, transparent 0%, rgba(55,40,25,0.06) 100%)",
+                          }}
+                          aria-hidden
+                        />
                         <WoodBar
                           themeStyles={themeStyles}
                           height={isLast ? PLANK_H + 4 : PLANK_H}
-                          className="w-full"
+                          className="relative z-[3] w-full"
                         />
                       </div>
                     );
