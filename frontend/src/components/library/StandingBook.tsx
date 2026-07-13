@@ -53,7 +53,7 @@ const StandingBook = memo(function StandingBook({
 
   const dims = useMemo(() => {
     const w = spineWidthFromPages(book.pages);
-    const h = spineHeightFromSeed(seed);
+    const h = spineHeightFromSeed(seed, book.pages);
     return { w, h };
   }, [book.pages, seed]);
 
@@ -61,7 +61,6 @@ const StandingBook = memo(function StandingBook({
     let cancelled = false;
     const cover = book.coverImage || "";
     if (!cover || cover.includes("placeholder")) return;
-    // Defer palette sampling so first paint stays snappy
     const t = window.setTimeout(() => {
       extractSpinePaletteFromCover(cover, seed).then((p) => {
         if (!cancelled) setPalette(p);
@@ -73,8 +72,17 @@ const StandingBook = memo(function StandingBook({
     };
   }, [book.coverImage, seed]);
 
+  // Title scales with spine width/height for denser, premium look
   const titleSize =
-    book.title.length > 42 ? 8 : book.title.length > 28 ? 9 : book.title.length > 18 ? 10 : 11;
+    dims.w < 26
+      ? 10
+      : book.title.length > 42
+        ? 11
+        : book.title.length > 28
+          ? 12
+          : book.title.length > 18
+            ? 13
+            : 14;
   const authorShort = (book.author || "").split(",")[0].trim();
 
   return (
@@ -183,7 +191,7 @@ const StandingBook = memo(function StandingBook({
       </div>
 
       {/* Cover preview — CSS only, no JS hover state */}
-      <div className="absolute left-1/2 -translate-x-1/2 bottom-[calc(100%+12px)] z-40 w-52 pointer-events-none opacity-0 translate-y-1 scale-[0.97] transition-[opacity,transform] duration-150 group-hover/book:opacity-100 group-hover/book:translate-y-0 group-hover/book:scale-100 group-hover/book:pointer-events-auto">
+      <div className="absolute left-1/2 -translate-x-1/2 bottom-[calc(100%+12px)] z-40 w-56 pointer-events-none opacity-0 translate-y-1 scale-[0.97] transition-[opacity,transform] duration-150 group-hover/book:opacity-100 group-hover/book:translate-y-0 group-hover/book:scale-100 group-hover/book:pointer-events-auto">
         <div className="bg-cream border border-cream-border rounded-xl shadow-2xl overflow-hidden">
           <div className="flex gap-2.5 p-2.5">
             <CoverImage
@@ -191,7 +199,7 @@ const StandingBook = memo(function StandingBook({
               title={book.title}
               author={book.author}
               bookId={book.id}
-              className="w-16 h-[92px] rounded shadow-sm flex-shrink-0"
+              className="w-[72px] h-[108px] rounded shadow-sm flex-shrink-0"
               imgClassName="w-full h-full object-cover"
             />
             <div className="min-w-0 flex-1 space-y-1">

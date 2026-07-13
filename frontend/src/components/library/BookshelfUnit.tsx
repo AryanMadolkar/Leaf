@@ -117,7 +117,7 @@ export default function BookshelfUnit({
 
   const tallest = useMemo(() => {
     if (!orderedBooks.length) return 48;
-    return Math.max(...orderedBooks.map((b) => spineHeightFromSeed(`${b.id}:${b.title}`)));
+    return Math.max(...orderedBooks.map((b) => spineHeightFromSeed(`${b.id}:${b.title}`, b.pages)));
   }, [orderedBooks]);
 
   const handleDragStart = (e: DragStartEvent) => {

@@ -14,13 +14,18 @@ export function clamp(n: number, min: number, max: number) {
 
 /** Spine width from page count (paperback → hardcover → large) */
 export function spineWidthFromPages(pages?: number): number {
-  if (!pages || pages <= 0) return 28;
-  return clamp(Math.round(pages / 18), 18, 60);
+  if (!pages || pages <= 0) return 32;
+  // Dense bookstore packing: ~20–55px
+  return clamp(Math.round(pages / 14), 20, 55);
 }
 
-export function spineHeightFromSeed(seed: string): number {
+/** Typical height 240–280; thick volumes up to 300 */
+export function spineHeightFromSeed(seed: string, pages?: number): number {
   const h = hashString(seed);
-  return 170 + (h % 41); // 170–210
+  let height = 240 + (h % 41); // 240–280
+  if (pages && pages >= 550) height = Math.min(300, height + 16);
+  if (pages && pages >= 750) height = 300;
+  return height;
 }
 
 export function spineTiltFromSeed(seed: string): number {

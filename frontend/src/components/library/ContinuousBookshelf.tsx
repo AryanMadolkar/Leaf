@@ -27,14 +27,15 @@ import {
 } from "./spineUtils";
 import type { Book } from "@/data/mockData";
 
-const ROW_GAP = 48;
-const PLANK_H = 12;
-const SIDE_W = 14;
-const TOP_H = 16;
-const BOOK_GAP = 1;
+const BREATHING = 20; // 16–24px above tallest book
+const PLANK_H = 10;
+const SIDE_W = 12;
+const TOP_H = 14;
+const BOOK_GAP = 3; // 2–4px tight packing
 const MIN_SHELVES = 4;
-const EMPTY_SHELF_H = 190;
-const BOOK_INSET = 10;
+/** Empty bays stay short so wood doesn't dominate */
+const EMPTY_SHELF_H = 72;
+const BOOK_INSET = 6;
 
 function packIntoRows(books: Book[], containerWidth: number): Book[][] {
   if (!books.length || containerWidth <= 0) return [];
@@ -285,18 +286,22 @@ const ContinuousBookshelf = memo(function ContinuousBookshelf({
                   aria-hidden
                 />
 
-                <div className="flex-1 min-w-0 flex flex-col" style={{ gap: ROW_GAP }}>
+                <div className="flex-1 min-w-0 flex flex-col">
                   {rows.map((row, rowIndex) => {
-                    const maxH = row.length
-                      ? Math.max(...row.map((b) => spineHeightFromSeed(`${b.id}:${b.title}`)), 170)
-                      : EMPTY_SHELF_H;
+                    const tallest = row.length
+                      ? Math.max(
+                          ...row.map((b) => spineHeightFromSeed(`${b.id}:${b.title}`, b.pages)),
+                        )
+                      : 0;
+                    // Tight wrap: tallest book + small breathing room only
+                    const bayH = row.length ? tallest + BREATHING : EMPTY_SHELF_H;
                     const isLast = rowIndex === rows.length - 1;
                     return (
                       <div key={`row-${rowIndex}`} className="relative w-full">
                         <div
                           className="relative flex items-end justify-start min-h-0"
                           style={{
-                            height: maxH,
+                            height: bayH,
                             gap: BOOK_GAP,
                             paddingLeft: BOOK_INSET,
                             paddingRight: BOOK_INSET,
@@ -316,7 +321,6 @@ const ContinuousBookshelf = memo(function ContinuousBookshelf({
                             />
                           ))}
                         </div>
-                        {/* Shelf spans full bay width — flush to both sides */}
                         <WoodBar
                           themeStyles={themeStyles}
                           height={isLast ? PLANK_H + 4 : PLANK_H}
