@@ -3,6 +3,7 @@ import { Instrument_Serif, Inter } from "next/font/google";
 import "./globals.css";
 import { LeafProvider } from "@/context/LeafContext";
 import { ThemeProvider, THEME_INLINE_SCRIPT } from "@/context/ThemeContext";
+import { Analytics } from "@vercel/analytics/next";
 
 const serif = Instrument_Serif({
   variable: "--font-serif",
@@ -50,6 +51,7 @@ export default function RootLayout({
             {children}
           </LeafProvider>
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );
