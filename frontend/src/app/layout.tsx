@@ -4,6 +4,7 @@ import "./globals.css";
 import { LeafProvider } from "@/context/LeafContext";
 import { ThemeProvider, THEME_INLINE_SCRIPT } from "@/context/ThemeContext";
 import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const serif = Instrument_Serif({
   variable: "--font-serif",
@@ -52,6 +53,7 @@ export default function RootLayout({
           </LeafProvider>
         </ThemeProvider>
         <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
