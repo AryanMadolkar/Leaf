@@ -1,0 +1,46 @@
+## Vercel Speed Insights Installation
+
+Successfully installed and configured Vercel Speed Insights for the Leaf project.
+
+### Changes Made
+
+**Modified Files:**
+1. `package.json` - Added `@vercel/speed-insights` dependency
+2. `package-lock.json` - Updated with new dependency tree
+3. `src/app/layout.tsx` - Added SpeedInsights component to root layout
+
+### Implementation Details
+
+Following the official Vercel Speed Insights quickstart guide (https://vercel.com/docs/speed-insights/quickstart), I implemented the Next.js 13.5+ installation method:
+
+1. **Package Installation**: Installed `@vercel/speed-insights` package using npm
+   
+2. **Component Integration**: 
+   - Imported `SpeedInsights` from `@vercel/speed-insights/next`
+   - Added the component to the root layout body, alongside the existing `Analytics` component
+   - This enables Speed Insights tracking across all pages in the application
+
+3. **Framework-Specific Approach**: Used the Next.js App Router method as the project uses:
+   - Next.js 16.2.9 (App Router architecture)
+   - React 19.2.4
+   - TypeScript
+
+### Verification
+
+✅ Build completed successfully - no compilation errors
+✅ Linting passed for modified files - no new errors introduced
+✅ Package lock file updated correctly
+✅ Existing code structure preserved - only added necessary imports and component
+
+### Next Steps
+
+To enable Speed Insights data collection:
+1. Ensure Speed Insights is enabled in the Vercel dashboard for this project
+2. Deploy the application to Vercel
+3. After deployment and user visits, Speed Insights metrics will be available in the project dashboard
+
+### Notes
+
+- The SpeedInsights component was placed right after the Analytics component in the layout body, following the existing pattern
+- No breaking changes were introduced
+- The implementation follows Next.js best practices for App Router layouts
