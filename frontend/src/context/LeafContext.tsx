@@ -487,6 +487,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
             followers: [],
             followingCount: 0,
             followersCount: 0,
+            favoriteBookIds: [],
             favoriteGenres: ["Fiction", "Mystery", "Sci-Fi"],
             isPrivate: false,
           };
