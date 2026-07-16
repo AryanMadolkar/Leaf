@@ -113,10 +113,9 @@ export default function Header() {
   } = useLeaf();
 
   const isGuest =
-    !isAuthenticated ||
-    !currentUser?.id ||
-    currentUser.id === "guest-user-id" ||
-    currentUser.id === "currentUser";
+    currentUser?.id === "guest-user-id" ||
+    currentUser?.id === "currentUser" ||
+    (!isProfileLoading && !isAuthenticated && !currentUser?.id);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState("");

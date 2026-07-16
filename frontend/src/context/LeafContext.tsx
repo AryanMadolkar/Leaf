@@ -480,6 +480,8 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (isDeprecatedAvatar(parsed.avatar)) parsed.avatar = "";
           setCurrentUser(parsed);
           setProfile(parsed);
+          // Token + cached profile means we're signed in — don't wait on /api/auth/me
+          setIsAuthenticated(true);
           setIsProfileLoading(false);
         }
       }

@@ -32,10 +32,9 @@ export default function StatsPage() {
   const [hoveredGenre, setHoveredGenre] = useState<any>(null);
 
   const isGuest =
-    !isAuthenticated ||
-    !currentUser?.id ||
-    currentUser.id === "guest-user-id" ||
-    currentUser.id === "currentUser";
+    currentUser?.id === "guest-user-id" ||
+    currentUser?.id === "currentUser" ||
+    (!isProfileLoading && !isAuthenticated && !currentUser?.id);
 
   const loadLocalStatsFallback = () => {
     console.log("Using client-side stats fallback from context.");

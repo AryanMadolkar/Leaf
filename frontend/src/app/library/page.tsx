@@ -15,12 +15,13 @@ import { authFetch } from "@/utils/auth/client";
 import type { LibraryPayload, LibraryViewMode } from "@/utils/library";
 import type { Book } from "@/data/mockData";
 import Link from "next/link";
-import { Copy, Check } from "lucide-react";
+import { Copy, Check, BookOpen } from "lucide-react";
 
 export default function UserLibraryPage() {
-  const { currentUser, logBook, isProfileLoading, diaryLogs } = useLeaf();
+  const { currentUser, logBook, isProfileLoading, diaryLogs, isAuthenticated } = useLeaf();
   const [library, setLibrary] = useState<LibraryPayload | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -33,23 +34,42 @@ export default function UserLibraryPage() {
   const deferredSort = useDeferredValue(sortMode);
   const deferredFilter = useDeferredValue(statusFilter);
 
+  const isGuest =
+    currentUser?.id === "guest-user-id" ||
+    currentUser?.id === "currentUser" ||
+    (!isProfileLoading && !isAuthenticated && !currentUser?.id);
+
   const load = useCallback(async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const res = await authFetch("/api/library");
       const data = await res.json();
-      if (data.success) setLibrary(data.library);
-    } catch (err) {
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Could not open your library");
+      }
+      setLibrary(data.library);
+    } catch (err: any) {
       console.error(err);
+      setLibrary(null);
+      setLoadError(err?.message || "Could not open your library");
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    if (!currentUser?.id || isProfileLoading) return;
+    if (isProfileLoading) return;
+    if (isGuest) {
+      setLibrary(null);
+      setLoading(false);
+      setLoadError(null);
+      return;
+    }
+    // Real signed-in user (cached profile or freshly authenticated)
+    if (!currentUser?.id) return;
     load();
-  }, [currentUser?.id, isProfileLoading, load]);
+  }, [currentUser?.id, isProfileLoading, isGuest, load]);
 
   const bookMap = useMemo(() => {
     const m = new Map<string, Book>();
@@ -229,12 +249,57 @@ export default function UserLibraryPage() {
     setSortMode("custom");
   }, []);
 
-  if (loading || isProfileLoading || !library) {
+  if (isProfileLoading || loading) {
     return (
       <div className="min-h-screen bg-cream flex flex-col">
         <Header />
         <div className="flex-1 flex items-center justify-center">
           <p className="text-xs text-charcoal-muted font-medium">Opening your study…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isGuest) {
+    return (
+      <div className="min-h-screen bg-cream flex flex-col">
+        <Header />
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center max-w-md mx-auto">
+          <BookOpen className="w-12 h-12 text-charcoal-muted mb-4 opacity-50" />
+          <h2 className="font-serif text-2xl font-bold text-charcoal">
+            Build your library by signing in
+          </h2>
+          <p className="text-sm text-charcoal-muted mt-2 leading-relaxed">
+            Create an account to shelve books, arrange your bookcase, and share your collection.
+          </p>
+          <Link
+            href="/auth"
+            className="mt-6 px-5 py-2.5 bg-brand hover:bg-brand-light text-cream font-bold text-xs rounded-lg shadow-sm transition-colors"
+          >
+            Sign in
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError || !library) {
+    return (
+      <div className="min-h-screen bg-cream flex flex-col">
+        <Header />
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center max-w-md mx-auto">
+          <BookOpen className="w-12 h-12 text-charcoal-muted mb-4 opacity-50" />
+          <h2 className="font-serif text-2xl font-bold text-charcoal">Couldn’t open your library</h2>
+          <p className="text-sm text-charcoal-muted mt-2 leading-relaxed">
+            {loadError || "Something went wrong while loading your shelves."}
+          </p>
+          <button
+            type="button"
+            onClick={() => load()}
+            className="mt-6 px-5 py-2.5 bg-brand hover:bg-brand-light text-cream font-bold text-xs rounded-lg shadow-sm transition-colors"
+          >
+            Try again
+          </button>
         </div>
       </div>
     );
