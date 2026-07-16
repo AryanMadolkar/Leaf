@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useLeaf } from "@/context/LeafContext";
 import { useTheme } from "@/context/ThemeContext";
 import { Book } from "@/data/mockData";
-import { Search, Plus, BookOpen, Star, LogOut, Check, X, Calendar, Clock, Book as BookIcon, Activity, CheckCircle, ChevronRight, Award, Bookmark, User, Settings, UserPlus, UserCheck, Menu, Sun, Moon, Loader2 } from "lucide-react";
+import { Search, Plus, BookOpen, Star, LogOut, LogIn, Check, X, Calendar, Clock, Book as BookIcon, Activity, CheckCircle, ChevronRight, Award, Bookmark, User, Settings, UserPlus, UserCheck, Menu, Sun, Moon, Loader2 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import UserAvatar from "@/components/UserAvatar";
 
@@ -101,6 +101,7 @@ export default function Header() {
     books, 
     currentUser,
     isProfileLoading,
+    isAuthenticated,
     logBook, 
     signOut, 
     addCachedBookToContext,
@@ -110,6 +111,12 @@ export default function Header() {
     updateBookProgressDirectly,
     toggleFollowUser,
   } = useLeaf();
+
+  const isGuest =
+    !isAuthenticated ||
+    !currentUser?.id ||
+    currentUser.id === "guest-user-id" ||
+    currentUser.id === "currentUser";
 
   // Search state
   const [searchQuery, setSearchQuery] = useState("");
@@ -718,80 +725,105 @@ export default function Header() {
                     transition={{ duration: 0.15, ease: "easeOut" }}
                     className="absolute right-0 top-10 w-64 bg-cream border border-cream-border rounded-xl shadow-xl overflow-hidden z-50 text-xs text-charcoal font-sans"
                   >
-                    {/* Top user section */}
-                    <div className="p-4 bg-cream-card border-b border-cream-border flex items-center gap-3">
-                      <UserAvatar avatarUrl={currentUser.avatar} name={currentUser.name} size={44} />
-                      <div className="min-w-0 flex-1">
-                        <p className="font-bold text-charcoal truncate text-sm" title={currentUser.name}>
-                          {currentUser.name}
-                        </p>
-                        <p className="text-[10px] text-charcoal-muted truncate font-medium">
-                          @{currentUser.username}
-                        </p>
-                        <p className="text-[9px] text-charcoal-light truncate font-mono mt-0.5" title={currentUser.email}>
-                          {currentUser.email || "guest@example.com"}
-                        </p>
-                      </div>
-                    </div>
+                    {isGuest ? (
+                      <>
+                        <div className="p-4 bg-cream-card border-b border-cream-border">
+                          <p className="font-serif text-base font-bold text-charcoal">Guest</p>
+                          <p className="text-[11px] text-charcoal-muted mt-1 leading-relaxed">
+                            Log in to sync your library, diary, and reading stats.
+                          </p>
+                        </div>
+                        <div className="p-1.5">
+                          <Link
+                            href="/auth"
+                            onClick={() => setShowAccountDropdown(false)}
+                            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-brand hover:bg-brand-light text-cream font-bold transition-colors"
+                          >
+                            <LogIn className="w-4 h-4" />
+                            Log in
+                          </Link>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        {/* Top user section */}
+                        <div className="p-4 bg-cream-card border-b border-cream-border flex items-center gap-3">
+                          <UserAvatar avatarUrl={currentUser.avatar} name={currentUser.name} size={44} />
+                          <div className="min-w-0 flex-1">
+                            <p className="font-bold text-charcoal truncate text-sm" title={currentUser.name}>
+                              {currentUser.name}
+                            </p>
+                            <p className="text-[10px] text-charcoal-muted truncate font-medium">
+                              @{currentUser.username}
+                            </p>
+                            {currentUser.email && (
+                              <p className="text-[9px] text-charcoal-light truncate font-mono mt-0.5" title={currentUser.email}>
+                                {currentUser.email}
+                              </p>
+                            )}
+                          </div>
+                        </div>
 
-                    {/* Navigation list */}
-                    <div className="p-1.5 space-y-0.5">
-                      <Link
-                        href="/library"
-                        onClick={() => setShowAccountDropdown(false)}
-                        className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-cream-dark/50 transition-colors"
-                      >
-                        <BookIcon className="w-4 h-4 text-brand-muted" />
-                        <span className="font-semibold text-charcoal-light">My Library</span>
-                      </Link>
-                      <Link
-                        href="/diary"
-                        onClick={() => setShowAccountDropdown(false)}
-                        className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-cream-dark/50 transition-colors"
-                      >
-                        <Calendar className="w-4 h-4 text-brand-muted" />
-                        <span className="font-semibold text-charcoal-light">Reading Diary</span>
-                      </Link>
-                      <Link
-                        href="/stats"
-                        onClick={() => setShowAccountDropdown(false)}
-                        className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-cream-dark/50 transition-colors"
-                      >
-                        <Activity className="w-4 h-4 text-brand-muted" />
-                        <span className="font-semibold text-charcoal-light">Reading Stats</span>
-                      </Link>
-                      <Link
-                        href={`/profile/${currentUser.username}`}
-                        onClick={() => setShowAccountDropdown(false)}
-                        className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-cream-dark/50 transition-colors"
-                      >
-                        <User className="w-4 h-4 text-brand-muted" />
-                        <span className="font-semibold text-charcoal-light">View Profile</span>
-                      </Link>
-                      <Link
-                        href="/settings"
-                        onClick={() => setShowAccountDropdown(false)}
-                        className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-cream-dark/50 transition-colors"
-                      >
-                        <Settings className="w-4 h-4 text-brand-muted" />
-                        <span className="font-semibold text-charcoal-light">Account Settings</span>
-                      </Link>
-                    </div>
+                        {/* Navigation list */}
+                        <div className="p-1.5 space-y-0.5">
+                          <Link
+                            href="/library"
+                            onClick={() => setShowAccountDropdown(false)}
+                            className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-cream-dark/50 transition-colors"
+                          >
+                            <BookIcon className="w-4 h-4 text-brand-muted" />
+                            <span className="font-semibold text-charcoal-light">My Library</span>
+                          </Link>
+                          <Link
+                            href="/diary"
+                            onClick={() => setShowAccountDropdown(false)}
+                            className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-cream-dark/50 transition-colors"
+                          >
+                            <Calendar className="w-4 h-4 text-brand-muted" />
+                            <span className="font-semibold text-charcoal-light">Reading Diary</span>
+                          </Link>
+                          <Link
+                            href="/stats"
+                            onClick={() => setShowAccountDropdown(false)}
+                            className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-cream-dark/50 transition-colors"
+                          >
+                            <Activity className="w-4 h-4 text-brand-muted" />
+                            <span className="font-semibold text-charcoal-light">Reading Stats</span>
+                          </Link>
+                          <Link
+                            href={`/profile/${currentUser.username}`}
+                            onClick={() => setShowAccountDropdown(false)}
+                            className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-cream-dark/50 transition-colors"
+                          >
+                            <User className="w-4 h-4 text-brand-muted" />
+                            <span className="font-semibold text-charcoal-light">View Profile</span>
+                          </Link>
+                          <Link
+                            href="/settings"
+                            onClick={() => setShowAccountDropdown(false)}
+                            className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-cream-dark/50 transition-colors"
+                          >
+                            <Settings className="w-4 h-4 text-brand-muted" />
+                            <span className="font-semibold text-charcoal-light">Account Settings</span>
+                          </Link>
+                        </div>
 
-                    {/* Footer / Sign Out */}
-                    <div className="border-t border-cream-border p-1.5 bg-cream-card/50">
-                      <button
-                        onClick={async () => {
-                          setShowAccountDropdown(false);
-                          await signOut();
-                          window.location.assign("/");
-                        }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors text-left cursor-pointer"
-                      >
-                        <LogOut className="w-4 h-4" />
-                        <span className="font-bold">Sign Out</span>
-                      </button>
-                    </div>
+                        {/* Footer / Sign Out */}
+                        <div className="border-t border-cream-border p-1.5 bg-cream-card/50">
+                          <button
+                            onClick={async () => {
+                              setShowAccountDropdown(false);
+                              await signOut();
+                              window.location.assign("/");
+                            }}
+                            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors text-left cursor-pointer"
+                          >
+                            <LogOut className="w-4 h-4" />
+                            <span className="font-bold">Sign Out</span>
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>

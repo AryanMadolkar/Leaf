@@ -21,7 +21,7 @@ import { motion } from "framer-motion";
 import { buildGenreDistribution } from "@/utils/genreUtils";
 
 export default function StatsPage() {
-  const { currentUser, diaryLogs, readingSessions, books, userStats } = useLeaf();
+  const { currentUser, diaryLogs, readingSessions, books, userStats, isAuthenticated, isProfileLoading } = useLeaf();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [lineChartPeriod, setLineChartPeriod] = useState<"7days" | "30days" | "12months">("30days");
@@ -30,6 +30,12 @@ export default function StatsPage() {
   const [hoveredLinePoint, setHoveredLinePoint] = useState<any>(null);
   const [hoveredBarIndex, setHoveredBarIndex] = useState<number | null>(null);
   const [hoveredGenre, setHoveredGenre] = useState<any>(null);
+
+  const isGuest =
+    !isAuthenticated ||
+    !currentUser?.id ||
+    currentUser.id === "guest-user-id" ||
+    currentUser.id === "currentUser";
 
   const loadLocalStatsFallback = () => {
     console.log("Using client-side stats fallback from context.");
@@ -241,16 +247,17 @@ export default function StatsPage() {
 
   useEffect(() => {
     async function loadStats() {
+      if (isProfileLoading) return;
+
+      // Guests see a login prompt — never hydrate mock/local fallback stats
+      if (isGuest) {
+        setData(null);
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
-        const isGuest =
-          !currentUser?.id ||
-          currentUser.id === "guest-user-id" ||
-          currentUser.id === "currentUser";
-        if (isGuest) {
-          loadLocalStatsFallback();
-          return;
-        }
         const res = await fetch(`/api/stats?userId=${currentUser.id}`);
         if (res.ok) {
           const payload = await res.json();
@@ -270,9 +277,9 @@ export default function StatsPage() {
       }
     }
     loadStats();
-  }, [currentUser.id, readingSessions, diaryLogs]);
+  }, [currentUser.id, readingSessions, diaryLogs, isGuest, isProfileLoading]);
 
-  if (loading) {
+  if (isProfileLoading || loading) {
     return (
       <div className="min-h-screen bg-cream flex flex-col">
         <Header />
@@ -282,6 +289,27 @@ export default function StatsPage() {
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
           </svg>
           <p className="text-xs text-charcoal-muted">Hydrating reading metrics & profiles...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isGuest) {
+    return (
+      <div className="min-h-screen bg-cream flex flex-col">
+        <Header />
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center max-w-md mx-auto">
+          <TrendingUp className="w-12 h-12 text-charcoal-muted mb-4 opacity-50" />
+          <h2 className="font-serif text-2xl font-bold text-charcoal">Login to check your stats</h2>
+          <p className="text-sm text-charcoal-muted mt-2 leading-relaxed">
+            Sign in to see your pages read, streaks, and reading insights.
+          </p>
+          <Link
+            href="/auth"
+            className="mt-6 px-5 py-2.5 bg-brand hover:bg-brand-light text-cream font-bold text-xs rounded-lg shadow-sm transition-colors"
+          >
+            Log in
+          </Link>
         </div>
       </div>
     );
