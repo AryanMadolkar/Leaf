@@ -14,6 +14,7 @@ import {
   Calendar,
 } from "lucide-react";
 import { StarDisplay } from "@/components/ReviewCard";
+import UserAvatar from "@/components/UserAvatar";
 import { formatRelativeTime } from "@/utils/time";
 
 type StreamReview = {
@@ -224,13 +225,11 @@ export default function LandingPage() {
                     key={review.id}
                     className="flex items-start gap-4 p-4 bg-cream-card border border-cream-border rounded-xl"
                   >
-                    <img
-                      src={
-                        review.reviewerAvatar ||
-                        "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&auto=format&fit=crop&q=80"
-                      }
-                      alt=""
-                      className="w-8 h-8 rounded-full object-cover border border-cream-border flex-shrink-0"
+                    <UserAvatar
+                      avatarUrl={review.reviewerAvatar}
+                      name={review.reviewerName}
+                      size={32}
+                      className="flex-shrink-0"
                     />
                     <div className="flex-1 min-w-0 space-y-1">
                       <p className="text-xs text-charcoal-light font-sans">
