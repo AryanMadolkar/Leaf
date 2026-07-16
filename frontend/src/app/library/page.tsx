@@ -45,6 +45,9 @@ export default function UserLibraryPage() {
       setLoadError(null);
       const res = await authFetch("/api/library");
       const data = await res.json();
+      if (res.status === 401) {
+        throw new Error("Your session expired. Please sign in again.");
+      }
       if (!res.ok || !data.success) {
         throw new Error(data.error || "Could not open your library");
       }
@@ -293,13 +296,23 @@ export default function UserLibraryPage() {
           <p className="text-sm text-charcoal-muted mt-2 leading-relaxed">
             {loadError || "Something went wrong while loading your shelves."}
           </p>
-          <button
-            type="button"
-            onClick={() => load()}
-            className="mt-6 px-5 py-2.5 bg-brand hover:bg-brand-light text-cream font-bold text-xs rounded-lg shadow-sm transition-colors"
-          >
-            Try again
-          </button>
+          <div className="mt-6 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => load()}
+              className="px-5 py-2.5 bg-brand hover:bg-brand-light text-cream font-bold text-xs rounded-lg shadow-sm transition-colors"
+            >
+              Try again
+            </button>
+            {loadError?.toLowerCase().includes("sign in") || loadError?.toLowerCase().includes("session") ? (
+              <Link
+                href="/auth"
+                className="px-5 py-2.5 border border-border text-charcoal font-bold text-xs rounded-lg hover:bg-surface-raised transition-colors"
+              >
+                Sign in
+              </Link>
+            ) : null}
+          </div>
         </div>
       </div>
     );

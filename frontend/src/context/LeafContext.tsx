@@ -447,7 +447,16 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Setup Auth — JWT in localStorage, sent as Authorization: Bearer
   useEffect(() => {
-    const isGuest = localStorage.getItem("leaf_guest_session") === "true";
+    const token = getAccessToken();
+    const guestFlag = localStorage.getItem("leaf_guest_session") === "true";
+
+    // Stale guest flag after a real login: prefer the JWT and clear guest mode
+    if (guestFlag && token) {
+      localStorage.removeItem("leaf_guest_session");
+      document.cookie = "leaf_guest_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    }
+
+    const isGuest = localStorage.getItem("leaf_guest_session") === "true" && !token;
     if (isGuest) {
       clearAccessToken();
       setIsAuthenticated(true);
@@ -458,11 +467,38 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
           email: "guest@example.com",
         },
       });
-      loadLocalStorageData();
+      // Only hydrate guest profile — never a leftover real account without a JWT
+      try {
+        const saved = localStorage.getItem("leaf_local_profile");
+        const parsed = saved ? JSON.parse(saved) : null;
+        if (parsed?.id === "guest-user-id") {
+          loadLocalStorageData();
+        } else {
+          const guestProfile = {
+            id: "guest-user-id",
+            username: "guest",
+            name: "Guest Reader",
+            avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=guest",
+            bio: "Just browsing Leaf as a guest.",
+            location: "",
+            website: "",
+            joinedDate: new Date().toISOString().split("T")[0],
+            following: [],
+            followers: [],
+            followingCount: 0,
+            followersCount: 0,
+            favoriteGenres: ["Fiction", "Mystery", "Sci-Fi"],
+            isPrivate: false,
+          };
+          setCurrentUser(guestProfile);
+          localStorage.setItem("leaf_local_profile", JSON.stringify(guestProfile));
+        }
+      } catch {
+        loadLocalStorageData();
+      }
       return;
     }
 
-    const token = getAccessToken();
     if (!token) {
       setSession(null);
       setIsAuthenticated(false);
@@ -577,8 +613,8 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
     if (!isProtected) return;
 
-    const isGuest = localStorage.getItem("leaf_guest_session") === "true";
     const token = getAccessToken();
+    const isGuest = localStorage.getItem("leaf_guest_session") === "true" && !token;
     if (!isGuest && !token && !isAuthenticated) {
       router.replace("/auth");
     }
@@ -739,6 +775,9 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!res.ok || !data.success || !data.token) {
       throw new Error(data.error || "Could not sign in.");
     }
+    // Leave guest mode so the next refresh keeps the JWT
+    localStorage.removeItem("leaf_guest_session");
+    document.cookie = "leaf_guest_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
     setAccessToken(data.token);
     const mapped = mapApiUserToCurrentUser(data.user, data.user.email);
     setCurrentUser(mapped);
@@ -760,6 +799,8 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!res.ok || !data.success || !data.token) {
       throw new Error(data.error || "Could not create account.");
     }
+    localStorage.removeItem("leaf_guest_session");
+    document.cookie = "leaf_guest_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
     setAccessToken(data.token);
     const mapped = mapApiUserToCurrentUser(data.user, data.user.email);
     setCurrentUser(mapped);
