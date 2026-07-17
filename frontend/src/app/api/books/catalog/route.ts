@@ -14,8 +14,8 @@ const getCachedShelf = unstable_cache(
     books: getCatalogBooks(shelf, limit, offset, shelf === "trending" ? weekKey : undefined),
     total: getCatalogBooks(shelf, 5000, 0, shelf === "trending" ? weekKey : undefined).length,
   }),
-  ["book-catalog-v2"],
-  { revalidate: 3600, tags: ["book-catalog-v2"] }
+  ["book-catalog-v3"],
+  { revalidate: 3600, tags: ["book-catalog-v3"] }
 );
 
 export async function GET(request: Request) {
@@ -43,4 +43,6 @@ export async function GET(request: Request) {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error("Catalog API error:", error);
-    return NextResponse.json({ success: false, error
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
+  }
+}

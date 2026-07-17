@@ -152,7 +152,7 @@ export const TRENDING_POOL_IDS = [
   "9780525559474", "9780062060624", "9780316556345", "9781984822178", "9781501161933",
   "9780735219090", "9781250301697", "9780307588364", "9781984806734", "9781250319126",
   "9781250217288", "9780765387561", "9780525536291", "9780399590504", "9780399588174",
-  "9780735211292", "9780062316097", "9781982185824", "9780593318171", "9780590353428",
+  "9780735211292", "9780062316097", "9781982185824", "9780593318171",
   "9780553103540", "9780765311788", "9780439023481", "9780345539786", "9780316229296",
   "9780735220676", "9780670026197", "9780735224292", "9780802124941", "9780593422949",
   "9780802162177", "9780593534484", "9781984806758", "9780593336823", "9780593441275",
@@ -163,18 +163,29 @@ export const TRENDING_POOL_IDS = [
   "9780593493446", "9780385550369", "9780802163372", "9780374602638", "9780593426213",
 ];
 
+/** Never surface in Trending This Week (franchise staples live on other shelves). */
+const TRENDING_EXCLUDE_IDS = new Set([
+  "9780590353428", // Harry Potter and the Sorcerer's Stone
+  "9780439064874", // Harry Potter and the Chamber of Secrets
+  "9780439136358", // Harry Potter and the Prisoner of Azkaban
+]);
+
+function isExcludedFromTrending(book: Book): boolean {
+  if (TRENDING_EXCLUDE_IDS.has(book.id)) return true;
+  const hay = `${book.title} ${book.author}`.toLowerCase();
+  return hay.includes("harry potter") || book.author.toLowerCase().includes("j.k. rowling");
+}
+
 function getTrendingPool(): Book[] {
   const catalogById = new Map(INITIAL_BOOKS.map((b) => [b.id, b]));
   const exclude = getAllTimeGreatsTopIds(25);
-
-  const orderedIds = [...new Set([...TRENDING_POOL_IDS, ...FEATURED_POOL_IDS, ...Object.keys(COVER_ID_BY_ISBN)])];
   const books: Book[] = [];
   const seen = new Set<string>();
 
-  for (const id of orderedIds) {
-    if (seen.has(id) || exclude.has(id) || !COVER_ID_BY_ISBN[id]) continue;
+  for (const id of TRENDING_POOL_IDS) {
+    if (seen.has(id) || exclude.has(id) || TRENDING_EXCLUDE_IDS.has(id) || !COVER_ID_BY_ISBN[id]) continue;
     const book = catalogById.get(id);
-    if (!book) continue;
+    if (!book || isExcludedFromTrending(book)) continue;
     seen.add(id);
     books.push(book);
   }
