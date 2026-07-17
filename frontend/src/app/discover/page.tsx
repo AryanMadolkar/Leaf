@@ -16,7 +16,7 @@ import {
   favoriteGenreFromTags,
 } from "@/utils/genreUtils";
 import { 
-  Search, Sparkles, BookOpen, Star, Award, Compass, 
+  Sparkles, BookOpen, Star, Award, Compass, 
   ChevronRight, Loader2, Library, Plus, MessageSquare, History, RefreshCw, Dice5
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -54,12 +54,6 @@ export default function DiscoverPage() {
   const router = useRouter();
   const { books, diaryLogs, logBook, currentUser } = useLeaf();
 
-  // Search state
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<Book[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [searchDebounce, setSearchDebounce] = useState("");
-
   // Hero featured book (server-cached, rotates daily)
   const [heroBook, setHeroBook] = useState<Book | null>(null);
   const [heroDate, setHeroDate] = useState<string | null>(null);
@@ -76,39 +70,6 @@ export default function DiscoverPage() {
   const [selectedRating, setSelectedRating] = useState<number>(0);
   const [logReview, setLogReview] = useState("");
   const [isLogging, setIsLogging] = useState(false);
-
-  // Debounce search input
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setSearchDebounce(searchQuery);
-    }, 350);
-    return () => clearTimeout(handler);
-  }, [searchQuery]);
-
-  // Execute Search
-  useEffect(() => {
-    async function performSearch() {
-      if (!searchDebounce || searchDebounce.trim().length < 2) {
-        setSearchResults([]);
-        return;
-      }
-      setSearchLoading(true);
-      try {
-        const res = await fetch(`/api/books/search?q=${encodeURIComponent(searchDebounce)}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success) {
-            setSearchResults(data.books || []);
-          }
-        }
-      } catch (err) {
-        console.error("Discover search error:", err);
-      } finally {
-        setSearchLoading(false);
-      }
-    }
-    performSearch();
-  }, [searchDebounce]);
 
   // Fetch daily featured volume from cached API
   useEffect(() => {
@@ -350,78 +311,7 @@ export default function DiscoverPage() {
 
       <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-8 space-y-14">
         
-        {/* Global Premium Search Bar */}
-        <section className="max-w-2xl mx-auto space-y-2 text-center">
-          <div className="relative group">
-            <div className="absolute inset-0 bg-brand/5 rounded-2xl blur-xl group-hover:bg-brand/10 transition-all duration-300 pointer-events-none" />
-            <div className="relative flex items-center bg-cream-card border border-cream-border rounded-xl shadow-sm overflow-hidden focus-within:border-brand transition-all duration-300">
-              <Search className="w-5 h-5 text-charcoal-muted ml-4 flex-shrink-0" />
-              <input
-                type="text"
-                placeholder="Search by title, author, or ISBN in local catalog..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full py-3.5 pl-3 pr-12 text-xs bg-transparent text-charcoal placeholder-charcoal-muted focus:outline-none"
-              />
-              {searchLoading && (
-                <Loader2 className="absolute right-4 w-4 h-4 text-brand animate-spin" />
-              )}
-            </div>
-          </div>
-        </section>
-
-        {/* Search Results Active Overlay */}
-        <AnimatePresence>
-          {searchQuery.trim().length >= 2 && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-              className="bg-cream-card border border-cream-border rounded-2xl p-6 space-y-6 shadow-md"
-            >
-              <div className="flex items-center justify-between border-b border-cream-border pb-3">
-                <h2 className="font-serif text-lg font-bold text-charcoal">
-                  Search Results for &ldquo;{searchQuery}&rdquo; ({searchResults.length})
-                </h2>
-                <button 
-                  onClick={() => setSearchQuery("")}
-                  className="text-[10px] font-bold text-brand hover:underline"
-                >
-                  Clear Search
-                </button>
-              </div>
-
-              {searchLoading ? (
-                <div className="flex flex-col items-center justify-center py-12 space-y-3">
-                  <Loader2 className="w-8 h-8 text-brand animate-spin" />
-                  <p className="text-xs text-charcoal-muted">Searching volumes...</p>
-                </div>
-              ) : searchResults.length > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6 justify-items-center">
-                  {searchResults.map((book) => (
-                    <div key={book.id} className="space-y-2 text-center w-28 sm:w-32 group">
-                      <BookCard book={book} size="sm" />
-                      <div>
-                        <p className="text-[11px] font-bold text-charcoal line-clamp-1 group-hover:text-brand cursor-pointer" onClick={() => router.push(`/book/${book.id}`)}>
-                          {book.title}
-                        </p>
-                        <p className="text-[9px] text-charcoal-muted truncate">{book.author}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <p className="text-xs text-charcoal-muted">No books found in the local catalog matching that search query.</p>
-                </div>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Default Curated Editorial View (only shown when search query is empty) */}
-        {searchQuery.trim().length < 2 && (
-          <>
+        <>
             {/* Random for You */}
             {randomBook && (
               <section className="bg-cream-card border border-cream-border rounded-2xl p-5 md:p-6 shadow-sm">
@@ -718,7 +608,6 @@ export default function DiscoverPage() {
               </div>
             </section>
           </>
-        )}
 
       </main>
 
