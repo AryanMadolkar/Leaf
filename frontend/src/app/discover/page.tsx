@@ -35,7 +35,10 @@ const CURATED_SHELVES: ShelfConfig[] = [
 ];
 
 async function fetchShelf(shelf: CatalogShelf, limit = 12): Promise<Book[]> {
-  const res = await fetch(`/api/books/catalog?shelf=${shelf}&limit=${limit}`);
+  const weekParam = shelf === "trending" ? `&week=${encodeURIComponent(new Date().toISOString().slice(0, 10))}` : "";
+  const res = await fetch(`/api/books/catalog?shelf=${shelf}&limit=${limit}${weekParam}`, {
+    cache: "no-store",
+  });
   if (!res.ok) return [];
   const data = await res.json();
   return data.success ? data.books : [];

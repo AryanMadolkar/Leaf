@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { unstable_cache } from "next/cache";
 import { CatalogShelf, getCatalogBooks, getISOWeekKey } from "@/utils/bookCatalog";
-import { CACHE_MEDIUM } from "@/utils/apiCache";
+import { CACHE_MEDIUM, CACHE_SHORT } from "@/utils/apiCache";
 
 const VALID_SHELVES: CatalogShelf[] = [
   "all-time-greats", "trending", "most-added", "booktok", "award-winners",
@@ -14,8 +14,8 @@ const getCachedShelf = unstable_cache(
     books: getCatalogBooks(shelf, limit, offset, shelf === "trending" ? weekKey : undefined),
     total: getCatalogBooks(shelf, 5000, 0, shelf === "trending" ? weekKey : undefined).length,
   }),
-  ["book-catalog"],
-  { revalidate: 3600, tags: ["book-catalog"] }
+  ["book-catalog-v2"],
+  { revalidate: 3600, tags: ["book-catalog-v2"] }
 );
 
 export async function GET(request: Request) {
@@ -38,11 +38,9 @@ export async function GET(request: Request) {
         ...(shelf === "trending" ? { week: weekKey } : {}),
         ...result,
       },
-      { headers: { "Cache-Control": CACHE_MEDIUM } }
+      { headers: { "Cache-Control": shelf === "trending" ? CACHE_SHORT : CACHE_MEDIUM } }
     );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error("Catalog API error:", error);
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
-  }
-}
+    return NextResponse.json({ success: false, error

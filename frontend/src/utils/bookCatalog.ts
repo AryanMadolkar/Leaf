@@ -163,39 +163,23 @@ export const TRENDING_POOL_IDS = [
   "9780593493446", "9780385550369", "9780802163372", "9780374602638", "9780593426213",
 ];
 
-function hasKnownCover(book: Book): boolean {
-  return Boolean(COVER_ID_BY_ISBN[book.id]);
-}
-
 function getTrendingPool(): Book[] {
   const catalogById = new Map(INITIAL_BOOKS.map((b) => [b.id, b]));
   const exclude = getAllTimeGreatsTopIds(25);
 
-  const poolIds = [...new Set(TRENDING_POOL_IDS)].filter(
-    (id) => catalogById.has(id) && !exclude.has(id) && COVER_ID_BY_ISBN[id]
-  );
+  const orderedIds = [...new Set([...TRENDING_POOL_IDS, ...FEATURED_POOL_IDS, ...Object.keys(COVER_ID_BY_ISBN)])];
+  const books: Book[] = [];
+  const seen = new Set<string>();
 
-  const merged = new Map<string, Book>();
-  poolIds.forEach((id) => merged.set(id, catalogById.get(id)!));
-
-  // Top up with recent, well-rated catalog titles that have verified cover art
-  if (merged.size < 48) {
-    preferBooksWithCovers(
-      INITIAL_BOOKS.filter((b) => {
-        if (exclude.has(b.id) || merged.has(b.id)) return false;
-        if (!hasKnownCover(b)) return false;
-        const isRecent = b.year >= 2010;
-        const hasBuzz = b.genres.some((g) =>
-          /booktok|contemporary|bestseller|popular|romance|thriller|memoir|fantasy|sci-fi|young adult/i.test(
-            g.toLowerCase()
-          )
-        );
-        return isRecent && hasBuzz && b.averageRating >= 4.2;
-      })
-    ).forEach((b) => merged.set(b.id, b));
+  for (const id of orderedIds) {
+    if (seen.has(id) || exclude.has(id) || !COVER_ID_BY_ISBN[id]) continue;
+    const book = catalogById.get(id);
+    if (!book) continue;
+    seen.add(id);
+    books.push(book);
   }
 
-  return preferBooksWithCovers(Array.from(merged.values()));
+  return books;
 }
 
 /** Weekly-rotating trending shelf — different picks each ISO week, never mirroring all-time greats. */
