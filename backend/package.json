@@ -6,7 +6,8 @@
   "scripts": {
     "seed-books": "node scripts/seedBooks.mjs",
     "seed-community": "node scripts/seedCommunity.mjs",
-    "generate-books": "node scripts/generate500Books.mjs"
+    "generate-books": "node scripts/generateRealCatalog.mjs",
+    "generate-books-legacy": "node scripts/generate500Books.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.1",
