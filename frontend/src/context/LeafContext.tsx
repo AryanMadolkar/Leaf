@@ -54,7 +54,6 @@ interface LeafContextType {
   signInWithPassword: (email: string, password: string) => Promise<any>;
   signUpWithPassword: (email: string, password: string, username: string, name: string) => Promise<any>;
   resetPassword: (email: string) => Promise<any>;
-  signInAsGuest: () => void;
 }
 
 const EMPTY_USER: User = {
@@ -127,25 +126,18 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (storedProfile) {
         const parsedProfile = JSON.parse(storedProfile);
-        if (isDeprecatedAvatar(parsedProfile.avatar)) {
-          parsedProfile.avatar = "";
-          localStorage.setItem("leaf_local_profile", JSON.stringify(parsedProfile));
+        if (parsedProfile?.id === "guest-user-id" || parsedProfile?.id === "currentUser") {
+          localStorage.removeItem("leaf_local_profile");
+          setCurrentUser(EMPTY_USER);
+          setProfile(null);
+        } else {
+          if (isDeprecatedAvatar(parsedProfile.avatar)) {
+            parsedProfile.avatar = "";
+            localStorage.setItem("leaf_local_profile", JSON.stringify(parsedProfile));
+          }
+          setCurrentUser(parsedProfile);
+          setProfile(parsedProfile);
         }
-        setCurrentUser(parsedProfile);
-        setProfile(parsedProfile);
-      } else {
-        const defaultGuest = {
-          id: "guest-user-id",
-          username: "literary_wanderer",
-          name: "Guest Reader",
-          avatar: "",
-          bio: "An avid reader exploring Leaf in guest mode.",
-          followersCount: 0,
-          followingCount: 0,
-          favoriteBookIds: [],
-        };
-        setCurrentUser(defaultGuest);
-        setProfile(defaultGuest);
       }
 
       if (storedLogs) setDiaryLogs(JSON.parse(storedLogs));
@@ -277,114 +269,6 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   };
 
-  // Local sync/save helper when server APIs are unavailable
-  const saveBookLocally = async (
-    bookId: string,
-    status: "Want to Read" | "Currently Reading" | "Finished",
-    rating?: number,
-    reviewContent?: string
-  ) => {
-    let book = books.find((b) => b.id === bookId);
-    if (!book) {
-      try {
-        const { fetchBookByIsbnOrId } = await import("../utils/openLibrary");
-        const fetched = await fetchBookByIsbnOrId(bookId);
-        if (fetched) {
-          book = fetched;
-          setBooks((prev) => [...prev, fetched]);
-        }
-      } catch (e) {
-        console.error("Failed to fetch book details client-side:", e);
-      }
-      
-      if (!book) {
-        book = {
-          id: bookId,
-          title: "Unknown Book",
-          author: "Unknown Author",
-          year: 2024,
-          description: "No description available.",
-          coverImage: "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=600&auto=format&fit=crop&q=80",
-          averageRating: 0.0,
-          genres: ["Fiction"],
-          pages: 300,
-        };
-        setBooks((prev) => [...prev, book!]);
-      }
-    }
-
-    const dateLogged = new Date().toISOString().split("T")[0];
-    const newLog: ReadingLog = {
-      id: `local-log-${Date.now()}`,
-      userId: currentUser.id,
-      bookId,
-      status,
-      dateLogged,
-      rating,
-      currentPage: status === "Finished" ? (book?.pages || 300) : 0,
-    };
-
-    let updatedLogs = [...diaryLogs];
-    const existingIndex = updatedLogs.findIndex((log) => log.bookId === bookId && log.userId === currentUser.id);
-    if (existingIndex >= 0) {
-      const existing = updatedLogs[existingIndex];
-      updatedLogs[existingIndex] = {
-        ...existing,
-        status,
-        rating: rating !== undefined ? rating : existing.rating,
-        currentPage: status === "Finished" ? (book?.pages || 300) : existing.currentPage,
-      };
-    } else {
-      updatedLogs.push(newLog);
-    }
-    setDiaryLogs(updatedLogs);
-    localStorage.setItem("leaf_local_diary_logs", JSON.stringify(updatedLogs));
-
-    if (status === "Finished" && (rating !== undefined || reviewContent)) {
-      const dateObj = new Date();
-      const dateString = dateObj.toLocaleDateString("en-US", {
-        month: "short",
-        day: "2-digit",
-        year: "numeric",
-      });
-      const newReview: Review = {
-        id: `local-rev-${Date.now()}`,
-        userId: currentUser.id,
-        bookId,
-        rating: rating || 0.0,
-        content: reviewContent || "",
-        dateString,
-        likesCount: 0,
-        commentsCount: 0,
-        isLiked: false,
-        reviewerName: currentUser.name,
-        reviewerAvatar: currentUser.avatar,
-        reviewerUsername: currentUser.username,
-        bookTitle: book?.title || "Unknown Book",
-        bookAuthor: book?.author || "Unknown Author",
-        bookCover: book?.coverImage || "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=600&auto=format&fit=crop&q=80",
-      };
-
-      let updatedReviews = [...reviews];
-      const revIndex = updatedReviews.findIndex((r) => r.bookId === bookId && r.userId === currentUser.id);
-      if (revIndex >= 0) {
-        updatedReviews[revIndex] = {
-          ...updatedReviews[revIndex],
-          rating: rating || updatedReviews[revIndex].rating,
-          content: reviewContent || updatedReviews[revIndex].content,
-        };
-      } else {
-        updatedReviews.unshift(newReview);
-      }
-      setReviews(updatedReviews);
-      localStorage.setItem("leaf_local_reviews", JSON.stringify(updatedReviews));
-    }
-
-    const updatedStats = calculateStatsFromLocalData(updatedLogs, readingSessions);
-    setUserStats(updatedStats);
-    localStorage.setItem("leaf_local_stats", JSON.stringify(updatedStats));
-  };
-
   // Local reading session tracker helper
   const logReadingSessionLocally = async (
     bookId: string,
@@ -447,59 +331,12 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Setup Auth — JWT in localStorage, sent as Authorization: Bearer
   useEffect(() => {
+    // Clear legacy guest-mode leftovers
+    localStorage.removeItem("leaf_guest_session");
+    document.cookie = "leaf_guest_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    document.cookie = "leaf_guest_onboarded=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+
     const token = getAccessToken();
-    const guestFlag = localStorage.getItem("leaf_guest_session") === "true";
-
-    // Stale guest flag after a real login: prefer the JWT and clear guest mode
-    if (guestFlag && token) {
-      localStorage.removeItem("leaf_guest_session");
-      document.cookie = "leaf_guest_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-    }
-
-    const isGuest = localStorage.getItem("leaf_guest_session") === "true" && !token;
-    if (isGuest) {
-      clearAccessToken();
-      setIsAuthenticated(true);
-      setIsProfileLoading(false);
-      setSession({
-        user: {
-          id: "guest-user-id",
-          email: "guest@example.com",
-        },
-      });
-      // Only hydrate guest profile — never a leftover real account without a JWT
-      try {
-        const saved = localStorage.getItem("leaf_local_profile");
-        const parsed = saved ? JSON.parse(saved) : null;
-        if (parsed?.id === "guest-user-id") {
-          loadLocalStorageData();
-        } else {
-          const guestProfile = {
-            id: "guest-user-id",
-            username: "guest",
-            name: "Guest Reader",
-            avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=guest",
-            bio: "Just browsing Leaf as a guest.",
-            location: "",
-            website: "",
-            joinedDate: new Date().toISOString().split("T")[0],
-            following: [],
-            followers: [],
-            followingCount: 0,
-            followersCount: 0,
-            favoriteBookIds: [],
-            favoriteGenres: ["Fiction", "Mystery", "Sci-Fi"],
-            isPrivate: false,
-          };
-          setCurrentUser(guestProfile);
-          localStorage.setItem("leaf_local_profile", JSON.stringify(guestProfile));
-        }
-      } catch {
-        loadLocalStorageData();
-      }
-      return;
-    }
-
     if (!token) {
       setSession(null);
       setIsAuthenticated(false);
@@ -520,6 +357,8 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Token + cached profile means we're signed in — don't wait on /api/auth/me
           setIsAuthenticated(true);
           setIsProfileLoading(false);
+        } else if (parsed?.id === "guest-user-id" || parsed?.id === "currentUser") {
+          localStorage.removeItem("leaf_local_profile");
         }
       }
     } catch {
@@ -615,8 +454,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!isProtected) return;
 
     const token = getAccessToken();
-    const isGuest = localStorage.getItem("leaf_guest_session") === "true" && !token;
-    if (!isGuest && !token && !isAuthenticated) {
+    if (!token && !isAuthenticated) {
       router.replace("/auth");
     }
   }, [pathname, isAuthenticated, router]);
@@ -624,12 +462,6 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Load user data when session is set after login/signup (mount path already hydrates in parallel)
   useEffect(() => {
     if (!session?.user) return;
-
-    if (session.user.id === "guest-user-id") {
-      loadLocalStorageData();
-      setIsProfileLoading(false);
-      return;
-    }
 
     if (skipNextInitRef.current) {
       skipNextInitRef.current = false;
@@ -696,38 +528,6 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsAuthenticated(true);
   };
 
-  const signInAsGuest = () => {
-    clearAccessToken();
-    localStorage.setItem("leaf_guest_session", "true");
-    document.cookie = "leaf_guest_session=true; path=/; max-age=31536000";
-    
-    const guestUser = {
-      id: "guest-user-id",
-      username: "literary_wanderer",
-      name: "Guest Reader",
-      avatar: "",
-      bio: "An avid reader exploring Leaf in guest mode.",
-      followersCount: 0,
-      followingCount: 0,
-      favoriteBookIds: [],
-    };
-    
-    setCurrentUser(guestUser);
-    setProfile(guestUser);
-    setIsAuthenticated(true);
-    setIsProfileLoading(false);
-    skipNextInitRef.current = true;
-    setSession({
-      user: {
-        id: "guest-user-id",
-        email: "guest@example.com",
-      }
-    });
-    
-    // Load local storage fallback data
-    loadLocalStorageData();
-  };
-
   const signOut = async () => {
     clearAccessToken();
     localStorage.removeItem("leaf_guest_session");
@@ -776,9 +576,6 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!res.ok || !data.success || !data.token) {
       throw new Error(data.error || "Could not sign in.");
     }
-    // Leave guest mode so the next refresh keeps the JWT
-    localStorage.removeItem("leaf_guest_session");
-    document.cookie = "leaf_guest_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
     setAccessToken(data.token);
     const mapped = mapApiUserToCurrentUser(data.user, data.user.email);
     setCurrentUser(mapped);
@@ -800,8 +597,6 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!res.ok || !data.success || !data.token) {
       throw new Error(data.error || "Could not create account.");
     }
-    localStorage.removeItem("leaf_guest_session");
-    document.cookie = "leaf_guest_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
     setAccessToken(data.token);
     const mapped = mapApiUserToCurrentUser(data.user, data.user.email);
     setCurrentUser(mapped);
@@ -814,7 +609,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const resetPassword = async (_email: string) => {
-    throw new Error("Password reset is not available yet. Create a new account or continue as guest.");
+    throw new Error("Password reset is not available yet. Create a new account or sign in.");
   };
 
   // Review Operations
@@ -934,12 +729,6 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setBooks((prev) => (prev.some((b) => b.id === book.id) ? prev : [...prev, book]));
     }
 
-    const isGuest = session?.user?.id === "guest-user-id";
-    if (isGuest) {
-      await saveBookLocally(bookId, status, rating, reviewContent);
-      return;
-    }
-
     try {
       const res = await authFetch("/api/user-books", {
         method: "POST",
@@ -996,11 +785,6 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     note?: string,
     readingMinutes?: number
   ) => {
-    const isGuest = session?.user?.id === "guest-user-id";
-    if (isGuest) {
-      return await logReadingSessionLocally(bookId, pagesRead, note, readingMinutes);
-    }
-
     const log = diaryLogs.find((l) => l.bookId === bookId);
     const startPage = log && log.currentPage ? log.currentPage : 0;
     const endPage = startPage + pagesRead;
@@ -1106,21 +890,6 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateProfile = async (name: string, bio: string, avatar: string, favoriteBookIds: string[], genres?: string[]) => {
-    const isGuest = session?.user?.id === "guest-user-id";
-    if (isGuest) {
-      const updatedUser = {
-        ...currentUser,
-        name,
-        bio,
-        avatar: avatar || INITIAL_USERS[4].avatar,
-        favoriteBookIds: favoriteBookIds || [],
-      };
-      setCurrentUser(updatedUser);
-      setProfile(updatedUser);
-      localStorage.setItem("leaf_local_profile", JSON.stringify(updatedUser));
-      return;
-    }
-
     try {
       const { data, error } = await (async () => {
         const res = await authFetch("/api/profile", {
@@ -1219,7 +988,6 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
         signInWithPassword,
         signUpWithPassword,
         resetPassword,
-        signInAsGuest,
       }}
     >
       {children}

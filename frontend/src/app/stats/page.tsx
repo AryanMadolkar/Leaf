@@ -31,10 +31,8 @@ export default function StatsPage() {
   const [hoveredBarIndex, setHoveredBarIndex] = useState<number | null>(null);
   const [hoveredGenre, setHoveredGenre] = useState<any>(null);
 
-  const isGuest =
-    currentUser?.id === "guest-user-id" ||
-    currentUser?.id === "currentUser" ||
-    (!isProfileLoading && !isAuthenticated && !currentUser?.id);
+  const needsLogin =
+    !isProfileLoading && !isAuthenticated;
 
   const loadLocalStatsFallback = () => {
     console.log("Using client-side stats fallback from context.");
@@ -248,8 +246,7 @@ export default function StatsPage() {
     async function loadStats() {
       if (isProfileLoading) return;
 
-      // Guests see a login prompt — never hydrate mock/local fallback stats
-      if (isGuest) {
+      if (needsLogin) {
         setData(null);
         setLoading(false);
         return;
@@ -276,7 +273,7 @@ export default function StatsPage() {
       }
     }
     loadStats();
-  }, [currentUser.id, readingSessions, diaryLogs, isGuest, isProfileLoading]);
+  }, [currentUser.id, readingSessions, diaryLogs, needsLogin, isProfileLoading]);
 
   if (isProfileLoading || loading) {
     return (
@@ -293,7 +290,7 @@ export default function StatsPage() {
     );
   }
 
-  if (isGuest) {
+  if (needsLogin) {
     return (
       <div className="min-h-screen bg-cream flex flex-col">
         <Header />

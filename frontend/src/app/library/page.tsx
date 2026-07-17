@@ -34,10 +34,8 @@ export default function UserLibraryPage() {
   const deferredSort = useDeferredValue(sortMode);
   const deferredFilter = useDeferredValue(statusFilter);
 
-  const isGuest =
-    currentUser?.id === "guest-user-id" ||
-    currentUser?.id === "currentUser" ||
-    (!isProfileLoading && !isAuthenticated && !currentUser?.id);
+  const needsLogin =
+    !isProfileLoading && !isAuthenticated;
 
   const load = useCallback(async () => {
     try {
@@ -63,16 +61,15 @@ export default function UserLibraryPage() {
 
   useEffect(() => {
     if (isProfileLoading) return;
-    if (isGuest) {
+    if (needsLogin) {
       setLibrary(null);
       setLoading(false);
       setLoadError(null);
       return;
     }
-    // Real signed-in user (cached profile or freshly authenticated)
     if (!currentUser?.id) return;
     load();
-  }, [currentUser?.id, isProfileLoading, isGuest, load]);
+  }, [currentUser?.id, isProfileLoading, needsLogin, load]);
 
   const bookMap = useMemo(() => {
     const m = new Map<string, Book>();
@@ -263,7 +260,7 @@ export default function UserLibraryPage() {
     );
   }
 
-  if (isGuest) {
+  if (needsLogin) {
     return (
       <div className="min-h-screen bg-cream flex flex-col">
         <Header />

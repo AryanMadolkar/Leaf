@@ -112,10 +112,7 @@ export default function Header() {
     toggleFollowUser,
   } = useLeaf();
 
-  const isGuest =
-    currentUser?.id === "guest-user-id" ||
-    currentUser?.id === "currentUser" ||
-    (!isProfileLoading && !isAuthenticated && !currentUser?.id);
+  const needsLogin = !isProfileLoading && !isAuthenticated;
 
   // Search state
   const [searchQuery, setSearchQuery] = useState("");
@@ -343,7 +340,7 @@ export default function Header() {
 
   const handleFollowFromSearch = async (e: React.MouseEvent, userId: string) => {
     e.stopPropagation();
-    if (!currentUser?.id || currentUser.id === "guest-user-id") {
+    if (!currentUser?.id || !isAuthenticated) {
       router.push("/auth");
       return;
     }
@@ -724,10 +721,10 @@ export default function Header() {
                     transition={{ duration: 0.15, ease: "easeOut" }}
                     className="absolute right-0 top-10 w-64 bg-cream border border-cream-border rounded-xl shadow-xl overflow-hidden z-50 text-xs text-charcoal font-sans"
                   >
-                    {isGuest ? (
+                    {needsLogin ? (
                       <>
                         <div className="p-4 bg-cream-card border-b border-cream-border">
-                          <p className="font-serif text-base font-bold text-charcoal">Guest</p>
+                          <p className="font-serif text-base font-bold text-charcoal">Welcome</p>
                           <p className="text-[11px] text-charcoal-muted mt-1 leading-relaxed">
                             Log in to sync your library, diary, and reading stats.
                           </p>

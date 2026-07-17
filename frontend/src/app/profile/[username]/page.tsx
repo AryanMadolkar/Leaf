@@ -24,6 +24,7 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
     diaryLogs,
     books,
     userStats: contextStats,
+    isAuthenticated,
   } = useLeaf();
   const [activeTab, setActiveTab] = useState<"activity" | "diary" | "lists" | "likes">("activity");
   const [targetUser, setTargetUser] = useState<any | null>(null);
@@ -76,7 +77,7 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
               display_name: currentUser.name,
               avatar_url: currentUser.avatar,
               bio: currentUser.bio,
-              email: currentUser.email || "guest@example.com",
+              email: currentUser.email || "",
               created_at: currentUser.created_at || new Date().toISOString(),
             };
             isMock = true;
@@ -231,7 +232,7 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
               description: ub.book?.description || "",
             })) : [];
         } else {
-          // Local/guest fallback — use context data only (no hardcoded mock reviews)
+          // Local fallback — use context data only (no hardcoded mock reviews)
           const { INITIAL_BOOKS } = await import("@/data/mockData");
           const isMe = currentUser ? targetProf.id === currentUser.id : false;
 
@@ -411,7 +412,7 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
   };
 
   const handleModalFollow = async (userId: string) => {
-    if (!currentUser?.id || currentUser.id === "guest-user-id") {
+    if (!currentUser?.id || !isAuthenticated) {
       router.push("/auth");
       return;
     }
