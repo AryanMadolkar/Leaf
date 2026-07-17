@@ -9,7 +9,7 @@ export const GENERATED_BOOKS: Book[] = [
     "author": "J.K. Rowling",
     "year": 1997,
     "description": "Harry Potter has no idea how famous he is. That's because he's being raised by his miserable uncle and aunt, who are terrified he will discover that he is a wizard.",
-    "coverImage": "https://covers.openlibrary.org/b/id/10521271-L.jpg?default=false",
+    "coverImage": "https://covers.openlibrary.org/b/id/15155833-L.jpg?default=false",
     "averageRating": 4.8,
     "genres": [
       "Fantasy",
@@ -24,7 +24,7 @@ export const GENERATED_BOOKS: Book[] = [
     "author": "J.K. Rowling",
     "year": 1998,
     "description": "The Dursleys were so mean and hideous that summer that all Harry Potter wanted was to get back to the Hogwarts School for Witchcraft and Wizardry.",
-    "coverImage": "https://covers.openlibrary.org/b/id/10521272-L.jpg?default=false",
+    "coverImage": "https://covers.openlibrary.org/b/id/15158664-L.jpg?default=false",
     "averageRating": 4.4,
     "genres": [
       "Fantasy",

@@ -4,7 +4,7 @@ export type CoverSize = "S" | "M" | "L";
 
 /** Same-origin cached cover by Open Library cover ID. */
 export function coverUrlFromCoverId(coverId: number | string, size: CoverSize = "M"): string {
-  return `/api/covers?id=${encodeURIComponent(String(coverId))}&size=${size}&v=2`;
+  return `/api/covers?id=${encodeURIComponent(String(coverId))}&size=${size}&v=3`;
 }
 
 /** Same-origin cached cover by ISBN (resolves cover ID when known). */
@@ -14,7 +14,7 @@ export function coverUrlFromIsbn(
   meta?: { title?: string; author?: string }
 ): string {
   const clean = isbn.replace(/[^0-9Xx]/g, "");
-  const params = new URLSearchParams({ isbn: clean, size, v: "2" });
+  const params = new URLSearchParams({ isbn: clean, size, v: "3" });
   if (meta?.title) params.set("title", meta.title);
   if (meta?.author) params.set("author", meta.author);
   return `/api/covers?${params.toString()}`;
@@ -106,7 +106,7 @@ export function resolveCoverUrl(
 
   // Last resort: title/author search via proxy
   if (meta.title) {
-    const params = new URLSearchParams({ size, title: meta.title, v: "2" });
+    const params = new URLSearchParams({ size, title: meta.title, v: "3" });
     if (meta.author) params.set("author", meta.author);
     return `/api/covers?${params.toString()}`;
   }
