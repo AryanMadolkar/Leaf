@@ -5,44 +5,31 @@ export const runtime = "nodejs";
 
 const VALID_SIZES = new Set(["S", "M", "L"]);
 
-function upstreamUrl(params: {
-  id?: string | null;
-  isbn?: string | null;
-  size: string;
-}): string | null {
-  const size = VALID_SIZES.has(params.size) ? params.size : "M";
-  if (params.id) {
-    return `https://covers.openlibrary.org/b/id/${params.id}-${size}.jpg?default=false`;
-  }
-  if (params.isbn) {
-    const clean = params.isbn.replace(/[^0-9Xx]/g, "");
-    if (!clean) return null;
-    const coverId = COVER_ID_BY_ISBN[clean] || COVER_ID_BY_ISBN[params.isbn];
-    if (coverId) {
-      return `https://covers.openlibrary.org/b/id/${coverId}-${size}.jpg?default=false`;
-    }
-    return `https://covers.openlibrary.org/b/isbn/${clean}-${size}.jpg?default=false`;
-  }
-  return null;
+/** Procedurally generated catalog ISBNs — never trust their Open Library ISBN covers. */
+function isFakeIsbn(isbn: string): boolean {
+  const clean = isbn.replace(/[^0-9Xx]/g, "");
+  return clean.startsWith("978100") || clean.startsWith("978101") || clean.startsWith("978102");
 }
 
-function googleBooksUrl(isbn: string): string {
-  const clean = isbn.replace(/[^0-9Xx]/g, "");
-  return `https://books.google.com/books/content?vid=ISBN${clean}&printsec=frontcover&img=1&zoom=1`;
+function olCoverById(coverId: number | string, size: string): string {
+  const sz = VALID_SIZES.has(size) ? size : "M";
+  return `https://covers.openlibrary.org/b/id/${coverId}-${sz}.jpg?default=false`;
 }
 
 async function fetchCoverBytes(url: string): Promise<{ bytes: ArrayBuffer; contentType: string } | null> {
   try {
     const res = await fetch(url, {
-      // Cache at the edge for a month after first successful fetch
       next: { revalidate: 60 * 60 * 24 * 30 },
       redirect: "follow",
-      headers: { Accept: "image/*,*/*;q=0.8" },
+      headers: {
+        Accept: "image/*,*/*;q=0.8",
+        "User-Agent": "LeafLibrary/1.0 (book cover proxy)",
+      },
     });
     if (!res.ok) return null;
     const bytes = await res.arrayBuffer();
-    // Open Library blank GIFs are tiny
-    if (bytes.byteLength < 200) return null;
+    // Blank OL GIFs and Google "image not available" stubs are tiny
+    if (bytes.byteLength < 1500) return null;
     return {
       bytes,
       contentType: res.headers.get("Content-Type") || "image/jpeg",
@@ -52,13 +39,70 @@ async function fetchCoverBytes(url: string): Promise<{ bytes: ArrayBuffer; conte
   }
 }
 
+/** Resolve a reliable Open Library cover_i for an ISBN. */
+async function coverIdForIsbn(isbn: string): Promise<number | null> {
+  const clean = isbn.replace(/[^0-9Xx]/g, "");
+  if (!clean || isFakeIsbn(clean)) return null;
+
+  const mapped = COVER_ID_BY_ISBN[clean] || COVER_ID_BY_ISBN[isbn];
+  if (mapped) return mapped;
+
+  try {
+    const res = await fetch(
+      `https://openlibrary.org/search.json?q=isbn:${encodeURIComponent(clean)}&fields=cover_i,title&limit=1`,
+      {
+        next: { revalidate: 60 * 60 * 24 * 7 },
+        headers: { "User-Agent": "LeafLibrary/1.0 (book cover proxy)" },
+      }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const coverI = data?.docs?.[0]?.cover_i;
+    return typeof coverI === "number" ? coverI : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Same-origin cover proxy.
- * Caches Open Library (and Google Books fallback) images at the CDN edge
- * so thumbnails load instantly after the first hit.
+ * Title/author search — only used for fake ISBNs.
+ * Requires an exact title match so we don't attach Fantastic Mr. Fox to Frankenstein.
+ */
+async function coverIdForTitleAuthor(title: string, author?: string | null): Promise<number | null> {
+  const needle = title.trim().toLowerCase();
+  if (!needle) return null;
+  try {
+    const q = new URLSearchParams({
+      title: title.trim(),
+      limit: "5",
+      fields: "cover_i,title",
+    });
+    if (author) q.set("author", author);
+    const res = await fetch(`https://openlibrary.org/search.json?${q.toString()}`, {
+      next: { revalidate: 60 * 60 * 24 * 7 },
+      headers: { "User-Agent": "LeafLibrary/1.0 (book cover proxy)" },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const docs: Array<{ cover_i?: number; title?: string }> = data?.docs || [];
+    const exact = docs.find((d) => (d.title || "").trim().toLowerCase() === needle && d.cover_i);
+    if (exact?.cover_i) return exact.cover_i;
+    // Soft match: title starts with the same words (handles subtitles)
+    const soft = docs.find(
+      (d) => (d.title || "").trim().toLowerCase().startsWith(needle) && d.cover_i
+    );
+    return soft?.cover_i || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Same-origin cover proxy with CDN caching.
  *
- * GET /api/covers?id=11200092&size=M
- * GET /api/covers?isbn=9780593135204&size=M
+ * GET /api/covers?id=12356249&size=M
+ * GET /api/covers?isbn=9780141439471&size=M
+ * GET /api/covers?isbn=978100…&title=…&author=…  (fake ISBN fallback)
  */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -68,38 +112,33 @@ export async function GET(request: Request) {
   const title = searchParams.get("title");
   const author = searchParams.get("author");
 
-  const primary = upstreamUrl({ id, isbn, size });
-  let payload = primary ? await fetchCoverBytes(primary) : null;
+  let payload: { bytes: ArrayBuffer; contentType: string } | null = null;
 
-  // Fallback: Google Books by ISBN when Open Library has nothing
-  if (!payload && isbn) {
-    payload = await fetchCoverBytes(googleBooksUrl(isbn));
+  // 1) Explicit cover ID
+  if (id) {
+    payload = await fetchCoverBytes(olCoverById(id, size));
   }
 
-  // Fallback: Open Library search by title/author (helps fake/generated ISBNs)
-  if (!payload && title) {
-    try {
-      const q = new URLSearchParams({
-        title,
-        limit: "1",
-        fields: "cover_i",
-      });
-      if (author) q.set("author", author);
-      const searchRes = await fetch(`https://openlibrary.org/search.json?${q.toString()}`, {
-        next: { revalidate: 60 * 60 * 24 * 7 },
-      });
-      if (searchRes.ok) {
-        const data = await searchRes.json();
-        const coverI = data?.docs?.[0]?.cover_i;
-        if (coverI) {
-          const sz = VALID_SIZES.has(size) ? size : "M";
-          payload = await fetchCoverBytes(
-            `https://covers.openlibrary.org/b/id/${coverI}-${sz}.jpg?default=false`
-          );
-        }
-      }
-    } catch {
-      // ignore
+  // 2) ISBN → verified cover_i (override map or Open Library isbn search)
+  if (!payload && isbn && !isFakeIsbn(isbn)) {
+    const coverI = await coverIdForIsbn(isbn);
+    if (coverI) {
+      payload = await fetchCoverBytes(olCoverById(coverI, size));
+    }
+    // Last ISBN attempt: direct OL isbn URL
+    if (!payload) {
+      const clean = isbn.replace(/[^0-9Xx]/g, "");
+      payload = await fetchCoverBytes(
+        `https://covers.openlibrary.org/b/isbn/${clean}-${VALID_SIZES.has(size) ? size : "M"}.jpg?default=false`
+      );
+    }
+  }
+
+  // 3) Fake ISBN / missing art → exact title match only (never loose author-only guesses)
+  if (!payload && title && (isFakeIsbn(isbn || "") || !isbn)) {
+    const coverI = await coverIdForTitleAuthor(title, author);
+    if (coverI) {
+      payload = await fetchCoverBytes(olCoverById(coverI, size));
     }
   }
 
