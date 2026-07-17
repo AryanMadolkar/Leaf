@@ -78,7 +78,13 @@ export interface Comment {
 }
 
 import { GENERATED_BOOKS } from "./mockBooksGenerated";
-export const INITIAL_BOOKS: Book[] = GENERATED_BOOKS;
+
+/** Old generator used 978100–978103 ISBN prefixes for procedural fakes. */
+function isFakeBookId(id: string): boolean {
+  return /^97810[0-3]/.test(id);
+}
+
+export const INITIAL_BOOKS: Book[] = GENERATED_BOOKS.filter((b) => !isFakeBookId(b.id));
 
 
 export const INITIAL_USERS: User[] = [

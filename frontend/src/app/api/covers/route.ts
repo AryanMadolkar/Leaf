@@ -8,7 +8,7 @@ const VALID_SIZES = new Set(["S", "M", "L"]);
 /** Procedurally generated catalog ISBNs — never trust their Open Library ISBN covers. */
 function isFakeIsbn(isbn: string): boolean {
   const clean = isbn.replace(/[^0-9Xx]/g, "");
-  return clean.startsWith("978100") || clean.startsWith("978101") || clean.startsWith("978102");
+  return /^97810[0-3]/.test(clean);
 }
 
 function olCoverById(coverId: number | string, size: string): string {
