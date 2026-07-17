@@ -1,6 +1,6 @@
 import { Book, INITIAL_BOOKS } from "@/data/mockData";
 import { COVER_ID_BY_ISBN } from "@/data/coverOverrides";
-import { coverUrlFromCoverId, withOpenLibraryDefaultFalse } from "@/utils/covers";
+import { resolveBookCover } from "@/utils/covers";
 
 export type CatalogShelf =
   | "all-time-greats"
@@ -20,13 +20,9 @@ export type CatalogShelf =
   | "leaderboard";
 
 export function withResolvedCover(book: Book): Book {
-  const coverId = COVER_ID_BY_ISBN[book.id];
-  if (coverId) {
-    return { ...book, coverImage: coverUrlFromCoverId(coverId) };
-  }
   return {
     ...book,
-    coverImage: withOpenLibraryDefaultFalse(book.coverImage || ""),
+    coverImage: resolveBookCover(book.id, book.coverImage, "M") || book.coverImage,
   };
 }
 

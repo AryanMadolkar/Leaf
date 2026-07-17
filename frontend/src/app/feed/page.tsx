@@ -206,10 +206,13 @@ export default function HomeFeed() {
                         <div className="relative w-16 h-24 md:w-20 md:h-28 rounded-md overflow-hidden shadow-sm bg-cream-dark">
                           <div className="absolute top-0 bottom-0 left-0 w-[2px] bg-charcoal/20 z-10" />
                           <CoverImage
-                            src={book!.coverImage}
+                            src={book!.coverImage || log.bookCover}
                             title={book!.title}
                             author={book!.author}
+                            isbn={book!.id}
                             bookId={book!.id}
+                            size="M"
+                            priority
                             className="w-full h-full"
                             imgClassName="w-full h-full object-cover"
                           />
@@ -281,11 +284,17 @@ export default function HomeFeed() {
                     <span className="font-serif text-xl font-bold text-charcoal/45 group-hover:text-brand transition-colors w-6 flex-shrink-0">
                       0{i + 1}
                     </span>
-                    <Link href={`/book/${book.id}`} className="flex-shrink-0">
-                      <img
+                    <Link href={`/book/${book.id}`} className="flex-shrink-0 w-10 h-14 rounded overflow-hidden shadow-sm">
+                      <CoverImage
                         src={book.coverImage}
-                        alt={book.title}
-                        className="w-10 h-14 object-cover rounded shadow-sm hover:scale-95 transition-transform"
+                        title={book.title}
+                        author={book.author}
+                        isbn={book.id}
+                        bookId={book.id}
+                        size="S"
+                        priority
+                        className="w-full h-full"
+                        imgClassName="w-full h-full object-cover hover:scale-95 transition-transform"
                       />
                     </Link>
                     <div className="min-w-0">
@@ -322,10 +331,16 @@ export default function HomeFeed() {
                   <div key={book.id} className="space-y-1.5 flex flex-col items-center text-center group">
                     <Link href={`/book/${book.id}`} className="relative block w-20 h-28 rounded overflow-hidden shadow border border-cream-border hover:-translate-y-1 transition-transform duration-300 flex-shrink-0 bg-cream-dark">
                       <div className="absolute top-0 bottom-0 left-0 w-[2px] bg-gradient-to-r from-charcoal/20 to-transparent z-10" />
-                      <img
+                      <CoverImage
                         src={book.coverImage}
-                        alt={book.title}
-                        className="w-full h-full object-cover select-none"
+                        title={book.title}
+                        author={book.author}
+                        isbn={book.id}
+                        bookId={book.id}
+                        size="M"
+                        priority
+                        className="w-full h-full"
+                        imgClassName="w-full h-full object-cover select-none"
                       />
                     </Link>
                     <div className="min-w-0 max-w-[90px]">

@@ -15,6 +15,7 @@ import {
   INITIAL_LISTS,
   INITIAL_COMMENTS,
 } from "../data/mockData";
+import { withResolvedCover } from "@/utils/bookCatalog";
 
 interface LeafContextType {
   books: Book[];
@@ -101,7 +102,7 @@ const LeafContext = createContext<LeafContextType | undefined>(undefined);
 export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const pathname = usePathname();
   const router = useRouter();
-  const [books, setBooks] = useState<Book[]>(INITIAL_BOOKS);
+  const [books, setBooks] = useState<Book[]>(() => INITIAL_BOOKS.map(withResolvedCover));
   const [users, setUsers] = useState<User[]>(INITIAL_USERS);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [diaryLogs, setDiaryLogs] = useState<ReadingLog[]>([]);

@@ -76,5 +76,12 @@ export const COVER_ID_BY_ISBN: Record<string, number> = {
   "9780679783689": 744854,
   "9780007117116": 12059372,
   "9780060935467": 10096404,
-  "9780679732760": 95742
+  "9780679732760": 95742,
+  // Classics commonly logged on Leaf
+  "9780141439471": 8739161, // Frankenstein
+  "9780140449136": 12816943, // Crime and Punishment (Penguin)
+  "9780061120084": 10580390, // To Kill a Mockingbird (Harper)
+  "9780486282114": 830344, // Crime and Punishment Dover
+  "9780141187761": 823185, // 1984 Penguin
+  "9780007350827": 6697661, // And Then There Were None
 };

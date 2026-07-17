@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
-import { coverFallbackStyle, resolveCoverUrl } from "@/utils/covers";
+import React, { useEffect, useState } from "react";
+import { COVER_ID_BY_ISBN } from "@/data/coverOverrides";
+import { coverFallbackStyle, resolveCoverUrl, type CoverSize } from "@/utils/covers";
 
 type CoverImageProps = {
   src?: string | null;
@@ -13,10 +14,15 @@ type CoverImageProps = {
   alt?: string;
   className?: string;
   imgClassName?: string;
+  /** Thumbnail size for the cover proxy (default M = fast). */
+  size?: CoverSize;
+  /** Eager-load for above-the-fold / feed cards. */
+  priority?: boolean;
 };
 
 /**
- * Book cover with Open Library blank-GIF detection and typographic fallback.
+ * Book cover via same-origin `/api/covers` proxy (CDN-cached).
+ * Falls back to a typographic plate when no artwork exists.
  */
 export default function CoverImage({
   src,
@@ -28,25 +34,43 @@ export default function CoverImage({
   alt,
   className = "",
   imgClassName = "w-full h-full object-cover",
+  size = "M",
+  priority = false,
 }: CoverImageProps) {
-  const resolved = resolveCoverUrl(src, { isbn, coverId, bookId });
+  const resolvedCoverId = coverId || (bookId && COVER_ID_BY_ISBN[bookId]) || (isbn && COVER_ID_BY_ISBN[isbn]) || null;
+  const resolved = resolveCoverUrl(src, {
+    isbn: isbn || bookId,
+    coverId: resolvedCoverId,
+    bookId,
+    size,
+    title,
+    author,
+  });
+
   const [failed, setFailed] = useState(!resolved);
+  const [currentSrc, setCurrentSrc] = useState(resolved);
   const seed = bookId || isbn || title;
 
-  const showFallback = failed || !resolved;
+  useEffect(() => {
+    setCurrentSrc(resolved);
+    setFailed(!resolved);
+  }, [resolved]);
+
+  const showFallback = failed || !currentSrc;
 
   return (
     <div className={`relative overflow-hidden bg-cream-dark ${className}`}>
       {!showFallback && (
         <img
-          src={resolved}
+          src={currentSrc}
           alt={alt || title}
           className={`${imgClassName} select-none`}
-          loading="lazy"
+          loading={priority ? "eager" : "lazy"}
+          decoding="async"
+          fetchPriority={priority ? "high" : "auto"}
           onError={() => setFailed(true)}
           onLoad={(e) => {
             const img = e.currentTarget;
-            // Open Library blank placeholders are tiny (~1×1 / few dozen bytes)
             if (img.naturalWidth < 40 || img.naturalHeight < 40) {
               setFailed(true);
             }

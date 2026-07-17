@@ -1,4 +1,5 @@
 import type { ReadingLog } from "@/data/mockData";
+import { resolveBookCover } from "@/utils/covers";
 
 /** Map a user_books row (with optional books join) into a client ReadingLog. */
 export function mapUserBookToDiaryLog(ub: any, userId: string): ReadingLog {
@@ -11,6 +12,7 @@ export function mapUserBookToDiaryLog(ub: any, userId: string): ReadingLog {
 
   const book = ub.book && !Array.isArray(ub.book) ? ub.book : Array.isArray(ub.book) ? ub.book[0] : null;
   const bookId = ub.book_id || book?.id || "";
+  const rawCover = book?.cover_url || undefined;
 
   return {
     id: ub.id,
@@ -23,6 +25,6 @@ export function mapUserBookToDiaryLog(ub: any, userId: string): ReadingLog {
     review: ub.review || undefined,
     bookTitle: book?.title || undefined,
     bookAuthor: book?.author_name || undefined,
-    bookCover: book?.cover_url || undefined,
+    bookCover: resolveBookCover(bookId, rawCover, "M") || rawCover,
   };
 }

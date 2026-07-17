@@ -4,7 +4,7 @@ import { createPublicClient } from "@/utils/supabase/public";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { Book, INITIAL_BOOKS } from "@/data/mockData";
 import { COVER_ID_BY_ISBN } from "@/data/coverOverrides";
-import { coverUrlFromCoverId, coverUrlFromIsbn, withOpenLibraryDefaultFalse } from "@/utils/covers";
+import { coverUrlFromCoverId, coverUrlFromIsbn, resolveBookCover } from "@/utils/covers";
 import { withResolvedCover } from "@/utils/bookCatalog";
 
 export interface NormalizedBook {
@@ -80,13 +80,9 @@ export function mapDbBookToClientBook(dbBook: any, avgRating?: number): Book {
     rawCover.includes("photo-1543002588-bfa74002ed7e") ||
     rawCover.includes("placeholder");
 
-  const coverImage = coverId
-    ? coverUrlFromCoverId(coverId)
-    : isStockFallback
-      ? (dbBook.isbn_13 || dbBook.isbn_10
-          ? coverUrlFromIsbn(dbBook.isbn_13 || dbBook.isbn_10)
-          : "")
-      : withOpenLibraryDefaultFalse(rawCover);
+  const coverImage = resolveBookCover(canonicalId, isStockFallback ? null : rawCover, "M")
+    || (coverId ? coverUrlFromCoverId(coverId) : "")
+    || (dbBook.isbn_13 || dbBook.isbn_10 ? coverUrlFromIsbn(dbBook.isbn_13 || dbBook.isbn_10) : "");
 
   return {
     id: canonicalId,
@@ -361,7 +357,7 @@ export async function searchOpenLibraryRemote(query: string): Promise<Book[]> {
     const coverUrl = coverId
       ? coverUrlFromCoverId(coverId)
       : isbn
-        ? withOpenLibraryDefaultFalse(`https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg`)
+        ? coverUrlFromIsbn(isbn)
         : "";
 
     const id =
