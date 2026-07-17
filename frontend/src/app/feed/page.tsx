@@ -7,7 +7,7 @@ import CoverImage from "@/components/CoverImage";
 import { StarDisplay } from "@/components/ReviewCard";
 import { useLeaf } from "@/context/LeafContext";
 import Link from "next/link";
-import { TrendingUp, Layers, BookOpen, Star, Sparkles } from "lucide-react";
+import { TrendingUp, Layers, BookOpen, Star, Sparkles, ArrowRight } from "lucide-react";
 
 export default function HomeFeed() {
   const { reviews, books, lists, diaryLogs, currentUser } = useLeaf();
@@ -125,6 +125,30 @@ export default function HomeFeed() {
       <Header />
 
       <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-8">
+
+        {/* Library CTA */}
+        <section className="mb-8 bg-cream-card border border-cream-border rounded-2xl p-6 md:p-8 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <Layers className="w-4 h-4 text-brand" />
+                <h2 className="font-serif text-xl md:text-2xl font-bold text-charcoal">
+                  Curate your own library
+                </h2>
+              </div>
+              <p className="text-sm text-charcoal-muted leading-relaxed max-w-lg">
+                Shelve your reads, arrange your bookcase, and share the collection that feels like you.
+              </p>
+            </div>
+            <Link
+              href="/library"
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-brand hover:bg-brand-light text-cream font-bold text-xs rounded-lg shadow-sm transition-colors flex-shrink-0"
+            >
+              Open Library
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        </section>
         
         {/* Bookshelf Shelf (Top Carousel Mockup) */}
         <section className="mb-10 bg-cream-card border border-cream-border rounded-2xl p-6 shadow-sm">
