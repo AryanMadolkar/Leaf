@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import Header from "@/components/Header";
 import { useLeaf } from "@/context/LeafContext";
 import { Layers, Plus, X, Heart, MessageSquare, Check, ArrowRight } from "lucide-react";
@@ -9,12 +9,23 @@ import { motion, AnimatePresence } from "framer-motion";
 
 export default function ListsPage() {
   const { lists, books, createList, users, toggleLikeList } = useLeaf();
+  const FALLBACK_COVER = "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=600&auto=format&fit=crop&q=80";
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedList, setSelectedList] = useState<any | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [coverImage, setCoverImage] = useState("");
   const [selectedBookIds, setSelectedBookIds] = useState<string[]>([]);
+  const [bookSearch, setBookSearch] = useState("");
+
+  const filteredBooks = useMemo(() => {
+    const query = bookSearch.trim().toLowerCase();
+    if (!query) return books;
+    return books.filter((b) => {
+      const hay = `${b.title} ${b.author} ${(b.genres || []).join(" ")}`.toLowerCase();
+      return hay.includes(query);
+    });
+  }, [books, bookSearch]);
 
   const handleBookToggle = (bookId: string) => {
     if (selectedBookIds.includes(bookId)) {
@@ -35,6 +46,7 @@ export default function ListsPage() {
     setDescription("");
     setCoverImage("");
     setSelectedBookIds([]);
+    setBookSearch("");
     setIsFormOpen(false);
   };
 
@@ -77,9 +89,12 @@ export default function ListsPage() {
                 {/* List Card Header Image */}
                 <div className="relative h-44 bg-charcoal/10 overflow-hidden">
                   <img
-                    src={list.coverImage}
+                    src={list.coverImage || FALLBACK_COVER}
                     alt={list.title}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).src = FALLBACK_COVER;
+                    }}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-charcoal/90 via-charcoal/30 to-transparent flex flex-col justify-end p-5">
                     <span className="text-[8px] uppercase tracking-wider text-cream/70 font-bold mb-0.5">
@@ -125,9 +140,12 @@ export default function ListsPage() {
                         >
                           <div className="w-9 h-14 rounded overflow-hidden shadow border border-cream-border hover:-translate-y-1.5 transition-transform duration-300">
                             <img
-                              src={book.coverImage}
+                              src={book.coverImage || FALLBACK_COVER}
                               alt={book.title}
                               className="w-full h-full object-cover"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).src = FALLBACK_COVER;
+                              }}
                             />
                           </div>
                         </Link>
@@ -226,8 +244,15 @@ export default function ListsPage() {
                   <label className="text-[10px] font-semibold uppercase tracking-wider text-charcoal block">
                     Select Books ({selectedBookIds.length} selected)
                   </label>
+                  <input
+                    type="text"
+                    value={bookSearch}
+                    onChange={(e) => setBookSearch(e.target.value)}
+                    placeholder="Search books by title, author, or genre..."
+                    className="w-full h-9 px-3 text-xs bg-cream-card border border-cream-border rounded-lg text-charcoal focus:outline-none focus:border-brand-muted"
+                  />
                   <div className="grid grid-cols-2 gap-2 max-h-[200px] overflow-y-auto border border-cream-border rounded-lg p-2 bg-cream-card">
-                    {books.map((b) => {
+                    {filteredBooks.map((b) => {
                       const isSelected = selectedBookIds.includes(b.id);
                       return (
                         <button
@@ -241,9 +266,12 @@ export default function ListsPage() {
                           }`}
                         >
                           <img
-                            src={b.coverImage}
+                            src={b.coverImage || FALLBACK_COVER}
                             alt={b.title}
                             className="w-6 h-9 object-cover rounded shadow-sm flex-shrink-0"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).src = FALLBACK_COVER;
+                            }}
                           />
                           <div className="min-w-0 flex-1">
                             <p className="text-[10px] font-semibold text-charcoal truncate">
@@ -257,6 +285,11 @@ export default function ListsPage() {
                         </button>
                       );
                     })}
+                    {filteredBooks.length === 0 ? (
+                      <p className="col-span-2 text-[11px] text-charcoal-muted py-3 text-center">
+                        No books match your search.
+                      </p>
+                    ) : null}
                   </div>
                 </div>
 
@@ -300,9 +333,12 @@ export default function ListsPage() {
               {/* Header/Cover Section */}
               <div className="relative h-60 bg-charcoal/10 flex-shrink-0">
                 <img
-                  src={selectedList.coverImage}
+                  src={selectedList.coverImage || FALLBACK_COVER}
                   alt={selectedList.title}
                   className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src = FALLBACK_COVER;
+                  }}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-charcoal via-charcoal/50 to-transparent p-6 flex flex-col justify-end">
                   <button
@@ -385,11 +421,11 @@ export default function ListsPage() {
                           className="w-16 h-24 rounded overflow-hidden shadow-md border border-cream-border/50 flex-shrink-0 hover:scale-105 transition-transform duration-300"
                         >
                           <img
-                            src={book.coverImage}
+                            src={book.coverImage || FALLBACK_COVER}
                             alt={book.title}
                             className="w-full h-full object-cover"
                             onError={(e) => {
-                              (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=600&auto=format&fit=crop&q=80";
+                              (e.currentTarget as HTMLImageElement).src = FALLBACK_COVER;
                             }}
                           />
                         </Link>
