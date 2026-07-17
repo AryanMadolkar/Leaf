@@ -26,6 +26,7 @@ export default function BookDetailClient({ book: initialBook }: BookDetailClient
     addCachedBookToContext,
     readingSessions,
     logReadingSession,
+    updateBookProgressDirectly,
   } = useLeaf();
 
   const [book, setBook] = useState<Book>(initialBook);
@@ -114,7 +115,7 @@ export default function BookDetailClient({ book: initialBook }: BookDetailClient
     let res = null;
     if (detailLogMethod === "increment") {
       const pRead = parseInt(detailPagesRead) || 0;
-      if (pRead <= 0) return;
+      if (pRead <= 0 || pRead >= book.pages) return;
       res = await logReadingSession(
         book.id,
         pRead,
@@ -123,12 +124,10 @@ export default function BookDetailClient({ book: initialBook }: BookDetailClient
       );
     } else {
       const curPage = parseInt(detailCurrentPage) || 0;
-      const startPage = userLogs[0]?.currentPage || 0;
-      const pRead = Math.max(0, curPage - startPage);
-      if (pRead <= 0) return;
-      res = await logReadingSession(
+      if (curPage <= 0 || curPage >= book.pages) return;
+      res = await updateBookProgressDirectly(
         book.id,
-        pRead,
+        curPage,
         detailNote || undefined,
         parseInt(detailMinutes) || undefined
       );
@@ -328,7 +327,7 @@ export default function BookDetailClient({ book: initialBook }: BookDetailClient
                                 <input
                                   type="number"
                                   min="1"
-                                  max={pagesRemaining}
+                                  max={Math.max(1, totalPages - 1)}
                                   placeholder="Pages read"
                                   value={detailPagesRead}
                                   onChange={(e) => setDetailPagesRead(e.target.value)}
@@ -337,7 +336,7 @@ export default function BookDetailClient({ book: initialBook }: BookDetailClient
                                 />
                                 <div className="flex gap-1">
                                   {[10, 25, 50].map((p) => {
-                                    const disabled = p > pagesRemaining;
+                                    const disabled = p >= totalPages;
                                     return (
                                       <button
                                         type="button"
@@ -359,9 +358,9 @@ export default function BookDetailClient({ book: initialBook }: BookDetailClient
                             ) : (
                               <input
                                 type="number"
-                                min={currentPage + 1}
-                                max={totalPages}
-                                placeholder={`Current page (Target: ${totalPages})`}
+                                min="1"
+                                max={Math.max(1, totalPages - 1)}
+                                placeholder={`Page 1–${Math.max(1, totalPages - 1)}`}
                                 value={detailCurrentPage}
                                 onChange={(e) => setDetailCurrentPage(e.target.value)}
                                 className="w-full h-8 px-2.5 text-xs bg-cream border border-cream-border rounded-lg text-charcoal focus:outline-none focus:border-brand-muted"

@@ -46,7 +46,12 @@ interface LeafContextType {
   readingSessions: any[];
   userStats: any | null;
   logReadingSession: (bookId: string, pagesRead: number, note?: string, readingMinutes?: number) => Promise<any>;
-  updateBookProgressDirectly: (bookId: string, currentPage: number) => Promise<any>;
+  updateBookProgressDirectly: (
+    bookId: string,
+    currentPage: number,
+    note?: string,
+    readingMinutes?: number
+  ) => Promise<any>;
   
   // Live Supabase Authenticated States
   session: any | null;
@@ -274,12 +279,13 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     bookId: string,
     pagesRead: number,
     note?: string,
-    readingMinutes?: number
+    readingMinutes?: number,
+    targetEndPage?: number
   ) => {
     const book = books.find((b) => b.id === bookId);
     const log = diaryLogs.find((l) => l.bookId === bookId && l.userId === currentUser.id);
     const startPage = log && log.currentPage ? log.currentPage : 0;
-    const endPage = startPage + pagesRead;
+    const endPage = targetEndPage ?? startPage + pagesRead;
     const pagesTotal = book?.pages || 320;
 
     const newSession = {
@@ -786,8 +792,11 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     readingMinutes?: number
   ) => {
     const log = diaryLogs.find((l) => l.bookId === bookId);
+    const book = books.find((b) => b.id === bookId);
+    const totalPages = book?.pages || 300;
     const startPage = log && log.currentPage ? log.currentPage : 0;
-    const endPage = startPage + pagesRead;
+    const endPage = Math.min(startPage + pagesRead, totalPages);
+    const actualPagesRead = Math.max(0, endPage - startPage);
 
     try {
       const res = await authFetch("/api/reading-sessions", {
@@ -795,7 +804,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           bookId,
-          pagesRead,
+          pagesRead: actualPagesRead,
           startPage,
           endPage,
           note,
@@ -833,11 +842,61 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const updateBookProgressDirectly = async (bookId: string, currentPage: number) => {
+  const updateBookProgressDirectly = async (
+    bookId: string,
+    targetPage: number,
+    note?: string,
+    readingMinutes?: number
+  ) => {
     const log = diaryLogs.find((l) => l.bookId === bookId);
-    const startPage = log && log.currentPage ? log.currentPage : 0;
-    const pagesRead = Math.max(0, currentPage - startPage);
-    return await logReadingSession(bookId, pagesRead, undefined, undefined);
+    const book = books.find((b) => b.id === bookId);
+    const totalPages = book?.pages || 300;
+    const startPage = log?.currentPage ?? 0;
+    const endPage = Math.min(Math.max(1, targetPage), totalPages);
+    const pagesRead = Math.max(0, endPage - startPage);
+
+    try {
+      const res = await authFetch("/api/reading-sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bookId,
+          pagesRead,
+          startPage,
+          endPage,
+          note,
+          readingMinutes,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setDiaryLogs(data.diaryLogs);
+          setReviews(data.reviews);
+          setReadingSessions(data.sessions || []);
+          setUserStats(data.stats || null);
+
+          const initRes = await authFetch("/api/init");
+          if (initRes.ok) {
+            const initData = await initRes.json();
+            if (initData.success && initData.books?.length) {
+              setBooks((prev) => {
+                const merged = new Map(prev.map((b) => [b.id, b]));
+                initData.books.forEach((b: Book) => merged.set(b.id, b));
+                return Array.from(merged.values());
+              });
+            }
+          }
+          return data;
+        }
+      }
+      console.warn("Server setBookProgress failed, falling back to local storage.");
+      return await logReadingSessionLocally(bookId, pagesRead, note, readingMinutes, endPage);
+    } catch (err) {
+      console.error("Failed to set reading progress, falling back to local storage:", err);
+      return await logReadingSessionLocally(bookId, pagesRead, note, readingMinutes, endPage);
+    }
   };
 
   const createList = (title: string, description: string, coverImage: string, bookIds: string[]) => {

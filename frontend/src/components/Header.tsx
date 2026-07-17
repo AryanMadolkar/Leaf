@@ -418,7 +418,7 @@ export default function Header() {
     let res = null;
     if (logMethod === "increment") {
       const pRead = parseInt(pagesReadInput) || 0;
-      if (pRead <= 0) return;
+      if (pRead <= 0 || pRead >= book.pages) return;
       res = await logReadingSession(
         book.id,
         pRead,
@@ -427,8 +427,13 @@ export default function Header() {
       );
     } else {
       const curPage = parseInt(currentPageInput) || 0;
-      if (curPage <= 0 || curPage <= book.currentPage) return;
-      res = await updateBookProgressDirectly(book.id, curPage);
+      if (curPage <= 0 || curPage >= book.pages) return;
+      res = await updateBookProgressDirectly(
+        book.id,
+        curPage,
+        noteInput || undefined,
+        parseInt(readingMinutesInput) || undefined
+      );
     }
 
     if (res && res.success) {
@@ -1305,7 +1310,7 @@ export default function Header() {
                                   <input
                                     type="number"
                                     min="1"
-                                    max={pagesRemaining}
+                                    max={Math.max(1, activeBook.pages - 1)}
                                     placeholder="e.g. 25"
                                     value={pagesReadInput}
                                     onChange={(e) => setPagesReadInput(e.target.value)}
@@ -1316,7 +1321,7 @@ export default function Header() {
                                 {/* Presets */}
                                 <div className="flex gap-2">
                                   {[10, 25, 50, 100].map((preset) => {
-                                    const disabled = preset > pagesRemaining;
+                                    const disabled = preset >= activeBook.pages;
                                     return (
                                       <button
                                         type="button"
@@ -1342,9 +1347,9 @@ export default function Header() {
                                 </label>
                                 <input
                                   type="number"
-                                  min={activeBook.currentPage + 1}
-                                  max={activeBook.pages}
-                                  placeholder={`Between ${activeBook.currentPage + 1} and ${activeBook.pages}`}
+                                  min="1"
+                                  max={Math.max(1, activeBook.pages - 1)}
+                                  placeholder={`Page 1–${Math.max(1, activeBook.pages - 1)}`}
                                   value={currentPageInput}
                                   onChange={(e) => setCurrentPageInput(e.target.value)}
                                   className="w-full h-10 px-3 text-sm bg-cream border border-cream-border rounded-lg text-charcoal focus:outline-none focus:border-brand-muted"
