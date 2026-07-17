@@ -5,16 +5,15 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   BookOpen,
-  TrendingUp,
   Sparkles,
   Layers,
   Users,
   Star,
-  Book,
-  Calendar,
 } from "lucide-react";
 import { StarDisplay } from "@/components/ReviewCard";
 import UserAvatar from "@/components/UserAvatar";
+import CoverImage from "@/components/CoverImage";
+import { COVER_ID_BY_ISBN } from "@/data/coverOverrides";
 import { formatRelativeTime } from "@/utils/time";
 
 type StreamReview = {
@@ -55,12 +54,12 @@ export default function LandingPage() {
 
 
   const floatingCovers = [
-    { src: "https://covers.openlibrary.org/b/isbn/9780140167771-L.jpg", rotate: "-6deg", y: 20, delay: 0 },
-    { src: "https://covers.openlibrary.org/b/isbn/9780593135204-L.jpg", rotate: "4deg", y: -10, delay: 0.2 },
-    { src: "https://covers.openlibrary.org/b/isbn/9781984822178-L.jpg", rotate: "-3deg", y: 40, delay: 0.4 },
-    { src: "https://covers.openlibrary.org/b/isbn/9780441172719-L.jpg", rotate: "8deg", y: -30, delay: 0.1 },
-    { src: "https://covers.openlibrary.org/b/isbn/9780593318171-L.jpg", rotate: "-5deg", y: 15, delay: 0.3 },
-    { src: "https://covers.openlibrary.org/b/isbn/9780743273565-L.jpg", rotate: "6deg", y: 0, delay: 0.5 },
+    { id: "9780140167771", title: "The Secret History", author: "Donna Tartt", rotate: "-6deg", y: 20, delay: 0 },
+    { id: "9780593135204", title: "Project Hail Mary", author: "Andy Weir", rotate: "4deg", y: -10, delay: 0.2 },
+    { id: "9781984822178", title: "Normal People", author: "Sally Rooney", rotate: "-3deg", y: 40, delay: 0.4 },
+    { id: "9780441172719", title: "Dune", author: "Frank Herbert", rotate: "8deg", y: -30, delay: 0.1 },
+    { id: "9780593318171", title: "Klara and the Sun", author: "Kazuo Ishiguro", rotate: "-5deg", y: 15, delay: 0.3 },
+    { id: "9780743273565", title: "The Great Gatsby", author: "F. Scott Fitzgerald", rotate: "6deg", y: 0, delay: 0.5 },
   ];
 
   const features = [
@@ -127,11 +126,11 @@ export default function LandingPage() {
             </p>
           </motion.div>
 
-          {/* Floating Collage */}
+          {/* Floating Collage — proxied covers (direct OL ISBN URLs often fail in-browser) */}
           <div className="w-full mt-16 md:mt-24 relative max-w-4xl mx-auto h-[220px] md:h-[300px] flex items-center justify-center gap-4 px-4 overflow-visible">
             {floatingCovers.map((cover, i) => (
               <motion.div
-                key={i}
+                key={cover.id}
                 initial={{ opacity: 0, y: 80, rotate: "0deg" }}
                 animate={{ opacity: 1, y: cover.y, rotate: cover.rotate }}
                 transition={{
@@ -141,13 +140,18 @@ export default function LandingPage() {
                   delay: cover.delay,
                 }}
                 whileHover={{ y: cover.y - 15, scale: 1.05, rotate: "0deg", zIndex: 10 }}
-                className="w-24 h-36 md:w-36 md:h-52 rounded-lg overflow-hidden book-shadow flex-shrink-0 cursor-pointer bg-cream-dark select-none"
+                className="relative w-24 h-36 md:w-36 md:h-52 rounded-lg overflow-hidden book-shadow flex-shrink-0 cursor-pointer bg-cream-dark select-none"
               >
-                <div className="absolute top-0 bottom-0 left-0 w-[4px] bg-gradient-to-r from-charcoal/20 to-transparent z-10" />
-                <img
-                  src={cover.src}
-                  alt="Book Cover"
-                  className="w-full h-full object-cover pointer-events-none"
+                <div className="absolute top-0 bottom-0 left-0 w-[4px] bg-gradient-to-r from-charcoal/20 to-transparent z-10 pointer-events-none" />
+                <CoverImage
+                  bookId={cover.id}
+                  isbn={cover.id}
+                  title={cover.title}
+                  author={cover.author}
+                  coverId={COVER_ID_BY_ISBN[cover.id]}
+                  priority
+                  className="w-full h-full"
+                  imgClassName="w-full h-full object-cover pointer-events-none"
                 />
               </motion.div>
             ))}
@@ -248,12 +252,16 @@ export default function LandingPage() {
                         </p>
                       ) : null}
                     </div>
-                    {review.bookCover ? (
-                      <img
-                        src={review.bookCover}
-                        alt=""
-                        className="w-10 h-14 object-cover rounded shadow-sm flex-shrink-0"
-                      />
+                    {review.bookCover || review.bookTitle ? (
+                      <div className="w-10 h-14 rounded shadow-sm flex-shrink-0 overflow-hidden">
+                        <CoverImage
+                          src={review.bookCover}
+                          title={review.bookTitle || "Book"}
+                          size="S"
+                          className="w-full h-full"
+                          imgClassName="w-full h-full object-cover"
+                        />
+                      </div>
                     ) : null}
                   </div>
                 ))
