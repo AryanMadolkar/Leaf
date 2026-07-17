@@ -19,11 +19,21 @@ export type CatalogShelf =
   | "nonfiction"
   | "leaderboard";
 
+/** Old procedural generator used 978100–978103 ISBN prefixes. */
+export function isFakeBookId(id: string): boolean {
+  return /^97810[0-3]/.test(id);
+}
+
 export function withResolvedCover(book: Book): Book {
   return {
     ...book,
     coverImage: resolveBookCover(book.id, book.coverImage, "M") || book.coverImage,
   };
+}
+
+/** Real catalog entries only — no procedural fakes, must have a known cover. */
+function realBooksWithCovers(books: Book[]): Book[] {
+  return books.filter((b) => !isFakeBookId(b.id) && COVER_ID_BY_ISBN[b.id]);
 }
 
 export function filterBooksByShelf(books: Book[], shelf: CatalogShelf): Book[] {
@@ -44,12 +54,13 @@ export function filterBooksByShelf(books: Book[], shelf: CatalogShelf): Book[] {
     case "award-winners":
       return books.filter(
         (b) =>
-          b.genres.some((g) => g.toLowerCase().includes("classic")) ||
-          b.genres.some((g) => g.toLowerCase().includes("high"))
+          b.genres.some((g) => /pulitzer|booker|hugo|nebula|award/i.test(g)) ||
+          (b.genres.some((g) => g.toLowerCase().includes("classic")) && b.averageRating >= 4.4)
       );
     case "modern-classics":
+      // Handled by curated pool in getCatalogBooks
       return books.filter(
-        (b) => b.genres.some((g) => g.toLowerCase().includes("classic")) && b.year > 1950
+        (b) => b.genres.some((g) => g.toLowerCase().includes("classic")) && b.year >= 1945
       );
     case "scifi":
       return books.filter(
@@ -109,15 +120,11 @@ export function filterBooksByShelf(books: Book[], shelf: CatalogShelf): Book[] {
 }
 
 function preferBooksWithCovers(books: Book[]): Book[] {
-  return [...books].sort((a, b) => {
-    const aHas = COVER_ID_BY_ISBN[a.id] ? 1 : 0;
-    const bHas = COVER_ID_BY_ISBN[b.id] ? 1 : 0;
-    if (aHas !== bHas) return bHas - aHas;
-    return b.averageRating - a.averageRating;
-  });
+  return [...realBooksWithCovers(books)].sort((a, b) => b.averageRating - a.averageRating);
 }
 
 /** ISO week key, e.g. "2026-W29" — used to rotate trending picks weekly. */
+
 export function getISOWeekKey(dateKey?: string): string {
   const d = dateKey ? new Date(`${dateKey}T12:00:00Z`) : new Date();
   const target = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
@@ -203,9 +210,62 @@ export function getTrendingBooksForWeek(weekKey?: string, limit = 15, offset = 0
   return rotated.slice(offset, offset + limit).map(withResolvedCover);
 }
 
+/** Curated post-war / late-20th-century masterpieces with verified covers. */
+const MODERN_CLASSICS_POOL_IDS = [
+  "9780385474542", // Things Fall Apart
+  "9780060883287", // One Hundred Years of Solitude
+  "9780307389733", // Love in the Time of Cholera
+  "9781400033416", // Beloved
+  "9781400033423", // Song of Solomon
+  "9780307278449", // The Bluest Eye
+  "9780679731726", // The Remains of the Day
+  "9781400078776", // Never Let Me Go
+  "9780307387899", // The Road
+  "9780679728759", // Blood Meridian
+  "9780316920049", // Infinite Jest
+  "9780375703860", // White Teeth
+  "9780684833392", // Catch-22
+  "9780812979657", // The God of Small Things
+  "9780812976533", // Midnight's Children
+  "9780140167771", // The Secret History
+  "9780451524935", // 1984
+  "9780060850524", // Brave New World
+  "9781451673319", // Fahrenheit 451
+  "9780060935467", // To Kill a Mockingbird
+  "9781559945806", // Slaughterhouse-Five
+  "9780795302763", // Cat's Cradle
+  "9780385490818", // The Handmaid's Tale
+  "9780679723165", // Lolita
+  "9780679723424", // Pale Fire
+  "9780441172719", // Dune
+  "9780441478125", // The Left Hand of Darkness
+  "9780807006924", // Kindred
+  "9780156027328", // Life of Pi
+  "9781594480003", // The Kite Runner
+  "9781455563920", // Pachinko
+  "9788435021296", // Do Androids Dream of Electric Sheep?
+];
+
+function getModernClassicsBooks(limit = 15, offset = 0): Book[] {
+  const catalogById = new Map(INITIAL_BOOKS.map((b) => [b.id, b]));
+  const books: Book[] = [];
+  const seen = new Set<string>();
+  for (const id of MODERN_CLASSICS_POOL_IDS) {
+    if (seen.has(id) || isFakeBookId(id) || !COVER_ID_BY_ISBN[id]) continue;
+    const book = catalogById.get(id);
+    if (!book) continue;
+    seen.add(id);
+    books.push(book);
+  }
+  return books.slice(offset, offset + limit).map(withResolvedCover);
+}
+
 export function getCatalogBooks(shelf: CatalogShelf, limit = 15, offset = 0, weekKey?: string): Book[] {
   if (shelf === "trending") {
     return getTrendingBooksForWeek(weekKey, limit, offset);
+  }
+  if (shelf === "modern-classics") {
+    return getModernClassicsBooks(limit, offset);
   }
   const filtered = preferBooksWithCovers(filterBooksByShelf(INITIAL_BOOKS, shelf));
   return filtered.slice(offset, offset + limit).map(withResolvedCover);

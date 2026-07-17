@@ -14,8 +14,8 @@ const getCachedShelf = unstable_cache(
     books: getCatalogBooks(shelf, limit, offset, shelf === "trending" ? weekKey : undefined),
     total: getCatalogBooks(shelf, 5000, 0, shelf === "trending" ? weekKey : undefined).length,
   }),
-  ["book-catalog-v3"],
-  { revalidate: 3600, tags: ["book-catalog-v3"] }
+  ["book-catalog-v5"],
+  { revalidate: 3600, tags: ["book-catalog-v5"] }
 );
 
 export async function GET(request: Request) {

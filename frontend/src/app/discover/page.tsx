@@ -8,6 +8,7 @@ import CoverImage from "@/components/CoverImage";
 import { useLeaf } from "@/context/LeafContext";
 import { Book } from "@/data/mockData";
 import type { CatalogShelf } from "@/utils/bookCatalog";
+import { isFakeBookId } from "@/utils/bookCatalog";
 import { COVER_ID_BY_ISBN } from "@/data/coverOverrides";
 import {
   buildGenreDistribution,
@@ -190,7 +191,7 @@ export default function DiscoverPage() {
     if (seedGenres.size === 0) return [];
 
     return books
-      .filter((b) => !loggedBookIds.has(b.id) && b.id !== lastLoggedBook.id)
+      .filter((b) => !loggedBookIds.has(b.id) && b.id !== lastLoggedBook.id && !isFakeBookId(b.id) && COVER_ID_BY_ISBN[b.id])
       .map((b) => {
         const genres = canonicalGenresForBook(b.genres);
         const overlap = genres.filter((g) => seedGenres.has(g)).length;
@@ -209,7 +210,7 @@ export default function DiscoverPage() {
     const topSet = new Set(topGenres);
 
     return books
-      .filter((b) => !loggedBookIds.has(b.id))
+      .filter((b) => !loggedBookIds.has(b.id) && !isFakeBookId(b.id) && COVER_ID_BY_ISBN[b.id])
       .map((b) => {
         const genres = canonicalGenresForBook(b.genres);
         // Require a real literary-genre overlap with the user's top tastes
