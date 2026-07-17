@@ -19,7 +19,7 @@ type ShelfConfig = { key: CatalogShelf; title: string; description: string; icon
 
 const CURATED_SHELVES: ShelfConfig[] = [
   { key: "all-time-greats", title: "All-Time Greats", description: "The highest rated and most influential works ever written", icon: Star },
-  { key: "trending", title: "Trending This Week", description: "Volumes currently popular among the community", icon: Compass },
+  { key: "trending", title: "Trending This Week", description: "Fresh community picks — refreshed every week", icon: Compass },
   { key: "most-added", title: "Most Added This Month", description: "Titles currently filling up reader libraries", icon: Library },
   { key: "booktok", title: "BookTok Favorites", description: "Modern romance and viral favorites", icon: MessageSquare },
   { key: "award-winners", title: "Award Winners", description: "Pulitzer, Booker, Hugo, and Nebula prize laureates", icon: Award },

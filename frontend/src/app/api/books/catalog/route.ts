@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { unstable_cache } from "next/cache";
-import { CatalogShelf, getCatalogBooks } from "@/utils/bookCatalog";
+import { CatalogShelf, getCatalogBooks, getISOWeekKey } from "@/utils/bookCatalog";
 import { CACHE_MEDIUM } from "@/utils/apiCache";
 
 const VALID_SHELVES: CatalogShelf[] = [
@@ -10,9 +10,9 @@ const VALID_SHELVES: CatalogShelf[] = [
 ];
 
 const getCachedShelf = unstable_cache(
-  async (shelf: CatalogShelf, limit: number, offset: number) => ({
-    books: getCatalogBooks(shelf, limit, offset),
-    total: getCatalogBooks(shelf, 5000, 0).length,
+  async (shelf: CatalogShelf, limit: number, offset: number, weekKey: string) => ({
+    books: getCatalogBooks(shelf, limit, offset, shelf === "trending" ? weekKey : undefined),
+    total: getCatalogBooks(shelf, 5000, 0, shelf === "trending" ? weekKey : undefined).length,
   }),
   ["book-catalog"],
   { revalidate: 3600, tags: ["book-catalog"] }
@@ -29,9 +29,15 @@ export async function GET(request: Request) {
   }
 
   try {
-    const result = await getCachedShelf(shelf, limit, offset);
+    const weekKey = getISOWeekKey();
+    const result = await getCachedShelf(shelf, limit, offset, weekKey);
     return NextResponse.json(
-      { success: true, shelf, ...result },
+      {
+        success: true,
+        shelf,
+        ...(shelf === "trending" ? { week: weekKey } : {}),
+        ...result,
+      },
       { headers: { "Cache-Control": CACHE_MEDIUM } }
     );
   } catch (error: unknown) {

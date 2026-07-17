@@ -35,8 +35,9 @@ export function filterBooksByShelf(books: Book[], shelf: CatalogShelf): Book[] {
     case "all-time-greats":
       return [...books].sort((a, b) => b.averageRating - a.averageRating);
     case "trending":
+      // Handled by getTrendingBooksForWeek — keep a broad fallback for direct filter use
       return books.filter(
-        (b) => b.genres.some((g) => g.toLowerCase().includes("popular")) || b.averageRating >= 4.4
+        (b) => b.year >= 2012 && b.averageRating >= 4.0
       );
     case "most-added":
       return books.filter(
@@ -120,7 +121,92 @@ function preferBooksWithCovers(books: Book[]): Book[] {
   });
 }
 
-export function getCatalogBooks(shelf: CatalogShelf, limit = 15, offset = 0): Book[] {
+/** ISO week key, e.g. "2026-W29" — used to rotate trending picks weekly. */
+export function getISOWeekKey(dateKey?: string): string {
+  const d = dateKey ? new Date(`${dateKey}T12:00:00Z`) : new Date();
+  const target = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const day = target.getUTCDay() || 7;
+  target.setUTCDate(target.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(target.getUTCFullYear(), 0, 1));
+  const week = Math.ceil((((target.getTime() - yearStart.getTime()) / 86_400_000) + 1) / 7);
+  return `${target.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+}
+
+function utcWeekOrdinal(weekKey: string): number {
+  const [yearStr, weekStr] = weekKey.split("-W");
+  return parseInt(yearStr, 10) * 53 + parseInt(weekStr, 10);
+}
+
+function getAllTimeGreatsTopIds(count = 25): Set<string> {
+  return new Set(
+    [...INITIAL_BOOKS]
+      .sort((a, b) => b.averageRating - a.averageRating)
+      .slice(0, count)
+      .map((b) => b.id)
+  );
+}
+
+/** Modern & buzzy titles — kept separate from the all-time-greats leaderboard. */
+export const TRENDING_POOL_IDS = [
+  "9781649374046", "9780593321201", "9780385547347", "9781501110368", "9780593135204",
+  "9780525559474", "9780062060624", "9780316556345", "9781984822178", "9781501161933",
+  "9780735219090", "9781250301697", "9780307588364", "9781984806734", "9781250319126",
+  "9781250217288", "9780765387561", "9780525536291", "9780399590504", "9780399588174",
+  "9780735211292", "9780062316097", "9781982185824", "9780593318171", "9780590353428",
+  "9780553103540", "9780765311788", "9780439023481", "9780345539786", "9780316229296",
+  "9780735220676", "9780670026197", "9780735224292", "9780802124941", "9780593422949",
+  "9780802162177", "9780593534484", "9781984806758", "9780593336823", "9780593441275",
+  "9780062439598", "9780593336830", "9781476746586", "9781455563920", "9781101947135",
+  "9781400095209", "9780307455928", "9780593230251", "9781571313560", "9780143127741",
+  "9780802148040", "9780802156984", "9780385537070", "9780593321447", "9781982168432",
+  "9780063250831", "9780063021426", "9781635575637", "9781250317696", "9780062662598",
+  "9780593493446", "9780385550369", "9780802163372", "9780374602638", "9780593426213",
+];
+
+function getTrendingPool(): Book[] {
+  const catalogById = new Map(INITIAL_BOOKS.map((b) => [b.id, b]));
+  const exclude = getAllTimeGreatsTopIds(25);
+
+  const explicit = [...new Set(TRENDING_POOL_IDS)]
+    .filter((id) => catalogById.has(id) && !exclude.has(id))
+    .map((id) => catalogById.get(id)!);
+
+  const dynamic = preferBooksWithCovers(
+    INITIAL_BOOKS.filter((b) => {
+      if (exclude.has(b.id)) return false;
+      const isRecent = b.year >= 2012;
+      const hasBuzz = b.genres.some((g) =>
+        /booktok|contemporary|bestseller|popular|romance|thriller|memoir|fantasy|sci-fi|young adult/i.test(
+          g.toLowerCase()
+        )
+      );
+      return isRecent && hasBuzz && b.averageRating >= 4.0;
+    })
+  );
+
+  const merged = new Map<string, Book>();
+  [...explicit, ...dynamic].forEach((b) => merged.set(b.id, b));
+  return Array.from(merged.values());
+}
+
+/** Weekly-rotating trending shelf — different picks each ISO week, never mirroring all-time greats. */
+export function getTrendingBooksForWeek(weekKey?: string, limit = 15, offset = 0): Book[] {
+  const key = weekKey ?? getISOWeekKey();
+  const pool = getTrendingPool();
+  if (pool.length === 0) return [];
+
+  const start = (utcWeekOrdinal(key) * 5) % pool.length;
+  const rotated: Book[] = [];
+  for (let i = 0; i < pool.length; i++) {
+    rotated.push(pool[(start + i) % pool.length]);
+  }
+  return rotated.slice(offset, offset + limit).map(withResolvedCover);
+}
+
+export function getCatalogBooks(shelf: CatalogShelf, limit = 15, offset = 0, weekKey?: string): Book[] {
+  if (shelf === "trending") {
+    return getTrendingBooksForWeek(weekKey, limit, offset);
+  }
   const filtered = preferBooksWithCovers(filterBooksByShelf(INITIAL_BOOKS, shelf));
   return filtered.slice(offset, offset + limit).map(withResolvedCover);
 }
