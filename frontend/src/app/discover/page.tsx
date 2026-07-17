@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import BookCard from "@/components/BookCard";
@@ -9,6 +9,11 @@ import { useLeaf } from "@/context/LeafContext";
 import { Book } from "@/data/mockData";
 import type { CatalogShelf } from "@/utils/bookCatalog";
 import { COVER_ID_BY_ISBN } from "@/data/coverOverrides";
+import {
+  buildGenreDistribution,
+  canonicalGenresForBook,
+  favoriteGenreFromTags,
+} from "@/utils/genreUtils";
 import { 
   Search, Sparkles, BookOpen, Star, Award, Compass, 
   ChevronRight, Loader2, Library, Plus, MessageSquare, History
@@ -46,7 +51,7 @@ async function fetchShelf(shelf: CatalogShelf, limit = 12): Promise<Book[]> {
 
 export default function DiscoverPage() {
   const router = useRouter();
-  const { books, diaryLogs, logBook, session } = useLeaf();
+  const { books, diaryLogs, logBook, currentUser } = useLeaf();
 
   // Search state
   const [searchQuery, setSearchQuery] = useState("");
@@ -150,21 +155,87 @@ export default function DiscoverPage() {
     loadShelves();
   }, []);
 
-  // Personalized shelves logic
-  const lastLoggedBook = diaryLogs.length > 0 ? books.find((b) => b.id === diaryLogs[diaryLogs.length - 1].bookId) : null;
-  const favoriteGenre = lastLoggedBook?.genres?.[0] || "Fiction";
-  const userGenres = Array.from(new Set(diaryLogs.flatMap((log) => {
-    const b = books.find((x) => x.id === log.bookId);
-    return b ? b.genres : [];
-  })));
+  // Personalized shelves — score catalog books against the user's real literary genres
+  const loggedBookIds = useMemo(
+    () => new Set(diaryLogs.filter((l) => l.userId === currentUser?.id).map((l) => l.bookId)),
+    [diaryLogs, currentUser?.id]
+  );
 
-  const becauseYouLiked = lastLoggedBook
-    ? books.filter((b) => b.id !== lastLoggedBook.id && b.genres.some((g) => lastLoggedBook.genres.includes(g))).slice(0, 12)
-    : [];
+  const userBookGenreLists = useMemo(() => {
+    return diaryLogs
+      .filter((l) => l.userId === currentUser?.id)
+      .map((log) => books.find((b) => b.id === log.bookId)?.genres)
+      .filter(Boolean) as string[][];
+  }, [diaryLogs, books, currentUser?.id]);
 
-  const basedOnGenres = userGenres.length > 0
-    ? books.filter((b) => b.genres.some((g) => userGenres.includes(g))).slice(0, 12)
-    : books.filter((b) => b.genres.includes(favoriteGenre)).slice(0, 12);
+  const tasteProfile = useMemo(() => {
+    const dist = buildGenreDistribution(userBookGenreLists, 5);
+    const topGenres = dist.map((g) => g.name);
+    const favoriteGenre = dist[0]?.name || favoriteGenreFromTags(userBookGenreLists) || "Fiction";
+    const genreWeights = new Map(dist.map((g) => [g.name, g.count]));
+    return { topGenres, favoriteGenre, genreWeights, dist };
+  }, [userBookGenreLists]);
+
+  const lastLoggedBook = useMemo(() => {
+    const mine = diaryLogs
+      .filter((l) => l.userId === currentUser?.id && l.bookId)
+      .sort((a, b) => (b.dateLogged || "").localeCompare(a.dateLogged || ""));
+    if (mine.length === 0) return null;
+    return books.find((b) => b.id === mine[0].bookId) || null;
+  }, [diaryLogs, books, currentUser?.id]);
+
+  const becauseYouLiked = useMemo(() => {
+    if (!lastLoggedBook) return [];
+    const seedGenres = new Set(canonicalGenresForBook(lastLoggedBook.genres));
+    if (seedGenres.size === 0) return [];
+
+    return books
+      .filter((b) => !loggedBookIds.has(b.id) && b.id !== lastLoggedBook.id)
+      .map((b) => {
+        const genres = canonicalGenresForBook(b.genres);
+        const overlap = genres.filter((g) => seedGenres.has(g)).length;
+        return { book: b, overlap, rating: b.averageRating };
+      })
+      .filter((x) => x.overlap > 0)
+      .sort((a, b) => b.overlap - a.overlap || b.rating - a.rating)
+      .slice(0, 12)
+      .map((x) => x.book);
+  }, [lastLoggedBook, books, loggedBookIds]);
+
+  const basedOnGenres = useMemo(() => {
+    const { topGenres, genreWeights } = tasteProfile;
+    if (topGenres.length === 0) return [];
+
+    const topSet = new Set(topGenres);
+
+    return books
+      .filter((b) => !loggedBookIds.has(b.id))
+      .map((b) => {
+        const genres = canonicalGenresForBook(b.genres);
+        // Require a real literary-genre overlap with the user's top tastes
+        const matched = genres.filter((g) => topSet.has(g));
+        if (matched.length === 0) return null;
+
+        // Weight by how often the user reads that genre + book rating
+        const weight = matched.reduce((sum, g) => sum + (genreWeights.get(g) || 1), 0);
+        const primaryBoost = matched.includes(topGenres[0]) ? 3 : 0;
+        return {
+          book: b,
+          score: weight * 2 + primaryBoost + b.averageRating,
+        };
+      })
+      .filter((x): x is { book: Book; score: number } => !!x)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 12)
+      .map((x) => x.book);
+  }, [books, loggedBookIds, tasteProfile]);
+
+  const tasteLabel = useMemo(() => {
+    const tops = tasteProfile.topGenres.slice(0, 2);
+    if (tops.length === 0) return "your reading profile";
+    if (tops.length === 1) return tops[0];
+    return `${tops[0]} & ${tops[1]}`;
+  }, [tasteProfile.topGenres]);
 
   // Quick log execution
   const handleQuickLog = async () => {
@@ -379,19 +450,19 @@ export default function DiscoverPage() {
             )}
 
             {/* Personalized Recommendations Section */}
-            {diaryLogs.length > 0 && (
+            {diaryLogs.some((l) => l.userId === currentUser?.id) && basedOnGenres.length > 0 && (
               <div className="space-y-12 py-4 border-t border-b border-cream-border/40">
-                {lastLoggedBook && (
+                {lastLoggedBook && becauseYouLiked.length > 0 && (
                   <Shelf 
                     title={`Because you liked ${lastLoggedBook.title}`} 
-                    description="Personalized based on subjects of your latest activity" 
+                    description={`More ${canonicalGenresForBook(lastLoggedBook.genres).slice(0, 2).join(" · ") || "reads"} like your latest log`}
                     booksList={becauseYouLiked} 
                     icon={History} 
                   />
                 )}
                 <Shelf 
                   title="Curated For Your Taste" 
-                  description={`Popular books matching your reading profile (${favoriteGenre})`} 
+                  description={`Popular books matching your reading profile (${tasteLabel})`} 
                   booksList={basedOnGenres} 
                   icon={Sparkles} 
                 />
