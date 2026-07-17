@@ -16,7 +16,7 @@ import { SHELF_THEMES, type ShelfThemeId } from "./shelfThemes";
 import type { LibraryViewMode } from "@/utils/library";
 
 export type SortMode = "custom" | "title" | "author" | "pages" | "year";
-export type StatusFilter = "all" | "Want to Read" | "Currently Reading" | "Finished" | "Favorite";
+export type StatusFilter = "all" | "Want to Read" | "Currently Reading" | "Finished" | "Did Not Finish" | "Favorite";
 
 type LibraryToolbarProps = {
   sortMode: SortMode;
@@ -153,6 +153,7 @@ export default function LibraryToolbar({
                     ["Currently Reading", "Reading"],
                     ["Finished", "Finished"],
                     ["Want to Read", "Wishlist"],
+                    ["Did Not Finish", "Did Not Finish"],
                     ["Favorite", "Favorites"],
                   ] as const
                 ).map(([id, label]) => (

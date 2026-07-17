@@ -119,7 +119,7 @@ const SortableBook = memo(function SortableBook({
   status?: ReadingStatus;
   isFavorite?: boolean;
   disabled?: boolean;
-  onStatus?: (bookId: string, status: "Want to Read" | "Currently Reading" | "Finished") => void;
+  onStatus?: (bookId: string, status: "Want to Read" | "Currently Reading" | "Finished" | "Did Not Finish") => void;
   onFavorite?: (bookId: string) => void;
   onRemove?: (bookId: string) => void;
 }) {
@@ -161,7 +161,7 @@ export type ContinuousBookshelfProps = {
   statusByBookId?: Record<string, ReadingStatus>;
   favoriteIds?: Set<string>;
   onReorder?: (bookIds: string[]) => void;
-  onStatus?: (bookId: string, status: "Want to Read" | "Currently Reading" | "Finished") => void;
+  onStatus?: (bookId: string, status: "Want to Read" | "Currently Reading" | "Finished" | "Did Not Finish") => void;
   onFavorite?: (bookId: string) => void;
   onRemove?: (bookId: string) => void;
 };

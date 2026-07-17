@@ -17,7 +17,7 @@ import {
 } from "@/utils/genreUtils";
 import { 
   Search, Sparkles, BookOpen, Star, Award, Compass, 
-  ChevronRight, Loader2, Library, Plus, MessageSquare, History
+  ChevronRight, Loader2, Library, Plus, MessageSquare, History, RefreshCw, Dice5
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -238,6 +238,56 @@ export default function DiscoverPage() {
     return `${tops[0]} & ${tops[1]}`;
   }, [tasteProfile.topGenres]);
 
+  /** Taste-biased pool for the Random for You card */
+  const randomPool = useMemo(() => {
+    const scored = books
+      .filter((b) => !loggedBookIds.has(b.id) && !isFakeBookId(b.id) && COVER_ID_BY_ISBN[b.id])
+      .map((b) => {
+        const genres = canonicalGenresForBook(b.genres);
+        const { topGenres, genreWeights } = tasteProfile;
+        if (topGenres.length === 0) {
+          return { book: b, score: b.averageRating };
+        }
+        const matched = genres.filter((g) => topGenres.includes(g));
+        if (matched.length === 0) {
+          return { book: b, score: b.averageRating * 0.25 };
+        }
+        const weight = matched.reduce((sum, g) => sum + (genreWeights.get(g) || 1), 0);
+        const primaryBoost = matched.includes(topGenres[0]) ? 4 : 0;
+        return { book: b, score: weight * 2 + primaryBoost + b.averageRating };
+      })
+      .sort((a, b) => b.score - a.score);
+
+    const topN = Math.min(60, Math.max(20, scored.length));
+    return scored.slice(0, topN).map((x) => x.book);
+  }, [books, loggedBookIds, tasteProfile]);
+
+  const [randomBook, setRandomBook] = useState<Book | null>(null);
+  const [randomSeen, setRandomSeen] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (randomPool.length === 0) {
+      setRandomBook(null);
+      return;
+    }
+    if (randomBook && randomPool.some((b) => b.id === randomBook.id)) return;
+    const pick = randomPool[Math.floor(Math.random() * randomPool.length)];
+    setRandomBook(pick);
+  }, [randomPool, randomBook]);
+
+  const refreshRandomBook = () => {
+    if (randomPool.length === 0) return;
+    const avoid = new Set([...(randomBook ? [randomBook.id] : []), ...randomSeen.slice(-12)]);
+    let candidates = randomPool.filter((b) => !avoid.has(b.id));
+    if (candidates.length === 0) {
+      candidates = randomPool.filter((b) => b.id !== randomBook?.id);
+    }
+    if (candidates.length === 0) candidates = randomPool;
+    const pick = candidates[Math.floor(Math.random() * candidates.length)];
+    setRandomBook(pick);
+    setRandomSeen((prev) => [...prev, pick.id].slice(-24));
+  };
+
   // Quick log execution
   const handleQuickLog = async () => {
     if (!logModalBook) return;
@@ -372,6 +422,78 @@ export default function DiscoverPage() {
         {/* Default Curated Editorial View (only shown when search query is empty) */}
         {searchQuery.trim().length < 2 && (
           <>
+            {/* Random for You */}
+            {randomBook && (
+              <section className="bg-cream-card border border-cream-border rounded-2xl p-5 md:p-6 shadow-sm">
+                <div className="flex items-start justify-between gap-3 mb-4">
+                  <div className="space-y-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <Dice5 className="w-4 h-4 text-brand flex-shrink-0" />
+                      <h2 className="font-serif text-lg font-bold text-charcoal">Random for You</h2>
+                    </div>
+                    <p className="text-[11px] text-charcoal-muted">
+                      {tasteProfile.topGenres.length > 0
+                        ? `A surprise pick tuned to ${tasteLabel}`
+                        : "A surprise pick from the catalog — log a few books to personalize"}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={refreshRandomBook}
+                    className="h-9 px-3 flex items-center gap-1.5 text-[11px] font-bold rounded-lg border border-cream-border bg-cream hover:border-brand hover:text-brand text-charcoal transition-colors flex-shrink-0"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Refresh
+                  </button>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-5">
+                  <div className="relative w-28 h-40 rounded-lg overflow-hidden book-shadow bg-cream-dark flex-shrink-0">
+                    <div className="absolute top-0 bottom-0 left-0 w-[3px] bg-gradient-to-r from-charcoal/20 to-transparent z-10" />
+                    <CoverImage
+                      src={randomBook.coverImage}
+                      title={randomBook.title}
+                      author={randomBook.author}
+                      isbn={randomBook.id}
+                      coverId={COVER_ID_BY_ISBN[randomBook.id]}
+                      bookId={randomBook.id}
+                      className="w-full h-full"
+                      imgClassName="w-full h-full object-cover select-none"
+                    />
+                  </div>
+                  <div className="flex-1 space-y-3 text-center sm:text-left min-w-0">
+                    <div className="space-y-1">
+                      <h3 className="font-serif text-xl font-bold text-charcoal leading-tight truncate">
+                        {randomBook.title}
+                      </h3>
+                      <p className="text-xs text-charcoal-muted font-semibold">
+                        by {randomBook.author} · {randomBook.year}
+                      </p>
+                    </div>
+                    <p className="text-xs text-charcoal-light leading-relaxed line-clamp-2 max-w-xl">
+                      {randomBook.description}
+                    </p>
+                    <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/book/${randomBook.id}`)}
+                        className="px-4 py-2 bg-charcoal text-cream rounded-lg text-xs font-bold hover:bg-charcoal/90 transition-colors flex items-center gap-1.5"
+                      >
+                        View Book <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLogModalBook(randomBook)}
+                        className="px-4 py-2 bg-cream border border-cream-border text-charcoal rounded-lg text-xs font-bold hover:bg-cream-dark transition-colors flex items-center gap-1.5"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add to Library
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )}
+
             {/* Featured Daily Hero Banner */}
             {heroLoading ? (
               <div className="flex items-center justify-center py-16">

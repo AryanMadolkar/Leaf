@@ -78,7 +78,7 @@ export default function UserLibraryPage() {
   }, [library?.books]);
 
   const statusByBookId = useMemo(() => {
-    const map: Record<string, "Want to Read" | "Currently Reading" | "Finished"> = {};
+    const map: Record<string, "Want to Read" | "Currently Reading" | "Finished" | "Did Not Finish"> = {};
     diaryLogs
       .filter((l) => l.userId === currentUser.id)
       .forEach((l) => {
@@ -227,7 +227,7 @@ export default function UserLibraryPage() {
   );
 
   const handleStatus = useCallback(
-    (bookId: string, status: "Want to Read" | "Currently Reading" | "Finished") => {
+    (bookId: string, status: "Want to Read" | "Currently Reading" | "Finished" | "Did Not Finish") => {
       logBook(bookId, status);
     },
     [logBook],

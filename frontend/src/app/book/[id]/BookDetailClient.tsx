@@ -6,7 +6,7 @@ import ReviewCard, { StarDisplay } from "@/components/ReviewCard";
 import BookCard from "@/components/BookCard";
 import { useLeaf } from "@/context/LeafContext";
 import { Book } from "@/data/mockData";
-import { BookOpen, Calendar, Check, Heart, Plus, Star, Users, Award } from "lucide-react";
+import { BookOpen, Calendar, Check, Heart, Plus, Star, Users, Award, RotateCcw, Ban } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import UserAvatar from "@/components/UserAvatar";
 import CoverImage from "@/components/CoverImage";
@@ -99,6 +99,19 @@ export default function BookDetailClient({ book: initialBook }: BookDetailClient
       logBook(book.id, status);
       setShowLogDrawer(false);
     }
+  };
+
+  const handleReadAgain = async () => {
+    await logBook(book.id, "Currently Reading");
+    setShowLogDrawer(false);
+    setLogStatus(null);
+  };
+
+  const handleDidNotFinish = async () => {
+    await logBook(book.id, "Did Not Finish");
+    setShowLogDrawer(false);
+    setShowStatusSelect(false);
+    setLogStatus(null);
   };
 
   const handleReviewSubmit = (e: React.FormEvent) => {
@@ -245,14 +258,18 @@ export default function BookDetailClient({ book: initialBook }: BookDetailClient
                         </button>
                         
                         {showStatusSelect && (
-                          <div className="absolute right-0 mt-2 w-36 bg-cream border border-cream-border rounded-xl shadow-lg py-1 z-20">
-                            {(["Want to Read", "Currently Reading", "Finished"] as const).map((status) => (
+                          <div className="absolute right-0 mt-2 w-40 bg-cream border border-cream-border rounded-xl shadow-lg py-1 z-20">
+                            {(["Want to Read", "Currently Reading", "Finished", "Did Not Finish"] as const).map((status) => (
                               <button
                                 type="button"
                                 key={status}
                                 onClick={() => {
-                                  handleLogAction(status);
-                                  setShowStatusSelect(false);
+                                  if (status === "Did Not Finish") {
+                                    handleDidNotFinish();
+                                  } else {
+                                    handleLogAction(status);
+                                    setShowStatusSelect(false);
+                                  }
                                 }}
                                 className="w-full text-left px-3 py-1.5 text-xs text-charcoal hover:bg-cream-dark/50"
                               >
@@ -399,6 +416,15 @@ export default function BookDetailClient({ book: initialBook }: BookDetailClient
                               Log Progress
                             </button>
                           </form>
+
+                          <button
+                            type="button"
+                            onClick={handleDidNotFinish}
+                            className="w-full h-10 flex items-center justify-center gap-2 text-xs font-bold rounded-lg border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors"
+                          >
+                            <Ban className="w-3.5 h-3.5" />
+                            Did Not Finish
+                          </button>
                         </div>
                       );
                     })()}
@@ -439,6 +465,28 @@ export default function BookDetailClient({ book: initialBook }: BookDetailClient
                     );
                   })}
                 </div>
+
+                {currentActiveStatus === "Finished" && (
+                  <button
+                    type="button"
+                    onClick={handleReadAgain}
+                    className="w-full h-10 flex items-center justify-center gap-2 text-xs font-bold rounded-lg border border-brand/30 bg-brand/5 text-brand hover:bg-brand hover:text-cream transition-colors"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Read Again
+                  </button>
+                )}
+
+                {currentActiveStatus === "Did Not Finish" && (
+                  <button
+                    type="button"
+                    onClick={handleReadAgain}
+                    className="w-full h-10 flex items-center justify-center gap-2 text-xs font-bold rounded-lg border border-brand/30 bg-brand/5 text-brand hover:bg-brand hover:text-cream transition-colors"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Resume Reading
+                  </button>
+                )}
 
                 {/* Log Review inline expansion drawer */}
                 <AnimatePresence>

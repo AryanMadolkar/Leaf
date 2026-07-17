@@ -41,7 +41,7 @@ function SortableStandingBook({
   editable: boolean;
   status?: ReadingStatus;
   isFavorite?: boolean;
-  onStatus?: (bookId: string, status: "Want to Read" | "Currently Reading" | "Finished") => void;
+  onStatus?: (bookId: string, status: "Want to Read" | "Currently Reading" | "Finished" | "Did Not Finish") => void;
   onFavorite?: (bookId: string) => void;
   onRemove?: (bookId: string) => void;
 }) {
@@ -81,7 +81,7 @@ type BookshelfUnitProps = {
   statusByBookId?: Record<string, ReadingStatus>;
   favoriteBookIds?: Set<string>;
   onRename?: (name: string, note: string) => void;
-  onStatus?: (bookId: string, status: "Want to Read" | "Currently Reading" | "Finished") => void;
+  onStatus?: (bookId: string, status: "Want to Read" | "Currently Reading" | "Finished" | "Did Not Finish") => void;
   onFavorite?: (bookId: string) => void;
   onMoveRequest?: (bookId: string, fromShelfId: string) => void;
   onRemove?: (bookId: string, shelfId: string) => void;

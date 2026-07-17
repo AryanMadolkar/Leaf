@@ -23,6 +23,9 @@ export default function ReadingDiaryPage() {
     if (status === "Want to Read") {
       return { label: "Want to Read", className: "bg-amber-50 text-amber-800 border-amber-200/80" };
     }
+    if (status === "Did Not Finish") {
+      return { label: "Did Not Finish", className: "bg-rose-50 text-rose-700 border-rose-200/80" };
+    }
     return { label: "Finished", className: "bg-cream-dark text-charcoal-muted border-cream-border" };
   };
 
@@ -136,7 +139,7 @@ export default function ReadingDiaryPage() {
               <div className="space-y-1">
                 <p className="font-serif text-lg font-bold text-charcoal">Your diary is empty</p>
                 <p className="text-xs text-charcoal-muted max-w-sm mx-auto">
-                  Log a book with + Log — Want to Read, Reading, and Finished all appear here.
+                  Log a book with + Log — Want to Read, Reading, Finished, and Did Not Finish all appear here.
                 </p>
               </div>
             </div>

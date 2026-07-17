@@ -46,7 +46,7 @@ export interface ReadingLog {
   id: string;
   userId: string;
   bookId: string;
-  status: "Want to Read" | "Currently Reading" | "Finished";
+  status: "Want to Read" | "Currently Reading" | "Finished" | "Did Not Finish";
   dateLogged: string; // e.g. "2026-06-12"
   rating?: number;
   currentPage?: number;

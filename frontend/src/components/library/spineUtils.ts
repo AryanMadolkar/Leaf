@@ -161,12 +161,18 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-export type ReadingStatus = "Want to Read" | "Currently Reading" | "Finished" | undefined;
+export type ReadingStatus =
+  | "Want to Read"
+  | "Currently Reading"
+  | "Finished"
+  | "Did Not Finish"
+  | undefined;
 
 export function statusStripColor(status?: ReadingStatus) {
   if (status === "Finished") return "#2E4D38";
   if (status === "Currently Reading") return "#C4782A";
   if (status === "Want to Read") return "#8A8680";
+  if (status === "Did Not Finish") return "#B83A3A";
   return "transparent";
 }
 
@@ -177,5 +183,6 @@ export function ribbonForBook(opts: {
   if (opts.isFavorite) return { color: "#C9A227", label: "favorite" };
   if (opts.status === "Currently Reading") return { color: "#B83A3A", label: "reading" };
   if (opts.status === "Want to Read") return { color: "#3A6EA5", label: "wishlist" };
+  if (opts.status === "Did Not Finish") return { color: "#8B4513", label: "dnf" };
   return null;
 }

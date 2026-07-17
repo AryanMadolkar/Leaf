@@ -36,7 +36,7 @@ interface LeafContextType {
   addComment: (reviewId: string, content: string) => void;
   logBook: (
     bookId: string,
-    status: "Want to Read" | "Currently Reading" | "Finished",
+    status: "Want to Read" | "Currently Reading" | "Finished" | "Did Not Finish",
     rating?: number,
     reviewContent?: string
   ) => void;
@@ -53,6 +53,22 @@ interface LeafContextType {
     note?: string,
     readingMinutes?: number
   ) => Promise<any>;
+  /** Bulk-import matched library books (e.g. Goodreads CSV). */
+  importLibraryBooks: (
+    books: Array<{
+      bookId: string;
+      status: "Want to Read" | "Currently Reading" | "Finished";
+      rating?: number;
+      review?: string;
+      title?: string;
+      author?: string;
+      coverImage?: string;
+      pages?: number;
+      year?: number;
+      genres?: string[];
+      description?: string;
+    }>
+  ) => Promise<{ imported: number; updated: number; errors: Array<{ bookId: string; error: string }> }>;
   
   // Live Supabase Authenticated States
   session: any | null;
@@ -698,7 +714,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Sync Log Book to DB (with local storage fallback)
   const logBook = async (
     bookId: string,
-    status: "Want to Read" | "Currently Reading" | "Finished",
+    status: "Want to Read" | "Currently Reading" | "Finished" | "Did Not Finish",
     rating?: number,
     reviewContent?: string
   ) => {
@@ -717,9 +733,13 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
         currentPage:
           status === "Finished"
             ? book?.pages || 300
-            : existingIndex >= 0
-              ? prev[existingIndex].currentPage || 0
-              : 0,
+            : status === "Did Not Finish"
+              ? existingIndex >= 0
+                ? prev[existingIndex].currentPage || 0
+                : 0
+              : existingIndex >= 0
+                ? prev[existingIndex].currentPage || 0
+                : 0,
         review: reviewContent || (existingIndex >= 0 ? prev[existingIndex].review : undefined),
         bookTitle: book?.title,
         bookAuthor: book?.author,
@@ -1014,6 +1034,78 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
+  const importLibraryBooks = async (
+    booksToImport: Array<{
+      bookId: string;
+      status: "Want to Read" | "Currently Reading" | "Finished";
+      rating?: number;
+      review?: string;
+      title?: string;
+      author?: string;
+      coverImage?: string;
+      pages?: number;
+      year?: number;
+      genres?: string[];
+      description?: string;
+    }>
+  ) => {
+    const res = await authFetch("/api/user-books/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ books: booksToImport }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || "Import failed");
+    }
+    if (data.diaryLogs) {
+      setDiaryLogs(data.diaryLogs);
+      localStorage.setItem("leaf_local_diary_logs", JSON.stringify(data.diaryLogs));
+    }
+    // Merge imported book metadata into local catalog
+    setBooks((prev) => {
+      const merged = new Map(prev.map((b) => [b.id, b]));
+      for (const item of booksToImport) {
+        if (!item.bookId || merged.has(item.bookId)) continue;
+        if (!item.title) continue;
+        merged.set(item.bookId, {
+          id: item.bookId,
+          title: item.title,
+          author: item.author || "Unknown Author",
+          year: item.year || 2000,
+          description: item.description || "",
+          coverImage: item.coverImage || "",
+          averageRating: 4.0,
+          genres: item.genres || ["Fiction"],
+          pages: item.pages || 300,
+        });
+      }
+      return Array.from(merged.values());
+    });
+
+    const initRes = await authFetch("/api/init");
+    if (initRes.ok) {
+      const initData = await initRes.json();
+      if (initData.success) {
+        if (initData.diaryLogs) setDiaryLogs(initData.diaryLogs);
+        if (initData.stats) setUserStats(initData.stats);
+        if (initData.books?.length) {
+          setBooks((prev) => {
+            const merged = new Map(prev.map((b) => [b.id, b]));
+            initData.books.forEach((b: Book) => merged.set(b.id, b));
+            return Array.from(merged.values());
+          });
+        }
+      }
+    }
+
+    return {
+      imported: data.imported || 0,
+      updated: data.updated || 0,
+      errors: data.errors || [],
+    };
+  };
+
   return (
     <LeafContext.Provider
       value={{
@@ -1041,6 +1133,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
         userStats,
         logReadingSession,
         updateBookProgressDirectly,
+        importLibraryBooks,
         
         // Auth
         session,

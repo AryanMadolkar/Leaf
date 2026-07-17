@@ -131,7 +131,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Validation Error: Missing required fields 'bookId' or 'status'." }, { status: 400 });
     }
 
-    const validStatuses = ["Want to Read", "Currently Reading", "Finished", "want_to_read", "reading", "finished"];
+    const validStatuses = [
+      "Want to Read",
+      "Currently Reading",
+      "Finished",
+      "Did Not Finish",
+      "want_to_read",
+      "reading",
+      "finished",
+      "did_not_finish",
+    ];
     if (!validStatuses.includes(status)) {
       console.warn("[DEBUG] [user-books] Validation failed: Invalid status value:", status);
       return NextResponse.json({ 
@@ -140,13 +149,16 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    const mappedStatus = status === "Want to Read" 
-      ? "want_to_read" 
-      : status === "Currently Reading" 
-      ? "reading" 
-      : status === "Finished"
-      ? "finished"
-      : status; // check if already formatted
+    const mappedStatus =
+      status === "Want to Read"
+        ? "want_to_read"
+        : status === "Currently Reading"
+          ? "reading"
+          : status === "Finished"
+            ? "finished"
+            : status === "Did Not Finish"
+              ? "did_not_finish"
+              : status; // already DB-formatted
 
     // 4. Authenticate User
     const { user, error: authError } = await getRequestUser();
@@ -219,7 +231,7 @@ export async function POST(request: Request) {
     console.log("[DEBUG] [user-books] Querying existing user_book record...");
     const { data: existingUserBook, error: fetchError } = await dbClient
       .from("user_books")
-      .select("id, started_at, finished_at, current_page")
+      .select("id, started_at, finished_at, current_page, status")
       .eq("user_id", user.id)
       .eq("book_id", resolvedBookId)
       .maybeSingle();
@@ -239,18 +251,27 @@ export async function POST(request: Request) {
         review: review !== undefined ? review : null,
       };
 
-      if (mappedStatus === "reading" && !existingUserBook.started_at) {
-        updatePayload.started_at = today;
-      }
-      if (mappedStatus === "reading" || mappedStatus === "want_to_read") {
-        // Re-shelving off Finished should clear completion date
+      if (mappedStatus === "reading") {
         updatePayload.finished_at = null;
-      }
-      if (mappedStatus === "finished") {
+        if (!existingUserBook.started_at || existingUserBook.status === "finished") {
+          updatePayload.started_at = today;
+        }
+        // Read Again / re-shelve from Finished — restart progress
+        if (existingUserBook.status === "finished") {
+          updatePayload.current_page = 0;
+        }
+      } else if (mappedStatus === "want_to_read") {
+        updatePayload.finished_at = null;
+        updatePayload.current_page = 0;
+      } else if (mappedStatus === "did_not_finish") {
+        // Keep progress where they stopped; clear completion date
+        updatePayload.finished_at = null;
+        if (!existingUserBook.started_at) {
+          updatePayload.started_at = today;
+        }
+      } else if (mappedStatus === "finished") {
         updatePayload.finished_at = today;
         updatePayload.current_page = totalPages;
-      } else if (mappedStatus === "want_to_read") {
-        updatePayload.current_page = 0;
       }
 
       console.log("[DEBUG] [user-books] Database update payload:", updatePayload);
@@ -272,7 +293,8 @@ export async function POST(request: Request) {
         status: mappedStatus,
         rating: rating !== undefined ? rating : null,
         review: review !== undefined ? review : null,
-        started_at: mappedStatus === "reading" ? today : null,
+        started_at:
+          mappedStatus === "reading" || mappedStatus === "did_not_finish" ? today : null,
         finished_at: mappedStatus === "finished" ? today : null,
         created_at: new Date().toISOString(),
         current_page: mappedStatus === "finished" ? totalPages : 0,

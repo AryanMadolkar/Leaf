@@ -6,6 +6,8 @@ export function mapUserBookToDiaryLog(ub: any, userId: string): ReadingLog {
   let clientStatus: ReadingLog["status"] = "Finished";
   if (ub.status === "want_to_read") clientStatus = "Want to Read";
   else if (ub.status === "reading") clientStatus = "Currently Reading";
+  else if (ub.status === "did_not_finish") clientStatus = "Did Not Finish";
+  else if (ub.status === "finished") clientStatus = "Finished";
 
   const dateStr = ub.finished_at || ub.started_at || ub.created_at || new Date().toISOString();
   const dateLogged = String(dateStr).includes("T") ? String(dateStr).split("T")[0] : String(dateStr);
