@@ -163,7 +163,7 @@ export default function HomeFeed() {
               href="/discover"
               className="text-[11px] font-semibold text-brand hover:underline"
             >
-              Browse Library →
+              Browse
             </Link>
           </div>
 
