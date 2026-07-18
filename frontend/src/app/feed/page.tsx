@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Header from "@/components/Header";
 import BookCard from "@/components/BookCard";
 import CoverImage from "@/components/CoverImage";
@@ -8,12 +8,58 @@ import { StarDisplay } from "@/components/ReviewCard";
 import { useLeaf } from "@/context/LeafContext";
 import Link from "next/link";
 import { TrendingUp, Layers, BookOpen, Star, Sparkles, ArrowRight } from "lucide-react";
+import type { Book } from "@/data/mockData";
 
 export default function HomeFeed() {
   const { reviews, books, lists, diaryLogs, currentUser } = useLeaf();
+  const [recentlyLoggedByUsers, setRecentlyLoggedByUsers] = useState<Book[]>([]);
 
-  // Recently finished books for horizontal carousel
-  const recentlyFinished = books.slice(0, 4);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/feed/recently-logged?limit=4");
+        const data = await res.json();
+        if (!cancelled && data.success && Array.isArray(data.books)) {
+          setRecentlyLoggedByUsers(data.books);
+        }
+      } catch (err) {
+        console.error("[feed] recently-logged fetch failed:", err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Fallback while loading / if API returns empty: prefer other users' reviews, then catalog
+  const recentlyFinished = useMemo(() => {
+    if (recentlyLoggedByUsers.length > 0) return recentlyLoggedByUsers.slice(0, 4);
+
+    const fromReviews: Book[] = [];
+    const seen = new Set<string>();
+    for (const r of reviews) {
+      if (!r.bookId || seen.has(r.bookId) || r.userId === currentUser.id) continue;
+      seen.add(r.bookId);
+      const catalog = books.find((b) => b.id === r.bookId);
+      fromReviews.push(
+        catalog || {
+          id: r.bookId,
+          title: r.bookTitle || "Untitled",
+          author: r.bookAuthor || "Unknown Author",
+          coverImage: r.bookCover || "",
+          year: 0,
+          description: "",
+          averageRating: r.rating || 0,
+          genres: [],
+          pages: 0,
+        },
+      );
+      if (fromReviews.length >= 4) break;
+    }
+    if (fromReviews.length > 0) return fromReviews;
+    return books.slice(0, 4);
+  }, [recentlyLoggedByUsers, reviews, books, currentUser.id]);
 
   // Trending books
   const trendingBooks = [...books].sort((a, b) => b.averageRating - a.averageRating).slice(0, 3);
@@ -156,7 +202,7 @@ export default function HomeFeed() {
             <div className="flex items-center gap-2">
               <BookOpen className="w-4 h-4 text-brand" />
               <h2 className="font-serif text-lg font-bold text-charcoal">
-                Recently Logged by Friends
+                Recently Logged by Users
               </h2>
             </div>
             <Link
