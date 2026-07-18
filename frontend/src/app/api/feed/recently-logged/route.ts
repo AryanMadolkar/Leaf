@@ -41,7 +41,11 @@ export async function GET(request: Request) {
       if (!bookId || seen.has(bookId)) continue;
       seen.add(bookId);
 
-      const rawBook = row.book && !Array.isArray(row.book) ? row.book : null;
+      const joined = row.book;
+      const rawBook =
+        joined && typeof joined === "object" && !Array.isArray(joined)
+          ? (joined as Record<string, unknown>)
+          : null;
       if (rawBook) {
         books.push(mapDbBookToClientBook({ ...rawBook, id: bookId }));
       } else {
