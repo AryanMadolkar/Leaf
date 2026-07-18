@@ -4,6 +4,11 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { ensureBookRow, getBookById } from "@/utils/booksApi";
 import { fetchLibraryPayload, slugify } from "@/utils/library";
 
+/** Escape SQL LIKE/ILIKE wildcards so underscores in usernames match literally. */
+function escapeIlikeExact(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -14,11 +19,30 @@ export async function GET(request: Request) {
     let targetUserId = user?.id || null;
 
     if (username) {
-      const { data: profile } = await admin
+      const needle = username.trim();
+      // Prefer exact match — ilike treats "_" as a single-char wildcard, which breaks
+      // usernames like aryan_madolkar when aryan.madolkar also exists.
+      let profile: { id: string; username: string } | null = null;
+
+      const { data: exact } = await admin
         .from("profiles")
         .select("id, username")
-        .ilike("username", username)
+        .eq("username", needle)
         .maybeSingle();
+      profile = exact;
+
+      if (!profile) {
+        const { data: rows, error: profileError } = await admin
+          .from("profiles")
+          .select("id, username")
+          .ilike("username", escapeIlikeExact(needle));
+        if (profileError) {
+          console.error("[library GET] profile lookup:", profileError);
+        }
+        const lower = needle.toLowerCase();
+        profile = (rows || []).find((r) => r.username.toLowerCase() === lower) || null;
+      }
+
       if (!profile) {
         return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });
       }

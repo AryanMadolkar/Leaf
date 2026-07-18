@@ -18,6 +18,11 @@ function sanitizeUsername(raw: string) {
     .slice(0, 24);
 }
 
+/** Escape SQL LIKE/ILIKE wildcards so underscores in usernames match literally. */
+function escapeIlikeExact(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -29,9 +34,11 @@ export async function POST(request: Request) {
     if (!email || !email.includes("@")) {
       return NextResponse.json({ success: false, error: "Enter a valid email address." }, { status: 400 });
     }
+
     if (password.length < 6) {
       return NextResponse.json({ success: false, error: "Password must be at least 6 characters." }, { status: 400 });
     }
+
     if (!username) username = `reader_${randomUUID().slice(0, 6)}`;
 
     let admin;
@@ -50,18 +57,26 @@ export async function POST(request: Request) {
     const { data: existingCred } = await admin
       .from("user_credentials")
       .select("user_id")
-      .ilike("email", email)
+      .eq("email", email)
       .maybeSingle();
 
     if (existingCred) {
       return NextResponse.json({ success: false, error: "An account with this email already exists." }, { status: 409 });
     }
 
-    const { data: taken } = await admin
+    const { data: takenExact } = await admin
       .from("profiles")
       .select("id")
-      .ilike("username", username)
+      .eq("username", username)
       .maybeSingle();
+    let taken = !!takenExact;
+    if (!taken) {
+      const { data: takenRows } = await admin
+        .from("profiles")
+        .select("id, username")
+        .ilike("username", escapeIlikeExact(username));
+      taken = (takenRows || []).some((r) => r.username.toLowerCase() === username);
+    }
 
     if (taken) {
       username = `${username}_${randomUUID().slice(0, 4)}`;
