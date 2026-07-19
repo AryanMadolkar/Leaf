@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
+import LeafLogo from "@/components/LeafLogo";
 import {
   BookOpen,
   Sparkles,
@@ -91,7 +92,7 @@ export default function LandingPage() {
       {/* Header (Minimal Landing Version) */}
       <header className="w-full py-6 px-6 max-w-6xl mx-auto flex items-center justify-between z-10">
         <Link href="/" className="flex items-center gap-2 group">
-          <BookOpen className="w-5 h-5 text-brand group-hover:rotate-6 transition-transform" />
+          <LeafLogo size={24} priority />
           <span className="font-serif text-2xl font-bold tracking-tight text-charcoal">
             Leaf
           </span>

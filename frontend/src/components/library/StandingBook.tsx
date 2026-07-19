@@ -28,10 +28,14 @@ type StandingBookProps = {
 
 const CARD_W = 224;
 const CARD_EST_H = 280;
-const GAP = 12;
+const GAP = 10;
 /** Clear sticky Header (64) + Library toolbar (~52) */
 const TOP_SAFE = 130;
 const EDGE = 12;
+/** Wait before opening — avoids flicker while scanning spines */
+const SHOW_DELAY_MS = 100;
+/** Grace period to move from spine → card without it vanishing */
+const HIDE_DELAY_MS = 180;
 
 function textureOverlay(texture: SpinePalette["texture"]): string {
   if (texture === "leather") {
@@ -76,6 +80,8 @@ const StandingBook = memo(function StandingBook({
 }: StandingBookProps) {
   const seed = `${book.id}:${book.title}`;
   const rootRef = useRef<HTMLDivElement>(null);
+  const showTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [palette, setPalette] = useState<SpinePalette>(() => paletteFromSeed(seed));
   const [hovered, setHovered] = useState(false);
   const [cardPos, setCardPos] = useState<{ top: number; left: number } | null>(null);
@@ -87,8 +93,57 @@ const StandingBook = memo(function StandingBook({
     return { w, h };
   }, [book.pages, seed]);
 
+  const clearTimers = () => {
+    if (showTimer.current) {
+      clearTimeout(showTimer.current);
+      showTimer.current = null;
+    }
+    if (hideTimer.current) {
+      clearTimeout(hideTimer.current);
+      hideTimer.current = null;
+    }
+  };
+
+  const openCard = () => {
+    if (hideTimer.current) {
+      clearTimeout(hideTimer.current);
+      hideTimer.current = null;
+    }
+    if (hovered) return;
+    if (showTimer.current) clearTimeout(showTimer.current);
+    showTimer.current = setTimeout(() => {
+      showTimer.current = null;
+      setHovered(true);
+    }, SHOW_DELAY_MS);
+  };
+
+  const scheduleClose = () => {
+    if (showTimer.current) {
+      clearTimeout(showTimer.current);
+      showTimer.current = null;
+    }
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    hideTimer.current = setTimeout(() => {
+      hideTimer.current = null;
+      setHovered(false);
+    }, HIDE_DELAY_MS);
+  };
+
+  const keepOpen = () => {
+    if (hideTimer.current) {
+      clearTimeout(hideTimer.current);
+      hideTimer.current = null;
+    }
+    if (showTimer.current) {
+      clearTimeout(showTimer.current);
+      showTimer.current = null;
+    }
+    setHovered(true);
+  };
+
   useEffect(() => {
     setMounted(true);
+    return () => clearTimers();
   }, []);
 
   useEffect(() => {
@@ -141,9 +196,12 @@ const StandingBook = memo(function StandingBook({
         <div
           className="fixed z-[200] w-56 pointer-events-auto"
           style={{ top: cardPos.top, left: cardPos.left }}
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => setHovered(false)}
+          onMouseEnter={keepOpen}
+          onMouseLeave={scheduleClose}
         >
+          {/* Invisible hit pads so the cursor can cross the gap to the card */}
+          <div className="absolute -left-4 top-0 bottom-0 w-4" aria-hidden />
+          <div className="absolute -right-4 top-0 bottom-0 w-4" aria-hidden />
           <div className="bg-cream border border-cream-border rounded-xl shadow-2xl overflow-hidden">
             <div className="flex gap-2.5 p-2.5">
               <CoverImage
@@ -241,8 +299,8 @@ const StandingBook = memo(function StandingBook({
       ref={rootRef}
       className="relative flex-shrink-0 z-0 hover:z-50"
       style={{ width: dims.w, height: dims.h }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseEnter={openCard}
+      onMouseLeave={scheduleClose}
     >
       <div className="absolute inset-0" {...dragHandleProps}>
         <Link
@@ -250,9 +308,9 @@ const StandingBook = memo(function StandingBook({
           className="absolute inset-0 origin-bottom focus:outline-none cursor-pointer transition-transform duration-200 ease-out"
           style={{
             boxShadow: hovered
-              ? "2px 8px 16px rgba(70,55,35,0.22), 0 2px 4px rgba(70,55,35,0.1)"
-              : "1px 2px 5px rgba(70,55,35,0.16), 0 1px 2px rgba(70,55,35,0.08)",
-            transform: hovered ? "translateY(-8px)" : "translateY(0)",
+              ? "0 10px 18px rgba(40,28,12,0.28), 0 2px 4px rgba(40,28,12,0.12)"
+              : "0 1px 0 rgba(40,28,12,0.35)",
+            transform: hovered ? "translateY(-10px) scaleY(1.01)" : "translateY(0)",
             zIndex: hovered ? 25 : 1,
           }}
           title={book.title}
@@ -260,17 +318,39 @@ const StandingBook = memo(function StandingBook({
           draggable={false}
         >
           <div
-            className="relative w-full h-full overflow-hidden rounded-[1px]"
+            className="relative w-full h-full overflow-hidden"
             style={{
-              background: `linear-gradient(90deg, ${palette.bgDeep} 0%, ${palette.bg} 18%, ${palette.bg} 82%, ${palette.bgDeep} 100%)`,
+              // Rounded spine look: deep edges, lit center
+              background: `linear-gradient(90deg,
+                ${palette.bgDeep} 0%,
+                ${palette.bg} 12%,
+                ${palette.bg} 78%,
+                ${palette.bgDeep} 92%,
+                rgba(0,0,0,0.35) 100%)`,
             }}
           >
             <div
-              className="absolute inset-0 pointer-events-none opacity-70 mix-blend-overlay"
+              className="absolute inset-0 pointer-events-none opacity-75 mix-blend-overlay"
               style={{ backgroundImage: textureOverlay(palette.texture) }}
             />
-            <div className="absolute inset-y-0 left-0 w-[2px] bg-gradient-to-r from-black/35 to-transparent" />
-            <div className="absolute inset-y-0 right-0 w-[2px] bg-gradient-to-l from-black/25 to-transparent" />
+            {/* Ambient occlusion at top (under shelf) + bottom (on plank) */}
+            <div
+              className="absolute inset-x-0 top-0 h-[18%] pointer-events-none"
+              style={{
+                background: "linear-gradient(180deg, rgba(0,0,0,0.28) 0%, transparent 100%)",
+              }}
+            />
+            <div
+              className="absolute inset-x-0 bottom-0 h-[12%] pointer-events-none"
+              style={{
+                background: "linear-gradient(0deg, rgba(0,0,0,0.22) 0%, transparent 100%)",
+              }}
+            />
+
+            {/* Contact edges — define books without gaps */}
+            <div className="absolute inset-y-0 left-0 w-[1.5px] bg-black/40" />
+            <div className="absolute inset-y-0 right-0 w-[1px] bg-black/50" />
+            <div className="absolute inset-y-0 left-[2px] w-[2px] bg-gradient-to-r from-white/15 to-transparent" />
 
             <div
               className="absolute left-[15%] right-[15%] top-[10%] h-px opacity-70"
@@ -319,8 +399,6 @@ const StandingBook = memo(function StandingBook({
                 </span>
               </div>
             )}
-
-            <div className="absolute inset-y-[4%] right-0 w-[1px] bg-gradient-to-b from-[#f5ecd8]/40 via-[#e8dcc4]/70 to-[#f5ecd8]/40" />
 
             <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex flex-col items-center gap-0.5 z-10">
               {isFavorite && (

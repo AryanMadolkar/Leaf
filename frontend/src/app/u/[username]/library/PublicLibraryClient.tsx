@@ -8,6 +8,7 @@ import CoverImage from "@/components/CoverImage";
 import type { LibraryPayload } from "@/utils/library";
 import type { ShelfThemeId } from "@/components/library/shelfThemes";
 import { BookOpen } from "lucide-react";
+import LeafLogo from "@/components/LeafLogo";
 
 export default function PublicLibraryClient() {
   const params = useParams();
@@ -69,7 +70,7 @@ export default function PublicLibraryClient() {
       <header className="border-b border-cream-border bg-cream/90 backdrop-blur sticky top-0 z-20">
         <div className="max-w-6xl mx-auto px-6 h-14 flex items-center">
           <Link href="/" className="flex items-center gap-2 group">
-            <BookOpen className="w-4 h-4 text-brand" />
+            <LeafLogo size={18} priority />
             <span className="font-serif text-lg font-bold text-charcoal">Leaf</span>
           </Link>
         </div>

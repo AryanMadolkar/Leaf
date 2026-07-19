@@ -4,7 +4,8 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useLeaf } from "@/context/LeafContext";
-import { BookOpen, ArrowRight, AlertCircle, Sparkles } from "lucide-react";
+import { ArrowRight, AlertCircle, Sparkles } from "lucide-react";
+import LeafLogo from "@/components/LeafLogo";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function AuthPage() {
@@ -65,7 +66,7 @@ export default function AuthPage() {
         
         {/* Top Header */}
         <Link href="/" className="flex items-center gap-2 group w-fit">
-          <BookOpen className="w-5 h-5 text-brand group-hover:rotate-6 transition-transform duration-300" />
+          <LeafLogo size={20} priority />
           <span className="font-serif text-xl font-bold tracking-tight text-charcoal">
             Leaf
           </span>

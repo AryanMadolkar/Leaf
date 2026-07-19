@@ -237,7 +237,7 @@ export default function BookshelfUnit({
             strategy={horizontalListSortingStrategy}
           >
             <div
-              className="flex items-end justify-start gap-[3px] overflow-x-auto overflow-y-visible px-0.5 pb-0"
+              className="flex items-end justify-start gap-0 overflow-x-auto overflow-y-visible px-0 pb-0"
               style={{
                 minHeight: orderedBooks.length ? tallest + 8 : 36,
                 scrollbarWidth: "thin",
@@ -279,17 +279,24 @@ export default function BookshelfUnit({
           </DragOverlay>
         </DndContext>
 
-        {/* Thin wooden support — sits under books, not a tall frame */}
+        {/* Wooden plank with depth under flush books */}
         <div
-          className="relative h-[7px] rounded-[2px] mt-0"
+          className="relative h-[10px] mt-0"
           style={{
             background: themeStyles.plank,
-            boxShadow: `0 6px 14px ${themeStyles.shadow}, inset 0 1px 0 rgba(255,255,255,0.18)`,
+            boxShadow: `0 8px 18px ${themeStyles.shadow}, inset 0 1px 0 rgba(255,255,255,0.25), inset 0 -2px 4px rgba(0,0,0,0.2)`,
             borderBottom: `2px solid ${themeStyles.edge}`,
           }}
-        />
+        >
+          <div
+            className="pointer-events-none absolute inset-x-0 -top-3 h-3"
+            style={{
+              background: "linear-gradient(180deg, transparent, rgba(40,28,12,0.18))",
+            }}
+          />
+        </div>
         <div
-          className="h-[3px] mx-1 rounded-b-[1px] opacity-90"
+          className="h-[4px] mx-0.5 opacity-90"
           style={{
             background: `linear-gradient(180deg, ${themeStyles.edge}, transparent)`,
           }}

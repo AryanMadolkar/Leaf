@@ -7,6 +7,7 @@ import { useLeaf } from "@/context/LeafContext";
 import { useTheme } from "@/context/ThemeContext";
 import { Book } from "@/data/mockData";
 import { Search, Plus, BookOpen, Star, LogOut, LogIn, Check, X, Calendar, Clock, Book as BookIcon, Activity, CheckCircle, ChevronRight, Award, Bookmark, User, Settings, UserPlus, UserCheck, Menu, Sun, Moon, Loader2 } from "lucide-react";
+import LeafLogo from "@/components/LeafLogo";
 import { AnimatePresence, motion } from "framer-motion";
 import UserAvatar from "@/components/UserAvatar";
 
@@ -500,7 +501,7 @@ export default function Header() {
           
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 group">
-            <BookOpen className="w-5 h-5 text-brand group-hover:rotate-6 transition-transform duration-300" />
+            <LeafLogo size={24} priority />
             <span className="font-serif text-2xl font-bold tracking-tight text-charcoal">
               Leaf
             </span>

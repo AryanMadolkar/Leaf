@@ -22,6 +22,13 @@ export const metadata: Metadata = {
   title: "Leaf — A Home for People Who Love Books",
   description: "Track what you read, share what you love, and curate your literary identity. A premium social platform for book lovers.",
   keywords: ["books", "reading diary", "book club", "reviews", "literary profile", "letterboxd for books"],
+  icons: {
+    icon: [
+      { url: "/favicon.ico" },
+      { url: "/leaf-logo-light.png", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-icon.png" }],
+  },
   openGraph: {
     title: "Leaf — A Home for People Who Love Books",
     description: "Track what you read, share what you love, and curate your literary identity. A premium social platform for book lovers.",
