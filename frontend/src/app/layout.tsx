@@ -24,9 +24,11 @@ export const metadata: Metadata = {
   keywords: ["books", "reading diary", "book club", "reviews", "literary profile", "letterboxd for books"],
   icons: {
     icon: [
-      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/favicon-32.png", type: "image/png", sizes: "32x32" },
       { url: "/favicon-48.png", type: "image/png", sizes: "48x48" },
-      { url: "/icon.png", type: "image/png", sizes: "256x256" },
+      { url: "/favicon-192.png", type: "image/png", sizes: "192x192" },
+      { url: "/favicon.ico", sizes: "48x48" },
     ],
     apple: [{ url: "/apple-icon.png", sizes: "180x180" }],
   },
