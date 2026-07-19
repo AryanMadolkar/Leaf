@@ -24,10 +24,11 @@ export const metadata: Metadata = {
   keywords: ["books", "reading diary", "book club", "reviews", "literary profile", "letterboxd for books"],
   icons: {
     icon: [
-      { url: "/favicon.ico" },
-      { url: "/leaf-logo-light.png", type: "image/png" },
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon-48.png", type: "image/png", sizes: "48x48" },
+      { url: "/icon.png", type: "image/png", sizes: "256x256" },
     ],
-    apple: [{ url: "/apple-icon.png" }],
+    apple: [{ url: "/apple-icon.png", sizes: "180x180" }],
   },
   openGraph: {
     title: "Leaf — A Home for People Who Love Books",
