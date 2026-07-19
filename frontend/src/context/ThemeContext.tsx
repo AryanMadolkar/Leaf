@@ -16,13 +16,17 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export const THEME_INLINE_SCRIPT = `(function(){try{var t=localStorage.getItem("${STORAGE_KEY}");if(t==="light"||t==="dark"){document.documentElement.setAttribute("data-theme",t)}else if(window.matchMedia("(prefers-color-scheme: dark)").matches){document.documentElement.setAttribute("data-theme","dark")}}catch(e){}})()`;
 
+function readStoredTheme(): Theme {
+  const stored = localStorage.getItem(STORAGE_KEY);
+  if (stored === "light" || stored === "dark") return stored;
+  if (window.matchMedia("(prefers-color-scheme: dark)").matches) return "dark";
+  return "light";
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(() => {
-    if (typeof window === "undefined") return "light";
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === "light" || stored === "dark") return stored;
-    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-  });
+  // Always start as "light" so server HTML and the client's first paint match.
+  // Real preference is applied in useLayoutEffect after hydration.
+  const [theme, setThemeState] = useState<Theme>("light");
 
   const applyTheme = useCallback((next: Theme) => {
     setThemeState(next);
@@ -30,10 +34,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(STORAGE_KEY, next);
   }, []);
 
-  // React 19 hydration can reconcile the <html> attribute back to the
-  // server-rendered "light" default even with suppressHydrationWarning,
-  // since the inline script's DOM write happens before React attaches.
-  // Re-apply the client's resolved theme synchronously post-hydration.
+  useLayoutEffect(() => {
+    const next = readStoredTheme();
+    setThemeState(next);
+    document.documentElement.setAttribute("data-theme", next);
+  }, []);
+
   useLayoutEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
