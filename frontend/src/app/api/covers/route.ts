@@ -188,30 +188,28 @@ export async function GET(request: Request) {
     await tryUrl(`gbooks:${clean}`, url);
   }
 
-  // 1) Explicit cover ID
-  await tryId(id);
+  // Prefer Google Books by ISBN first — Open Library cover_i often 302s to dead archive.org zips
+  await tryGoogleIsbn(isbn);
 
-  // 2) Mapped override for this ISBN
+  // Explicit / mapped Open Library cover ID
+  await tryId(id);
   if (!state.cover && isbn) {
     const mapped = COVER_ID_BY_ISBN[isbn] || COVER_ID_BY_ISBN[isbnRaw || ""];
     await tryId(mapped);
   }
 
-  // 3) Direct Open Library ISBN cover
+  // Direct Open Library ISBN cover
   await tryIsbn(isbn);
 
-  // 4) Google Books by ISBN (fast recovery when OL cover_i 302s to archive.org)
-  await tryGoogleIsbn(isbn);
-
-  // 5) Title/author search — try multiple cover ids + isbns (+ Google) until one works
+  // Title/author search — try multiple cover ids + isbns (+ Google) until one works
   if (!state.cover && title) {
     const candidates = await candidatesFromTitleAuthor(title, author);
     for (const c of candidates) {
       if (state.cover) break;
       if (c.kind === "id") await tryId(c.value);
       else {
-        await tryIsbn(c.value);
         await tryGoogleIsbn(c.value);
+        await tryIsbn(c.value);
       }
     }
   }

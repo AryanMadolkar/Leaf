@@ -365,10 +365,10 @@ export async function searchOpenLibraryRemote(query: string): Promise<Book[]> {
     const author = doc.author_name?.[0] || "Unknown Author";
     const coverId = doc.cover_i;
     const coverMeta = { title, author, isbn: isbn || undefined };
-    const coverUrl = coverId
-      ? coverUrlFromCoverId(coverId, "M", coverMeta)
-      : isbn
-        ? coverUrlFromIsbn(isbn, "M", coverMeta)
+    const coverUrl = isbn
+      ? coverUrlFromIsbn(isbn, "M", coverMeta)
+      : coverId
+        ? coverUrlFromCoverId(coverId, "M", coverMeta)
         : coverUrlFromIsbn("", "M", coverMeta);
 
     const id =

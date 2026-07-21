@@ -8,6 +8,7 @@ import { useTheme } from "@/context/ThemeContext";
 import { Book } from "@/data/mockData";
 import { Search, Plus, BookOpen, Star, LogOut, LogIn, Check, X, Calendar, Clock, Book as BookIcon, Activity, CheckCircle, ChevronRight, Award, Bookmark, User, Settings, UserPlus, UserCheck, Menu, Sun, Moon, Loader2 } from "lucide-react";
 import LeafLogo from "@/components/LeafLogo";
+import CoverImage from "@/components/CoverImage";
 import { AnimatePresence, motion } from "framer-motion";
 import UserAvatar from "@/components/UserAvatar";
 
@@ -584,10 +585,15 @@ export default function Header() {
                                 }}
                                 className="w-full flex items-center gap-3 px-4 py-2 hover:bg-cream-dark/50 transition-colors duration-200 text-left"
                               >
-                                <img
+                                <CoverImage
                                   src={book.coverImage}
-                                  alt={book.title}
-                                  className="w-8 h-12 object-cover rounded shadow-sm flex-shrink-0"
+                                  title={book.title}
+                                  author={book.author}
+                                  bookId={book.id}
+                                  isbn={book.id}
+                                  size="S"
+                                  className="w-8 h-12 rounded shadow-sm flex-shrink-0"
+                                  imgClassName="w-full h-full object-cover"
                                 />
                                 <div className="min-w-0">
                                   <p className="text-xs font-semibold text-charcoal truncate">
@@ -937,10 +943,15 @@ export default function Header() {
                           onClick={() => setSelectedBook(book)}
                           className="w-full flex items-center gap-4 p-2.5 rounded-xl border border-cream-border hover:bg-cream-dark/30 hover:border-brand-muted transition-all text-left group"
                         >
-                          <img
+                          <CoverImage
                             src={book.coverImage}
-                            alt={book.title}
-                            className="w-10 h-14 object-cover rounded shadow-sm group-hover:scale-95 transition-transform"
+                            title={book.title}
+                            author={book.author}
+                            bookId={book.id}
+                            isbn={book.id}
+                            size="S"
+                            className="w-10 h-14 rounded shadow-sm group-hover:scale-95 transition-transform"
+                            imgClassName="w-full h-full object-cover"
                           />
                           <div>
                             <p className="text-sm font-semibold text-charcoal">
@@ -969,10 +980,15 @@ export default function Header() {
                   <form onSubmit={handleLogSubmit} className="space-y-6">
                     {/* Selected Book Row */}
                     <div className="flex items-center gap-4 p-3 bg-cream-card border border-cream-border rounded-xl">
-                      <img
+                      <CoverImage
                         src={selectedBook.coverImage}
-                        alt={selectedBook.title}
-                        className="w-12 h-18 object-cover rounded shadow-md"
+                        title={selectedBook.title}
+                        author={selectedBook.author}
+                        bookId={selectedBook.id}
+                        isbn={selectedBook.id}
+                        size="M"
+                        className="w-12 h-[4.5rem] rounded shadow-md"
+                        imgClassName="w-full h-full object-cover"
                       />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-bold text-charcoal truncate">
@@ -1144,10 +1160,15 @@ export default function Header() {
                   </div>
 
                   <div className="flex items-center gap-4 p-3 bg-cream-card border border-cream-border rounded-xl text-left">
-                    <img
+                    <CoverImage
                       src={completedBookInfo?.coverImage}
-                      alt={completedBookInfo?.title}
-                      className="w-12 h-18 object-cover rounded shadow"
+                      title={completedBookInfo?.title || ""}
+                      author={completedBookInfo?.author}
+                      bookId={completedBookInfo?.id}
+                      isbn={completedBookInfo?.id}
+                      size="M"
+                      className="w-12 h-[4.5rem] rounded shadow"
+                      imgClassName="w-full h-full object-cover"
                     />
                     <div className="min-w-0">
                       <p className="text-sm font-bold text-charcoal truncate">
@@ -1235,10 +1256,15 @@ export default function Header() {
                       <div className="space-y-6">
                         {/* Card Details */}
                         <div className="flex items-center gap-4 p-4 bg-cream-card border border-cream-border rounded-xl">
-                          <img
+                          <CoverImage
                             src={activeBook.coverImage}
-                            alt={activeBook.title}
-                            className="w-16 h-24 object-cover rounded shadow-md border border-cream-border animate-fade-in"
+                            title={activeBook.title}
+                            author={activeBook.author}
+                            bookId={activeBook.id}
+                            isbn={activeBook.id}
+                            size="M"
+                            className="w-16 h-24 rounded shadow-md border border-cream-border animate-fade-in"
+                            imgClassName="w-full h-full object-cover"
                           />
                           <div className="flex-1 min-w-0">
                             <h4 className="text-sm font-bold text-charcoal truncate">
@@ -1444,10 +1470,15 @@ export default function Header() {
                             className="flex items-center justify-between p-2 rounded-lg bg-cream-card border border-cream-border hover:border-brand/40 transition-all"
                           >
                             <div className="flex items-center gap-2 min-w-0">
-                              <img
+                              <CoverImage
                                 src={book.coverImage}
-                                alt={book.title}
-                                className="w-8 h-12 object-cover rounded shadow-xs flex-shrink-0"
+                                title={book.title}
+                                author={book.author}
+                                bookId={book.id}
+                                isbn={book.id}
+                                size="S"
+                                className="w-8 h-12 rounded shadow-xs flex-shrink-0"
+                                imgClassName="w-full h-full object-cover"
                               />
                               <div className="min-w-0">
                                 <p className="text-xs font-bold text-charcoal truncate">{book.title}</p>
@@ -1479,10 +1510,15 @@ export default function Header() {
                             className="flex items-center justify-between p-3 rounded-lg bg-cream-card border border-cream-border"
                           >
                             <div className="flex items-center gap-3 min-w-0">
-                              <img
+                              <CoverImage
                                 src={book.coverImage}
-                                alt={book.title}
-                                className="w-8 h-12 object-cover rounded shadow-xs flex-shrink-0"
+                                title={book.title}
+                                author={book.author}
+                                bookId={book.id}
+                                isbn={book.id}
+                                size="S"
+                                className="w-8 h-12 rounded shadow-xs flex-shrink-0"
+                                imgClassName="w-full h-full object-cover"
                               />
                               <div className="min-w-0">
                                 <p className="text-xs font-bold text-charcoal truncate">{book.title}</p>

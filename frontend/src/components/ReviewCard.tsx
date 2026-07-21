@@ -7,6 +7,7 @@ import { Heart, MessageSquare, CornerDownRight, ArrowRight } from "lucide-react"
 import { Review } from "@/data/mockData";
 import { motion, AnimatePresence } from "framer-motion";
 import UserAvatar from "./UserAvatar";
+import CoverImage from "@/components/CoverImage";
 
 interface ReviewCardProps {
   review: Review;
@@ -84,10 +85,15 @@ export default function ReviewCard({ review, showBookCover = true }: ReviewCardP
           <Link href={`/book/${book.id}`} className="flex-shrink-0 group">
             <div className="relative w-20 h-28 md:w-24 md:h-36 rounded-md overflow-hidden shadow-sm group-hover:shadow-md transition-all duration-300">
               <div className="absolute top-0 bottom-0 left-0 w-[3px] bg-charcoal/20 z-10" />
-              <img
+              <CoverImage
                 src={book.coverImage}
-                alt={book.title}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                title={book.title}
+                author={book.author}
+                bookId={book.id}
+                isbn={book.id}
+                size="M"
+                className="w-full h-full"
+                imgClassName="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
               />
             </div>
           </Link>

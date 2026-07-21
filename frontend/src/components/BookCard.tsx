@@ -5,7 +5,6 @@ import Link from "next/link";
 import { Star } from "lucide-react";
 import { Book } from "@/data/mockData";
 import CoverImage from "@/components/CoverImage";
-import { COVER_ID_BY_ISBN } from "@/data/coverOverrides";
 
 interface BookCardProps {
   book: Book;
@@ -21,8 +20,6 @@ export default function BookCard({ book, size = "md", showStats = false }: BookC
     xl: "w-52 h-76",
   };
 
-  const coverId = COVER_ID_BY_ISBN[book.id];
-
   return (
     <div className="flex flex-col items-center">
       <Link href={`/book/${book.id}`} className="group relative block focus:outline-none">
@@ -37,7 +34,6 @@ export default function BookCard({ book, size = "md", showStats = false }: BookC
             title={book.title}
             author={book.author}
             isbn={book.id}
-            coverId={coverId}
             bookId={book.id}
             size="M"
             priority

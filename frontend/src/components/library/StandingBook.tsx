@@ -209,6 +209,8 @@ const StandingBook = memo(function StandingBook({
                 title={book.title}
                 author={book.author}
                 bookId={book.id}
+                isbn={book.id}
+                size="S"
                 className="w-[72px] h-[108px] rounded shadow-sm flex-shrink-0"
                 imgClassName="w-full h-full object-cover"
               />

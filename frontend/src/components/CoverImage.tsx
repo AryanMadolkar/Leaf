@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { COVER_ID_BY_ISBN } from "@/data/coverOverrides";
 import {
   coverFallbackStyle,
   nextCoverFallback,
@@ -27,8 +26,7 @@ type CoverImageProps = {
 
 /**
  * Book cover via same-origin `/api/covers` proxy (CDN-cached).
- * Retries ISBN / title when a mapped cover ID is dead.
- * Falls back to a typographic plate when no artwork exists.
+ * Resolves by ISBN first (Google Books), then Open Library, then a typographic plate.
  */
 export default function CoverImage({
   src,
@@ -43,10 +41,10 @@ export default function CoverImage({
   size = "M",
   priority = false,
 }: CoverImageProps) {
-  const resolvedCoverId = coverId || (bookId && COVER_ID_BY_ISBN[bookId]) || (isbn && COVER_ID_BY_ISBN[isbn]) || null;
   const resolved = resolveCoverUrl(src, {
     isbn: isbn || bookId,
-    coverId: resolvedCoverId,
+    // Only use an explicit coverId when we don't have an ISBN
+    coverId: coverId || null,
     bookId,
     size,
     title,
