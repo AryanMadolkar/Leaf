@@ -26,7 +26,7 @@ type CoverImageProps = {
 
 /**
  * Book cover via same-origin `/api/covers` proxy (CDN-cached).
- * Resolves by ISBN first (Google Books), then Open Library, then a typographic plate.
+ * Typographic plate shows immediately; real cover fades in when ready.
  */
 export default function CoverImage({
   src,
@@ -43,7 +43,6 @@ export default function CoverImage({
 }: CoverImageProps) {
   const resolved = resolveCoverUrl(src, {
     isbn: isbn || bookId,
-    // Only use an explicit coverId when we don't have an ISBN
     coverId: coverId || null,
     bookId,
     size,
@@ -52,23 +51,41 @@ export default function CoverImage({
   });
 
   const [failed, setFailed] = useState(!resolved);
+  const [loaded, setLoaded] = useState(false);
   const [currentSrc, setCurrentSrc] = useState(resolved);
   const seed = bookId || isbn || title;
 
   useEffect(() => {
     setCurrentSrc(resolved);
     setFailed(!resolved);
+    setLoaded(false);
   }, [resolved]);
-
-  const showFallback = failed || !currentSrc;
 
   return (
     <div className={`relative overflow-hidden bg-cream-dark ${className}`}>
-      {!showFallback && (
+      {/* Always paint a plate so shelves never sit blank while the proxy races */}
+      <div
+        className={`absolute inset-0 flex flex-col justify-end p-2.5 text-cream transition-opacity duration-300 ${
+          loaded && !failed ? "opacity-0" : "opacity-100"
+        }`}
+        style={coverFallbackStyle(seed)}
+        aria-hidden={loaded && !failed}
+      >
+        <span className="text-[8px] uppercase tracking-wider font-semibold opacity-70 line-clamp-1">
+          {author || "Unknown"}
+        </span>
+        <span className="font-serif text-[11px] font-bold leading-tight line-clamp-3 mt-0.5">
+          {title}
+        </span>
+      </div>
+
+      {!failed && currentSrc && (
         <img
           src={currentSrc}
           alt={alt || title}
-          className={`${imgClassName} select-none`}
+          className={`${imgClassName} absolute inset-0 select-none transition-opacity duration-300 ${
+            loaded ? "opacity-100" : "opacity-0"
+          }`}
           loading={priority ? "eager" : "lazy"}
           decoding="async"
           fetchPriority={priority ? "high" : "auto"}
@@ -81,13 +98,14 @@ export default function CoverImage({
             });
             if (next && next !== currentSrc) {
               setCurrentSrc(next);
+              setLoaded(false);
               return;
             }
             setFailed(true);
+            setLoaded(false);
           }}
           onLoad={(e) => {
             const img = e.currentTarget;
-            // Tiny or Google's classic 128×184 missing-cover stub
             const isStub =
               img.naturalWidth < 40 ||
               img.naturalHeight < 40 ||
@@ -101,26 +119,16 @@ export default function CoverImage({
               });
               if (next && next !== currentSrc) {
                 setCurrentSrc(next);
+                setLoaded(false);
                 return;
               }
               setFailed(true);
+              setLoaded(false);
+              return;
             }
+            setLoaded(true);
           }}
         />
-      )}
-      {showFallback && (
-        <div
-          className="absolute inset-0 flex flex-col justify-end p-2.5 text-cream"
-          style={coverFallbackStyle(seed)}
-          aria-label={title}
-        >
-          <span className="text-[8px] uppercase tracking-wider font-semibold opacity-70 line-clamp-1">
-            {author || "Unknown"}
-          </span>
-          <span className="font-serif text-[11px] font-bold leading-tight line-clamp-3 mt-0.5">
-            {title}
-          </span>
-        </div>
       )}
     </div>
   );

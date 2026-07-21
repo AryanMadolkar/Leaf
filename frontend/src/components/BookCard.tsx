@@ -36,7 +36,6 @@ export default function BookCard({ book, size = "md", showStats = false }: BookC
             isbn={book.id}
             bookId={book.id}
             size="M"
-            priority
             className="w-full h-full"
             imgClassName="w-full h-full object-cover select-none group-hover:scale-105 transition-transform duration-700 ease-out"
           />
