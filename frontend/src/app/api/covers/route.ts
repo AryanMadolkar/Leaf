@@ -31,6 +31,14 @@ function olCoverByIsbn(isbn: string, size: string): string | null {
   return `https://covers.openlibrary.org/b/isbn/${clean}-${sz}.jpg?default=false`;
 }
 
+/** Google Books cover by ISBN — works when Open Library cover_i is a dead 302. */
+function googleCoverByIsbn(isbn: string, size: string): string | null {
+  const clean = cleanIsbn(isbn);
+  if (!clean || isFakeIsbn(clean)) return null;
+  const zoom = size === "L" ? 2 : 1;
+  return `https://books.google.com/books/content?vid=ISBN${clean}&printsec=frontcover&img=1&zoom=${zoom}`;
+}
+
 /**
  * Fetch a cover image. Critical: do NOT follow redirects.
  * Missing OL covers 302 to archive.org zip URLs that hang ~12s and fail.
@@ -171,6 +179,15 @@ export async function GET(request: Request) {
     await tryUrl(`isbn:${clean}`, url);
   }
 
+  async function tryGoogleIsbn(value: string | null | undefined) {
+    if (!value || isFakeIsbn(value)) return;
+    const clean = cleanIsbn(value);
+    if (!clean) return;
+    const url = googleCoverByIsbn(clean, size);
+    if (!url) return;
+    await tryUrl(`gbooks:${clean}`, url);
+  }
+
   // 1) Explicit cover ID
   await tryId(id);
 
@@ -180,16 +197,22 @@ export async function GET(request: Request) {
     await tryId(mapped);
   }
 
-  // 3) Direct ISBN cover (often works when cover_i is stale)
+  // 3) Direct Open Library ISBN cover
   await tryIsbn(isbn);
 
-  // 4) Title/author search — try multiple cover ids + isbns until one works
+  // 4) Google Books by ISBN (fast recovery when OL cover_i 302s to archive.org)
+  await tryGoogleIsbn(isbn);
+
+  // 5) Title/author search — try multiple cover ids + isbns (+ Google) until one works
   if (!state.cover && title) {
     const candidates = await candidatesFromTitleAuthor(title, author);
     for (const c of candidates) {
       if (state.cover) break;
       if (c.kind === "id") await tryId(c.value);
-      else await tryIsbn(c.value);
+      else {
+        await tryIsbn(c.value);
+        await tryGoogleIsbn(c.value);
+      }
     }
   }
 
