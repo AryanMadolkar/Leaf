@@ -130,6 +130,8 @@ async function candidatesFromTitleAuthor(
   return out.slice(0, MAX_CANDIDATES);
 }
 
+type CoverPayload = { bytes: ArrayBuffer; contentType: string };
+
 /**
  * Same-origin cover proxy with CDN caching.
  *
@@ -146,12 +148,13 @@ export async function GET(request: Request) {
   const isbn = isbnRaw && !isFakeIsbn(isbnRaw) ? cleanIsbn(isbnRaw) : null;
 
   const tried = new Set<string>();
-  let payload: { bytes: ArrayBuffer; contentType: string } | null = null;
+  // Box so nested assigns stay visible to TypeScript (bare `let` + closures → `never`)
+  const state: { cover: CoverPayload | null } = { cover: null };
 
   async function tryUrl(key: string, url: string) {
-    if (payload || tried.has(key)) return;
+    if (state.cover || tried.has(key)) return;
     tried.add(key);
-    payload = await fetchCoverBytes(url);
+    state.cover = await fetchCoverBytes(url);
   }
 
   async function tryId(coverId: number | string | null | undefined) {
@@ -172,7 +175,7 @@ export async function GET(request: Request) {
   await tryId(id);
 
   // 2) Mapped override for this ISBN
-  if (!payload && isbn) {
+  if (!state.cover && isbn) {
     const mapped = COVER_ID_BY_ISBN[isbn] || COVER_ID_BY_ISBN[isbnRaw || ""];
     await tryId(mapped);
   }
@@ -181,15 +184,16 @@ export async function GET(request: Request) {
   await tryIsbn(isbn);
 
   // 4) Title/author search — try multiple cover ids + isbns until one works
-  if (!payload && title) {
+  if (!state.cover && title) {
     const candidates = await candidatesFromTitleAuthor(title, author);
     for (const c of candidates) {
-      if (payload) break;
+      if (state.cover) break;
       if (c.kind === "id") await tryId(c.value);
       else await tryIsbn(c.value);
     }
   }
 
+  const payload = state.cover;
   if (!payload) {
     return new NextResponse(null, {
       status: 404,
