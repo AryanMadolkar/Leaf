@@ -1,5 +1,5 @@
 /**
- * Generate a ~5000-book catalog of REAL editions from Open Library.
+ * Generate a ~10000-book catalog of REAL editions from Open Library.
  * Requires: ISBN-13, cover_i, title, author.
  *
  * Usage (from backend/): node scripts/generateRealCatalog.mjs
@@ -11,7 +11,7 @@ import { modernFavorites } from "./modernFavorites.mjs";
 import { curatedBooks } from "./curatedBooks.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const TARGET_COUNT = 5000;
+const TARGET_COUNT = 10000;
 const PAGE_SIZE = 100;
 const USER_AGENT = "LeafLibrary/1.0 (catalog builder; real books only)";
 
@@ -46,12 +46,47 @@ const SUBJECT_QUERIES = [
   { q: "subject:detective", genre: "Mystery & Thriller" },
   { q: "subject:contemporary", genre: "Literary Fiction" },
   { q: "subject:memoir", genre: "Biography & Memoir" },
+  { q: "subject:comics", genre: "Graphic Novel" },
+  { q: "subject:manga", genre: "Graphic Novel" },
+  { q: "subject:urban_fantasy", genre: "Fantasy" },
+  { q: "subject:epic_fantasy", genre: "Fantasy" },
+  { q: "subject:paranormal", genre: "Romance" },
+  { q: "subject:chick_lit", genre: "Romance" },
+  { q: "subject:suspense", genre: "Mystery & Thriller" },
+  { q: "subject:espionage", genre: "Mystery & Thriller" },
+  { q: "subject:true_crime", genre: "Non-Fiction" },
+  { q: "subject:travel", genre: "Non-Fiction" },
+  { q: "subject:cookbooks", genre: "Non-Fiction" },
+  { q: "subject:music", genre: "Non-Fiction" },
+  { q: "subject:art", genre: "Non-Fiction" },
+  { q: "subject:sports", genre: "Non-Fiction" },
+  { q: "subject:religion", genre: "Non-Fiction" },
+  { q: "subject:politics", genre: "Non-Fiction" },
+  { q: "subject:economics", genre: "Non-Fiction" },
+  { q: "subject:technology", genre: "Non-Fiction" },
+  { q: "subject:nature", genre: "Non-Fiction" },
+  { q: "subject:animals", genre: "Non-Fiction" },
+  { q: "subject:children", genre: "Young Adult" },
+  { q: "subject:middle_grade", genre: "Young Adult" },
+  { q: "subject:coming_of_age", genre: "Literary Fiction" },
+  { q: "subject:short_stories", genre: "Literary Fiction" },
+  { q: "subject:essays", genre: "Literary Fiction" },
+  { q: "subject:plays", genre: "Classics" },
+  { q: "subject:mythology", genre: "Fantasy" },
+  { q: "subject:fairy_tales", genre: "Fantasy" },
+  { q: "subject:steampunk", genre: "Sci-Fi" },
+  { q: "subject:cyberpunk", genre: "Sci-Fi" },
+  { q: "subject:western", genre: "Adventure" },
+  { q: "subject:sports_fiction", genre: "Literary Fiction" },
   // Popularity / award-ish crawls
   { q: "award:pulitzer", genre: "Literary Fiction" },
   { q: "award:hugo", genre: "Sci-Fi" },
   { q: "award:nebula", genre: "Sci-Fi" },
   { q: "award:booker", genre: "Literary Fiction" },
+  { q: "award:national_book_award", genre: "Literary Fiction" },
+  { q: "award:newbery", genre: "Young Adult" },
   { q: "language:eng AND ebook_access:public", genre: "Classics" },
+  { q: "language:eng AND has_fulltext:true", genre: "Classics" },
 ];
 
 function pickIsbn13(isbnList = []) {
@@ -101,7 +136,7 @@ async function fetchJson(url) {
 async function crawlSubject({ q, genre }, seenIsbns, books, coverMap) {
   let page = 1;
   let emptyStreak = 0;
-  while (books.length < TARGET_COUNT && page <= 40 && emptyStreak < 3) {
+  while (books.length < TARGET_COUNT && page <= 80 && emptyStreak < 3) {
     const url =
       `https://openlibrary.org/search.json?q=${encodeURIComponent(q)}` +
       `&language=eng&limit=${PAGE_SIZE}&page=${page}` +
@@ -183,14 +218,22 @@ function seedFromCurated(seenIsbns, books) {
 async function enrichCoverIds(books, coverMap) {
   const need = books.filter((b) => !coverMap[b.id]);
   console.log(`Resolving cover_i for ${need.length} seeded ISBNs…`);
-  for (let i = 0; i < need.length; i += 10) {
-    const batch = need.slice(i, i + 10);
+  for (let i = 0; i < need.length; i += 20) {
+    const batch = need.slice(i, i + 20);
     await Promise.all(
       batch.map(async (book) => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 2500);
         try {
-          const data = await fetchJson(
-            `https://openlibrary.org/search.json?q=isbn:${book.id}&fields=cover_i&limit=1`
+          const res = await fetch(
+            `https://openlibrary.org/search.json?q=isbn:${book.id}&fields=cover_i&limit=1`,
+            {
+              signal: controller.signal,
+              headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
+            }
           );
+          if (!res.ok) return;
+          const data = await res.json();
           const coverI = data?.docs?.[0]?.cover_i;
           if (coverI) {
             coverMap[book.id] = coverI;
@@ -198,11 +241,13 @@ async function enrichCoverIds(books, coverMap) {
           }
         } catch {
           // keep isbn URL
+        } finally {
+          clearTimeout(timer);
         }
       })
     );
-    process.stdout.write(`\r  cover enrich ${Math.min(i + 10, need.length)}/${need.length}`);
-    await sleep(250);
+    process.stdout.write(`\r  cover enrich ${Math.min(i + 20, need.length)}/${need.length}`);
+    await sleep(150);
   }
   console.log("");
 }
@@ -212,8 +257,26 @@ async function main() {
   const books = [];
   const coverMap = {};
 
+  // Reuse previously known cover IDs so curated seeds don't need a full re-resolve
+  try {
+    const overridesPath = path.resolve(__dirname, "../../frontend/src/data/coverOverrides.ts");
+    const raw = fs.readFileSync(overridesPath, "utf8");
+    for (const m of raw.matchAll(/"(\d{13})":\s*(\d+)/g)) {
+      coverMap[m[1]] = Number(m[2]);
+    }
+    console.log(`Loaded ${Object.keys(coverMap).length} existing cover overrides`);
+  } catch {
+    // first run
+  }
+
   console.log("Seeding curated classics + modern favorites…");
   seedFromCurated(seenIsbns, books);
+  // Attach known cover ids to seeded books
+  for (const book of books) {
+    if (coverMap[book.id]) {
+      book.coverImage = `https://covers.openlibrary.org/b/id/${coverMap[book.id]}-L.jpg?default=false`;
+    }
+  }
   console.log(`Seeded ${books.length} curated real books`);
 
   for (const subject of SUBJECT_QUERIES) {
@@ -232,7 +295,7 @@ async function main() {
   }
 
   let page = 1;
-  while (books.length < TARGET_COUNT && page <= 100) {
+  while (books.length < TARGET_COUNT && page <= 200) {
     const url =
       `https://openlibrary.org/search.json?q=*` +
       `&language=eng&sort=editions&limit=${PAGE_SIZE}&page=${page}` +

@@ -12,7 +12,7 @@ const VALID_SHELVES: CatalogShelf[] = [
 const getCachedShelf = unstable_cache(
   async (shelf: CatalogShelf, limit: number, offset: number, weekKey: string) => ({
     books: getCatalogBooks(shelf, limit, offset, shelf === "trending" ? weekKey : undefined),
-    total: getCatalogBooks(shelf, 5000, 0, shelf === "trending" ? weekKey : undefined).length,
+    total: getCatalogBooks(shelf, 10000, 0, shelf === "trending" ? weekKey : undefined).length,
   }),
   ["book-catalog-v5"],
   { revalidate: 3600, tags: ["book-catalog-v5"] }
