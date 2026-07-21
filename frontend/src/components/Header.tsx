@@ -486,7 +486,7 @@ export default function Header() {
 
   const navItems = [
     { label: "Feed", href: "/feed" },
-    { label: "Reading Room", href: "/room" },
+    { label: "Search", href: "/search" },
     { label: "Library", href: "/library" },
     { label: "Discover", href: "/discover" },
     { label: "Lists", href: "/lists" },
