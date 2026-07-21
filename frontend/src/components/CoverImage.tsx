@@ -2,7 +2,12 @@
 
 import React, { useEffect, useState } from "react";
 import { COVER_ID_BY_ISBN } from "@/data/coverOverrides";
-import { coverFallbackStyle, resolveCoverUrl, type CoverSize } from "@/utils/covers";
+import {
+  coverFallbackStyle,
+  nextCoverFallback,
+  resolveCoverUrl,
+  type CoverSize,
+} from "@/utils/covers";
 
 type CoverImageProps = {
   src?: string | null;
@@ -22,6 +27,7 @@ type CoverImageProps = {
 
 /**
  * Book cover via same-origin `/api/covers` proxy (CDN-cached).
+ * Retries ISBN / title when a mapped cover ID is dead.
  * Falls back to a typographic plate when no artwork exists.
  */
 export default function CoverImage({
@@ -68,10 +74,32 @@ export default function CoverImage({
           loading={priority ? "eager" : "lazy"}
           decoding="async"
           fetchPriority={priority ? "high" : "auto"}
-          onError={() => setFailed(true)}
+          onError={() => {
+            const next = nextCoverFallback(currentSrc || "", {
+              isbn: isbn || bookId,
+              title,
+              author,
+              size,
+            });
+            if (next && next !== currentSrc) {
+              setCurrentSrc(next);
+              return;
+            }
+            setFailed(true);
+          }}
           onLoad={(e) => {
             const img = e.currentTarget;
             if (img.naturalWidth < 40 || img.naturalHeight < 40) {
+              const next = nextCoverFallback(currentSrc || "", {
+                isbn: isbn || bookId,
+                title,
+                author,
+                size,
+              });
+              if (next && next !== currentSrc) {
+                setCurrentSrc(next);
+                return;
+              }
               setFailed(true);
             }
           }}

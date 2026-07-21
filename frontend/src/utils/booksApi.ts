@@ -72,22 +72,30 @@ export function mapDbBookToClientBook(dbBook: any, avgRating?: number): Book {
       isbn_10: dbBook.isbn_10,
     });
 
-  const isbnKey = dbBook.isbn_13 || dbBook.isbn_10 || canonicalId;
-  const coverId = COVER_ID_BY_ISBN[isbnKey] || COVER_ID_BY_ISBN[canonicalId];
+  const isbnKey = dbBook.isbn_13 || dbBook.isbn_10 || "";
+  const coverId = (isbnKey && COVER_ID_BY_ISBN[isbnKey]) || COVER_ID_BY_ISBN[canonicalId];
   const rawCover = dbBook.cover_url || "";
   const isStockFallback =
     !rawCover ||
     rawCover.includes("photo-1543002588-bfa74002ed7e") ||
     rawCover.includes("placeholder");
+  const title = dbBook.title;
+  const author = dbBook.author_name || "Unknown Author";
 
-  const coverImage = resolveBookCover(canonicalId, isStockFallback ? null : rawCover, "M")
-    || (coverId ? coverUrlFromCoverId(coverId) : "")
-    || (dbBook.isbn_13 || dbBook.isbn_10 ? coverUrlFromIsbn(dbBook.isbn_13 || dbBook.isbn_10) : "");
+  const coverImage =
+    resolveBookCover(canonicalId, isStockFallback ? null : rawCover, "M", {
+      title,
+      author,
+      isbn: isbnKey || null,
+    }) ||
+    (coverId ? coverUrlFromCoverId(coverId, "M", { title, author, isbn: isbnKey || undefined }) : "") ||
+    (isbnKey ? coverUrlFromIsbn(isbnKey, "M", { title, author }) : "") ||
+    coverUrlFromIsbn("", "M", { title, author });
 
   return {
     id: canonicalId,
-    title: dbBook.title,
-    author: dbBook.author_name || "Unknown Author",
+    title,
+    author,
     year: dbBook.first_publish_year || 2000,
     description: dbBook.description || "No description available.",
     coverImage,
@@ -352,13 +360,16 @@ export async function searchOpenLibraryRemote(query: string): Promise<Book[]> {
   for (const doc of docs.slice(0, 12)) {
     const isbn13 = doc.isbn?.find((i: string) => i.length === 13) || null;
     const isbn10 = doc.isbn?.find((i: string) => i.length === 10) || null;
-    const isbn = isbn13 || isbn10 || doc.isbn?.[0] || "";
+    const isbn = isbn13 || isbn10 || "";
+    const title = doc.title || "Untitled";
+    const author = doc.author_name?.[0] || "Unknown Author";
     const coverId = doc.cover_i;
+    const coverMeta = { title, author, isbn: isbn || undefined };
     const coverUrl = coverId
-      ? coverUrlFromCoverId(coverId)
+      ? coverUrlFromCoverId(coverId, "M", coverMeta)
       : isbn
-        ? coverUrlFromIsbn(isbn)
-        : "";
+        ? coverUrlFromIsbn(isbn, "M", coverMeta)
+        : coverUrlFromIsbn("", "M", coverMeta);
 
     const id =
       doc.key?.replace("/works/", "") ||
@@ -368,8 +379,8 @@ export async function searchOpenLibraryRemote(query: string): Promise<Book[]> {
 
     results.push({
       id,
-      title: doc.title || "Untitled",
-      author: doc.author_name?.[0] || "Unknown Author",
+      title,
+      author,
       year: doc.first_publish_year || 2000,
       description:
         (Array.isArray(doc.first_sentence)

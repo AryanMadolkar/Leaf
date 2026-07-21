@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
-import BookCard from "@/components/BookCard";
-import { Search, Sparkles, BookOpen, Calendar, ArrowRight, Loader2 } from "lucide-react";
+import CoverImage from "@/components/CoverImage";
+import { Search, BookOpen, ArrowRight, Loader2 } from "lucide-react";
 import { useLeaf } from "@/context/LeafContext";
 import { Book } from "@/data/mockData";
 
@@ -119,19 +119,15 @@ export default function SearchPage() {
                   {/* Left Side: Book Cover (sm size) */}
                   <div className="relative w-20 h-28 rounded-md overflow-hidden book-shadow flex-shrink-0 bg-cream-dark">
                     <div className="absolute top-0 bottom-0 left-0 w-[3px] bg-gradient-to-r from-charcoal/20 to-transparent z-10" />
-                    {book.coverImage ? (
-                      <img
-                        src={book.coverImage}
-                        alt={book.title}
-                        className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-500"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div className="w-full h-full p-2 flex flex-col justify-between items-center text-center bg-cream-dark border border-cream-border text-[9px] font-serif font-bold text-charcoal-muted">
-                        <span>{book.title}</span>
-                        <span className="text-[7px] font-sans">No Cover</span>
-                      </div>
-                    )}
+                    <CoverImage
+                      src={book.coverImage}
+                      title={book.title}
+                      author={book.author}
+                      bookId={book.id}
+                      size="M"
+                      className="w-full h-full"
+                      imgClassName="w-full h-full object-cover group-hover:scale-102 transition-transform duration-500"
+                    />
                   </div>
 
                   {/* Right Side: Details */}

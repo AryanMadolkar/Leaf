@@ -2,9 +2,34 @@ import { COVER_ID_BY_ISBN } from "@/data/coverOverrides";
 
 export type CoverSize = "S" | "M" | "L";
 
+type CoverMeta = { title?: string; author?: string; isbn?: string };
+
+/** Real ISBN-10 / ISBN-13 only — not Open Library work keys like OL29049148W. */
+export function normalizeIsbn(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const clean = value.replace(/[^0-9Xx]/g, "");
+  if (clean.length === 10 || clean.length === 13) return clean;
+  return null;
+}
+
+function appendMeta(base: string, meta?: CoverMeta): string {
+  if (!meta) return base;
+  const u = new URL(base, "http://local");
+  const isbn = normalizeIsbn(meta.isbn);
+  if (isbn && !u.searchParams.get("isbn")) u.searchParams.set("isbn", isbn);
+  if (meta.title && !u.searchParams.get("title")) u.searchParams.set("title", meta.title);
+  if (meta.author && !u.searchParams.get("author")) u.searchParams.set("author", meta.author);
+  return `${u.pathname}?${u.searchParams.toString()}`;
+}
+
 /** Same-origin cached cover by Open Library cover ID. */
-export function coverUrlFromCoverId(coverId: number | string, size: CoverSize = "M"): string {
-  return `/api/covers?id=${encodeURIComponent(String(coverId))}&size=${size}&v=3`;
+export function coverUrlFromCoverId(
+  coverId: number | string,
+  size: CoverSize = "M",
+  meta?: CoverMeta
+): string {
+  const base = `/api/covers?id=${encodeURIComponent(String(coverId))}&size=${size}&v=3`;
+  return appendMeta(base, meta);
 }
 
 /** Same-origin cached cover by ISBN (resolves cover ID when known). */
@@ -13,7 +38,15 @@ export function coverUrlFromIsbn(
   size: CoverSize = "M",
   meta?: { title?: string; author?: string }
 ): string {
-  const clean = isbn.replace(/[^0-9Xx]/g, "");
+  const clean = normalizeIsbn(isbn);
+  if (!clean) {
+    if (meta?.title) {
+      const params = new URLSearchParams({ size, title: meta.title, v: "3" });
+      if (meta.author) params.set("author", meta.author);
+      return `/api/covers?${params.toString()}`;
+    }
+    return "";
+  }
   const params = new URLSearchParams({ isbn: clean, size, v: "3" });
   if (meta?.title) params.set("title", meta.title);
   if (meta?.author) params.set("author", meta.author);
@@ -28,15 +61,15 @@ export function withOpenLibraryDefaultFalse(url: string): string {
 }
 
 /** Rewrite Open Library URLs through our caching proxy. */
-export function toProxiedCoverUrl(url: string, size: CoverSize = "M"): string {
+export function toProxiedCoverUrl(url: string, size: CoverSize = "M", meta?: CoverMeta): string {
   if (!url) return "";
-  if (url.startsWith("/api/covers")) return url;
+  if (url.startsWith("/api/covers")) return appendMeta(url, meta);
 
   const idMatch = url.match(/\/b\/id\/(\d+)/);
-  if (idMatch) return coverUrlFromCoverId(idMatch[1], size);
+  if (idMatch) return coverUrlFromCoverId(idMatch[1], size, meta);
 
   const isbnMatch = url.match(/\/b\/isbn\/([0-9Xx]+)/i);
-  if (isbnMatch) return coverUrlFromIsbn(isbnMatch[1], size);
+  if (isbnMatch) return coverUrlFromIsbn(isbnMatch[1], size, meta);
 
   if (url.includes("covers.openlibrary.org")) {
     return withOpenLibraryDefaultFalse(url);
@@ -58,6 +91,7 @@ export function coverFallbackStyle(seed: string): { background: string } {
 
 /**
  * Resolve the best available cover URL (proxied + preferred cover ID).
+ * Always attach isbn/title/author so the proxy can recover from dead cover IDs.
  */
 export function resolveCoverUrl(
   coverImage: string | null | undefined,
@@ -71,16 +105,20 @@ export function resolveCoverUrl(
   }
 ): string {
   const size = opts?.size || "M";
-  const meta = {
+  const isbn =
+    normalizeIsbn(opts?.isbn) ||
+    normalizeIsbn(opts?.bookId && /^[\dXx-]{10,}$/.test(opts.bookId) ? opts.bookId : null);
+  const meta: CoverMeta = {
     title: opts?.title || undefined,
     author: opts?.author || undefined,
+    isbn: isbn || undefined,
   };
 
-  if (opts?.coverId) return coverUrlFromCoverId(opts.coverId, size);
+  if (opts?.coverId) return coverUrlFromCoverId(opts.coverId, size, meta);
 
   const lookupKey = opts?.isbn || opts?.bookId || "";
   if (lookupKey && COVER_ID_BY_ISBN[lookupKey]) {
-    return coverUrlFromCoverId(COVER_ID_BY_ISBN[lookupKey], size);
+    return coverUrlFromCoverId(COVER_ID_BY_ISBN[lookupKey], size, meta);
   }
 
   const raw = (coverImage || "").trim();
@@ -90,21 +128,11 @@ export function resolveCoverUrl(
     raw.includes("placeholder");
 
   if (!isStockFallback) {
-    const proxied = toProxiedCoverUrl(raw, size);
-    // Attach title/author so proxy can search if the ISBN image 404s
-    if (proxied.startsWith("/api/covers") && (meta.title || meta.author)) {
-      const u = new URL(proxied, "http://local");
-      if (meta.title) u.searchParams.set("title", meta.title);
-      if (meta.author) u.searchParams.set("author", meta.author);
-      return `${u.pathname}?${u.searchParams.toString()}`;
-    }
-    return proxied;
+    return toProxiedCoverUrl(raw, size, meta);
   }
 
-  if (opts?.isbn) return coverUrlFromIsbn(opts.isbn, size, meta);
-  if (opts?.bookId && /^[\dXx-]{10,}$/.test(opts.bookId)) return coverUrlFromIsbn(opts.bookId, size, meta);
+  if (isbn) return coverUrlFromIsbn(isbn, size, meta);
 
-  // Last resort: title/author search via proxy
   if (meta.title) {
     const params = new URLSearchParams({ size, title: meta.title, v: "3" });
     if (meta.author) params.set("author", meta.author);
@@ -118,14 +146,37 @@ export function resolveBookCover(
   bookId: string | null | undefined,
   coverUrl?: string | null,
   size: CoverSize = "M",
-  meta?: { title?: string; author?: string }
+  meta?: { title?: string; author?: string; isbn?: string | null }
 ): string {
   if (!bookId && !coverUrl && !meta?.title) return "";
   return resolveCoverUrl(coverUrl, {
     bookId,
-    isbn: bookId,
+    isbn: normalizeIsbn(meta?.isbn) || normalizeIsbn(bookId),
     size,
     title: meta?.title,
     author: meta?.author,
   });
+}
+
+/** Client-side fallback chain after a cover URL 404s. */
+export function nextCoverFallback(
+  failedSrc: string,
+  opts: { isbn?: string | null; title?: string; author?: string; size?: CoverSize }
+): string {
+  const size = opts.size || "M";
+  const u = new URL(failedSrc, "http://local");
+  const hadId = u.searchParams.has("id");
+  const isbn = opts.isbn || u.searchParams.get("isbn");
+  const title = opts.title || u.searchParams.get("title") || undefined;
+  const author = opts.author || u.searchParams.get("author") || undefined;
+
+  if (hadId && isbn) {
+    return coverUrlFromIsbn(isbn, size, { title, author });
+  }
+  if ((hadId || isbn) && title) {
+    const params = new URLSearchParams({ size, title, v: "3" });
+    if (author) params.set("author", author);
+    return `/api/covers?${params.toString()}`;
+  }
+  return "";
 }

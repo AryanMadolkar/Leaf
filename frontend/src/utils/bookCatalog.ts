@@ -27,7 +27,11 @@ export function isFakeBookId(id: string): boolean {
 export function withResolvedCover(book: Book): Book {
   return {
     ...book,
-    coverImage: resolveBookCover(book.id, book.coverImage, "M") || book.coverImage,
+    coverImage:
+      resolveBookCover(book.id, book.coverImage, "M", {
+        title: book.title,
+        author: book.author,
+      }) || book.coverImage,
   };
 }
 
