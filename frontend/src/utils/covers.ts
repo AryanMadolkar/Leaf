@@ -5,7 +5,7 @@ export type CoverSize = "S" | "M" | "L";
 type CoverMeta = { title?: string; author?: string; isbn?: string };
 
 /** Cache-bust when cover resolution strategy changes. */
-const COVER_VERSION = "4";
+const COVER_VERSION = "5";
 
 /** Real ISBN-10 / ISBN-13 only — not Open Library work keys like OL29049148W. */
 export function normalizeIsbn(value: string | null | undefined): string | null {

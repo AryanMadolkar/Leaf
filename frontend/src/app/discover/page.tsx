@@ -345,7 +345,6 @@ export default function DiscoverPage() {
                       title={randomBook.title}
                       author={randomBook.author}
                       isbn={randomBook.id}
-                      coverId={COVER_ID_BY_ISBN[randomBook.id]}
                       bookId={randomBook.id}
                       className="w-full h-full"
                       imgClassName="w-full h-full object-cover select-none"
@@ -402,10 +401,10 @@ export default function DiscoverPage() {
                     title={heroBook.title}
                     author={heroBook.author}
                     isbn={heroBook.id}
-                    coverId={COVER_ID_BY_ISBN[heroBook.id]}
                     bookId={heroBook.id}
                     className="w-full h-full"
                     imgClassName="w-full h-full object-cover select-none"
+                    priority
                   />
                 </div>
 
@@ -556,7 +555,6 @@ export default function DiscoverPage() {
                         title={book.title}
                         author={book.author}
                         isbn={book.id}
-                        coverId={COVER_ID_BY_ISBN[book.id]}
                         bookId={book.id}
                         className="w-10 h-14 rounded-md book-shadow flex-shrink-0"
                         imgClassName="w-full h-full object-cover"
@@ -589,7 +587,6 @@ export default function DiscoverPage() {
                         title={book.title}
                         author={book.author}
                         isbn={book.id}
-                        coverId={COVER_ID_BY_ISBN[book.id]}
                         bookId={book.id}
                         className="w-10 h-14 rounded-md book-shadow flex-shrink-0"
                         imgClassName="w-full h-full object-cover"

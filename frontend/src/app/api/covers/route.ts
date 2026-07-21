@@ -1,13 +1,21 @@
 import { NextResponse } from "next/server";
+import { createHash } from "crypto";
 import { COVER_ID_BY_ISBN } from "@/data/coverOverrides";
 
 export const runtime = "nodejs";
 
 const VALID_SIZES = new Set(["S", "M", "L"]);
-const FETCH_TIMEOUT_MS = 2200;
-const MAX_CANDIDATES = 6;
+const FETCH_TIMEOUT_MS = 2800;
+const MAX_CANDIDATES = 12;
+const MIN_COVER_BYTES = 2500;
+const MIN_COVER_EDGE = 90;
 
-/** Procedurally generated catalog ISBNs — never trust their Open Library ISBN covers. */
+/** Known Google Books content-endpoint stubs (rate-limit / missing-cover). */
+const BAD_COVER_SHA256 = new Set([
+  // Identical 575×829 JPEG returned for many ISBNs when Google rate-limits
+  "5e7f0425abc77878f2a1efe98f12070d7e97b3047d2ce1cd050598230e34e205",
+]);
+
 function isFakeIsbn(isbn: string): boolean {
   const clean = isbn.replace(/[^0-9Xx]/g, "");
   return /^97810[0-3]/.test(clean);
@@ -31,19 +39,75 @@ function olCoverByIsbn(isbn: string, size: string): string | null {
   return `https://covers.openlibrary.org/b/isbn/${clean}-${sz}.jpg?default=false`;
 }
 
-/** Google Books cover by ISBN — works when Open Library cover_i is a dead 302. */
-function googleCoverByIsbn(isbn: string, size: string): string | null {
+function googleCoverByIsbn(isbn: string, zoom: number): string | null {
   const clean = cleanIsbn(isbn);
   if (!clean || isFakeIsbn(clean)) return null;
-  const zoom = size === "L" ? 2 : 1;
   return `https://books.google.com/books/content?vid=ISBN${clean}&printsec=frontcover&img=1&zoom=${zoom}`;
 }
 
-/**
- * Fetch a cover image. Critical: do NOT follow redirects.
- * Missing OL covers 302 to archive.org zip URLs that hang ~12s and fail.
- * Real covers return HTTP 200 directly from covers.openlibrary.org.
- */
+function readU32(data: Uint8Array, offset: number): number {
+  return ((data[offset] << 24) | (data[offset + 1] << 16) | (data[offset + 2] << 8) | data[offset + 3]) >>> 0;
+}
+
+function readU16(data: Uint8Array, offset: number): number {
+  return (data[offset] << 8) | data[offset + 1];
+}
+
+function jpegDimensions(data: Uint8Array): { w: number; h: number } | null {
+  if (data[0] !== 0xff || data[1] !== 0xd8) return null;
+  let i = 2;
+  while (i < data.length - 8) {
+    if (data[i] !== 0xff) {
+      i++;
+      continue;
+    }
+    const marker = data[i + 1];
+    if (marker === 0xc0 || marker === 0xc1 || marker === 0xc2) {
+      return { h: readU16(data, i + 5), w: readU16(data, i + 7) };
+    }
+    if (marker === 0xd9 || marker === 0xda) break;
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd9)) {
+      i += 2;
+      continue;
+    }
+    const length = readU16(data, i + 2);
+    if (length < 2) break;
+    i += 2 + length;
+  }
+  return null;
+}
+
+function isUsableCover(bytes: ArrayBuffer): boolean {
+  if (bytes.byteLength < MIN_COVER_BYTES) return false;
+
+  const sha = createHash("sha256").update(Buffer.from(bytes)).digest("hex");
+  if (BAD_COVER_SHA256.has(sha)) return false;
+
+  const data = new Uint8Array(bytes);
+
+  // PNG — reject grayscale stubs (Google "image not available")
+  if (data.length > 26 && data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47) {
+    const width = readU32(data, 16);
+    const height = readU32(data, 20);
+    const colorType = data[25];
+    if (colorType === 0 || colorType === 4) return false;
+    if (width < MIN_COVER_EDGE || height < MIN_COVER_EDGE) return false;
+    return true;
+  }
+
+  const jpeg = jpegDimensions(data);
+  if (jpeg) {
+    if (jpeg.w < MIN_COVER_EDGE || jpeg.h < MIN_COVER_EDGE) return false;
+    // Rate-limit stub fingerprint: fixed 575×829 @ ~246KB
+    if (jpeg.w === 575 && jpeg.h === 829 && bytes.byteLength > 240000 && bytes.byteLength < 250000) {
+      return false;
+    }
+    return true;
+  }
+
+  return bytes.byteLength >= 5000;
+}
+
 async function fetchCoverBytes(url: string): Promise<{ bytes: ArrayBuffer; contentType: string } | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -51,17 +115,16 @@ async function fetchCoverBytes(url: string): Promise<{ bytes: ArrayBuffer; conte
     const res = await fetch(url, {
       signal: controller.signal,
       redirect: "manual",
-      next: { revalidate: 60 * 60 * 24 * 30 },
+      next: { revalidate: 60 * 60 * 24 * 14 },
       headers: {
         Accept: "image/*,*/*;q=0.8",
         "User-Agent": "LeafLibrary/1.0 (book cover proxy)",
       },
     });
-    // 302/301 → archive.org (or blank). Treat as missing.
     if (res.status >= 300 && res.status < 400) return null;
     if (!res.ok) return null;
     const bytes = await res.arrayBuffer();
-    if (bytes.byteLength < 1500) return null;
+    if (!isUsableCover(bytes)) return null;
     return {
       bytes,
       contentType: res.headers.get("Content-Type") || "image/jpeg",
@@ -93,7 +156,6 @@ async function fetchJson<T>(url: string): Promise<T | null> {
 
 type SearchDoc = { cover_i?: number; title?: string; isbn?: string[] };
 
-/** Collect working cover candidates from an OL title search. */
 async function candidatesFromTitleAuthor(
   title: string,
   author?: string | null
@@ -102,7 +164,7 @@ async function candidatesFromTitleAuthor(
   if (!needle) return [];
   const q = new URLSearchParams({
     title: title.trim(),
-    limit: "8",
+    limit: "12",
     fields: "cover_i,title,isbn",
   });
   if (author) q.set("author", author);
@@ -117,14 +179,17 @@ async function candidatesFromTitleAuthor(
   ];
   const seen = new Set<string>();
   const out: Array<{ kind: "id" | "isbn"; value: string }> = [];
+
+  // Prefer cover IDs first — Google content endpoint often rate-limits with a fake JPEG
   for (const d of ranked) {
-    if (d.cover_i) {
-      const key = `id:${d.cover_i}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        out.push({ kind: "id", value: String(d.cover_i) });
-      }
-    }
+    if (!d.cover_i) continue;
+    const key = `id:${d.cover_i}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ kind: "id", value: String(d.cover_i) });
+    if (out.length >= MAX_CANDIDATES) return out;
+  }
+  for (const d of ranked) {
     for (const isbn of d.isbn || []) {
       const clean = cleanIsbn(isbn);
       if (!clean || isFakeIsbn(clean)) continue;
@@ -132,20 +197,28 @@ async function candidatesFromTitleAuthor(
       if (seen.has(key)) continue;
       seen.add(key);
       out.push({ kind: "isbn", value: clean });
+      if (out.length >= MAX_CANDIDATES) return out;
     }
-    if (out.length >= MAX_CANDIDATES) break;
   }
-  return out.slice(0, MAX_CANDIDATES);
+  return out;
+}
+
+/** Fresh cover id from Open Library books API (often newer than search cover_i). */
+async function coverIdFromBooksApi(isbn: string): Promise<number | null> {
+  const clean = cleanIsbn(isbn);
+  if (!clean) return null;
+  const data = await fetchJson<Record<string, { cover?: { medium?: string; large?: string } }>>(
+    `https://openlibrary.org/api/books?bibkeys=ISBN:${encodeURIComponent(clean)}&format=json&jscmd=data`
+  );
+  if (!data) return null;
+  const entry = data[`ISBN:${clean}`] || Object.values(data)[0];
+  const url = entry?.cover?.large || entry?.cover?.medium || "";
+  const m = url.match(/\/b\/id\/(\d+)/);
+  return m ? Number(m[1]) : null;
 }
 
 type CoverPayload = { bytes: ArrayBuffer; contentType: string };
 
-/**
- * Same-origin cover proxy with CDN caching.
- *
- * GET /api/covers?id=12356249&size=M&isbn=…&title=…
- * Dead cover IDs (302 → archive.org) fall through to ISBN / title search candidates.
- */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
@@ -156,7 +229,6 @@ export async function GET(request: Request) {
   const isbn = isbnRaw && !isFakeIsbn(isbnRaw) ? cleanIsbn(isbnRaw) : null;
 
   const tried = new Set<string>();
-  // Box so nested assigns stay visible to TypeScript (bare `let` + closures → `never`)
   const state: { cover: CoverPayload | null } = { cover: null };
 
   async function tryUrl(key: string, url: string) {
@@ -170,46 +242,66 @@ export async function GET(request: Request) {
     await tryUrl(`id:${coverId}`, olCoverById(coverId, size));
   }
 
-  async function tryIsbn(value: string | null | undefined) {
+  async function tryOlIsbn(value: string | null | undefined) {
     if (!value || isFakeIsbn(value)) return;
     const clean = cleanIsbn(value);
     if (!clean) return;
     const url = olCoverByIsbn(clean, size);
     if (!url) return;
-    await tryUrl(`isbn:${clean}`, url);
+    await tryUrl(`ol-isbn:${clean}`, url);
   }
 
   async function tryGoogleIsbn(value: string | null | undefined) {
     if (!value || isFakeIsbn(value)) return;
     const clean = cleanIsbn(value);
     if (!clean) return;
-    const url = googleCoverByIsbn(clean, size);
-    if (!url) return;
-    await tryUrl(`gbooks:${clean}`, url);
+    // zoom 1 often still unique when zoom 3 is a shared rate-limit stub
+    for (const zoom of [1, 3, 4]) {
+      if (state.cover) return;
+      const url = googleCoverByIsbn(clean, zoom);
+      if (!url) continue;
+      await tryUrl(`gbooks:${clean}:z${zoom}`, url);
+    }
   }
 
-  // Prefer Google Books by ISBN first — Open Library cover_i often 302s to dead archive.org zips
-  await tryGoogleIsbn(isbn);
-
-  // Explicit / mapped Open Library cover ID
+  // 1) Mapped / explicit Open Library cover IDs (unique per book when alive)
   await tryId(id);
   if (!state.cover && isbn) {
     const mapped = COVER_ID_BY_ISBN[isbn] || COVER_ID_BY_ISBN[isbnRaw || ""];
     await tryId(mapped);
+    await tryId(await coverIdFromBooksApi(isbn));
   }
 
-  // Direct Open Library ISBN cover
-  await tryIsbn(isbn);
-
-  // Title/author search — try multiple cover ids + isbns (+ Google) until one works
+  // 2) Title search cover IDs — try several until one returns HTTP 200
   if (!state.cover && title) {
     const candidates = await candidatesFromTitleAuthor(title, author);
     for (const c of candidates) {
       if (state.cover) break;
       if (c.kind === "id") await tryId(c.value);
+    }
+    for (const c of candidates) {
+      if (state.cover) break;
+      if (c.kind === "isbn") {
+        await tryId(await coverIdFromBooksApi(c.value));
+        await tryOlIsbn(c.value);
+        await tryGoogleIsbn(c.value);
+      }
+    }
+  }
+
+  // 3) Direct OL ISBN + Google for primary ISBN
+  await tryOlIsbn(isbn);
+  await tryGoogleIsbn(isbn);
+
+  // 4) Looser title search without author
+  if (!state.cover && title && author) {
+    const loose = await candidatesFromTitleAuthor(title, null);
+    for (const c of loose) {
+      if (state.cover) break;
+      if (c.kind === "id") await tryId(c.value);
       else {
         await tryGoogleIsbn(c.value);
-        await tryIsbn(c.value);
+        await tryOlIsbn(c.value);
       }
     }
   }
@@ -218,7 +310,7 @@ export async function GET(request: Request) {
   if (!payload) {
     return new NextResponse(null, {
       status: 404,
-      headers: { "Cache-Control": "public, max-age=300" },
+      headers: { "Cache-Control": "public, max-age=60" },
     });
   }
 
