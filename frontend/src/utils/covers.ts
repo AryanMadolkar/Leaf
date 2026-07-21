@@ -6,7 +6,7 @@ export type CoverSize = "S" | "M" | "L";
 type CoverMeta = { title?: string; author?: string; isbn?: string };
 
 /** Cache-bust when cover resolution strategy changes. */
-const COVER_VERSION = "7";
+const COVER_VERSION = "8";
 
 /** Real ISBN-10 / ISBN-13 only — not Open Library work keys like OL29049148W. */
 export function normalizeIsbn(value: string | null | undefined): string | null {
@@ -182,7 +182,7 @@ export function resolveBookCover(
   });
 }
 
-/** Client-side fallback chain after a cover URL 404s. */
+/** Client-side fallback chain after a cover URL 404s or is rejected as a stub. */
 export function nextCoverFallback(
   failedSrc: string,
   opts: { isbn?: string | null; title?: string; author?: string; size?: CoverSize }
@@ -193,17 +193,19 @@ export function nextCoverFallback(
   const isbn = normalizeIsbn(opts.isbn) || normalizeIsbn(u.searchParams.get("isbn"));
   const title = opts.title || u.searchParams.get("title") || undefined;
   const author = opts.author || u.searchParams.get("author") || undefined;
+  const attempt = Number(u.searchParams.get("alt") || "0");
 
   if (hadId && isbn) {
     return coverUrlFromIsbn(isbn, size, { title, author });
   }
-  // Local static path or stale proxy URL without isbn param
   if (isbn && (!u.searchParams.get("isbn") || failedSrc.startsWith("/covers/"))) {
     return coverUrlFromIsbn(isbn, size, { title, author });
   }
-  if (title) {
-    const params = new URLSearchParams({ size, title, v: COVER_VERSION });
+  // Same ISBN URL already failed/rejected — try title-only with alt bump to skip CDN hit
+  if (title && attempt < 2) {
+    const params = new URLSearchParams({ size, title, v: COVER_VERSION, alt: String(attempt + 1) });
     if (author) params.set("author", author);
+    if (isbn && attempt === 0) params.set("isbn", isbn);
     return `/api/covers?${params.toString()}`;
   }
   return "";

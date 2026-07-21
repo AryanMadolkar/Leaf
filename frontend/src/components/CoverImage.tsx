@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   coverFallbackStyle,
   nextCoverFallback,
@@ -23,6 +23,15 @@ type CoverImageProps = {
   /** Eager-load for above-the-fold / feed cards. */
   priority?: boolean;
 };
+
+function isBadCoverDimensions(w: number, h: number): boolean {
+  if (w < 40 || h < 40) return true;
+  // Google missing-cover stub
+  if (w === 128 && h === 184) return true;
+  // Wikipedia/Google landscape banners mis-served as covers
+  if (w >= h * 1.35) return true;
+  return false;
+}
 
 /**
  * Book cover via same-origin `/api/covers` proxy (CDN-cached).
@@ -53,6 +62,7 @@ export default function CoverImage({
   const [failed, setFailed] = useState(!resolved);
   const [loaded, setLoaded] = useState(false);
   const [currentSrc, setCurrentSrc] = useState(resolved);
+  const imgRef = useRef<HTMLImageElement | null>(null);
   const seed = bookId || isbn || title;
 
   useEffect(() => {
@@ -61,12 +71,41 @@ export default function CoverImage({
     setLoaded(false);
   }, [resolved]);
 
+  const acceptOrAdvance = (img: HTMLImageElement) => {
+    if (isBadCoverDimensions(img.naturalWidth, img.naturalHeight)) {
+      const next = nextCoverFallback(currentSrc || "", {
+        isbn: isbn || bookId,
+        title,
+        author,
+        size,
+      });
+      if (next && next !== currentSrc) {
+        setCurrentSrc(next);
+        setLoaded(false);
+        return;
+      }
+      setFailed(true);
+      setLoaded(false);
+      return;
+    }
+    setLoaded(true);
+  };
+
+  // Cached images often fire load before React attaches onLoad — poll complete
+  useEffect(() => {
+    if (failed || !currentSrc) return;
+    const img = imgRef.current;
+    if (img && img.complete && img.naturalWidth > 0) {
+      acceptOrAdvance(img);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-check when src changes
+  }, [currentSrc, failed]);
+
   return (
     <div className={`relative overflow-hidden bg-cream-dark ${className}`}>
-      {/* Always paint a plate so shelves never sit blank while the proxy races */}
       <div
         className={`absolute inset-0 flex flex-col justify-end p-2.5 text-cream transition-opacity duration-300 ${
-          loaded && !failed ? "opacity-0" : "opacity-100"
+          loaded && !failed ? "opacity-0 pointer-events-none" : "opacity-100"
         }`}
         style={coverFallbackStyle(seed)}
         aria-hidden={loaded && !failed}
@@ -81,9 +120,10 @@ export default function CoverImage({
 
       {!failed && currentSrc && (
         <img
+          ref={imgRef}
           src={currentSrc}
           alt={alt || title}
-          className={`${imgClassName} absolute inset-0 select-none transition-opacity duration-300 ${
+          className={`${imgClassName} absolute inset-0 z-[1] select-none transition-opacity duration-300 ${
             loaded ? "opacity-100" : "opacity-0"
           }`}
           loading={priority ? "eager" : "lazy"}
@@ -104,30 +144,7 @@ export default function CoverImage({
             setFailed(true);
             setLoaded(false);
           }}
-          onLoad={(e) => {
-            const img = e.currentTarget;
-            const isStub =
-              img.naturalWidth < 40 ||
-              img.naturalHeight < 40 ||
-              (img.naturalWidth === 128 && img.naturalHeight === 184);
-            if (isStub) {
-              const next = nextCoverFallback(currentSrc || "", {
-                isbn: isbn || bookId,
-                title,
-                author,
-                size,
-              });
-              if (next && next !== currentSrc) {
-                setCurrentSrc(next);
-                setLoaded(false);
-                return;
-              }
-              setFailed(true);
-              setLoaded(false);
-              return;
-            }
-            setLoaded(true);
-          }}
+          onLoad={(e) => acceptOrAdvance(e.currentTarget)}
         />
       )}
     </div>

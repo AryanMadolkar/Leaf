@@ -14,6 +14,7 @@ const FETCH_TIMEOUT_MS = 1100;
 const TOTAL_BUDGET_MS = 3000;
 const MAX_ID_TRIES = 4;
 const MIN_COVER_BYTES = 2500;
+const MAX_COVER_BYTES = 1_200_000;
 const MIN_COVER_EDGE = 90;
 
 /** Known Google Books content-endpoint stubs (rate-limit / missing-cover). */
@@ -89,8 +90,16 @@ function jpegDimensions(data: Uint8Array): { w: number; h: number } | null {
   return null;
 }
 
+function isPortraitCover(w: number, h: number): boolean {
+  if (w < MIN_COVER_EDGE || h < MIN_COVER_EDGE) return false;
+  // Reject landscape banners (Wikipedia lead images, etc.)
+  if (w > h * 1.15) return false;
+  return true;
+}
+
 function isUsableCover(bytes: ArrayBuffer): boolean {
   if (bytes.byteLength < MIN_COVER_BYTES) return false;
+  if (bytes.byteLength > MAX_COVER_BYTES) return false;
 
   const sha = createHash("sha256").update(Buffer.from(bytes)).digest("hex");
   if (BAD_COVER_SHA256.has(sha)) return false;
@@ -102,13 +111,20 @@ function isUsableCover(bytes: ArrayBuffer): boolean {
     const height = readU32(data, 20);
     const colorType = data[25];
     if (colorType === 0 || colorType === 4) return false;
-    if (width < MIN_COVER_EDGE || height < MIN_COVER_EDGE) return false;
+    if (!isPortraitCover(width, height)) return false;
     return true;
+  }
+
+  // GIF — Open Library sometimes serves these
+  if (data.length > 10 && data[0] === 0x47 && data[1] === 0x49 && data[2] === 0x46) {
+    const width = data[6] | (data[7] << 8);
+    const height = data[8] | (data[9] << 8);
+    return isPortraitCover(width, height);
   }
 
   const jpeg = jpegDimensions(data);
   if (jpeg) {
-    if (jpeg.w < MIN_COVER_EDGE || jpeg.h < MIN_COVER_EDGE) return false;
+    if (!isPortraitCover(jpeg.w, jpeg.h)) return false;
     if (jpeg.w === 128 && jpeg.h === 184) return false;
     if (jpeg.w === 575 && jpeg.h === 829 && bytes.byteLength > 240000 && bytes.byteLength < 250000) {
       return false;
@@ -119,7 +135,7 @@ function isUsableCover(bytes: ArrayBuffer): boolean {
     return true;
   }
 
-  return bytes.byteLength >= 5000;
+  return false;
 }
 
 async function fetchCoverBytes(url: string, timeoutMs = FETCH_TIMEOUT_MS): Promise<CoverPayload | null> {
@@ -235,10 +251,18 @@ async function coverFromWikipediaFast(title: string): Promise<CoverPayload | nul
       originalimage?: { source?: string };
     }>(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(attempt)}`);
     if (!summary || summary.type === "disambiguation") continue;
-    const imageUrl = summary.originalimage?.source || summary.thumbnail?.source;
-    if (!imageUrl) continue;
-    const cover = await fetchCoverBytes(imageUrl);
-    if (cover) return cover;
+    // Prefer thumbnail — originals are often multi‑MB or wide banners
+    for (const imageUrl of [summary.thumbnail?.source, summary.originalimage?.source]) {
+      if (!imageUrl) continue;
+      // Request a portrait-friendly width when Wikimedia thumb supports it
+      const sized = imageUrl.replace(/\/(\d+)px-/, "/400px-");
+      const cover = await fetchCoverBytes(sized);
+      if (cover) return cover;
+      if (sized !== imageUrl) {
+        const fallback = await fetchCoverBytes(imageUrl);
+        if (fallback) return fallback;
+      }
+    }
   }
   return null;
 }
@@ -251,7 +275,7 @@ async function localCoverBytes(isbn: string | null): Promise<CoverPayload | null
     const filePath = path.join(process.cwd(), "public", publicPath.replace(/^\//, ""));
     const buf = await readFile(filePath);
     const bytes = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
-    if (!isUsableCover(bytes)) return null;
+    // Bundled assets are trusted — skip stub/aspect filters
     const ext = path.extname(filePath).toLowerCase();
     return {
       bytes,
