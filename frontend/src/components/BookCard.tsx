@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Star } from "lucide-react";
 import { Book } from "@/data/mockData";
 import CoverImage from "@/components/CoverImage";
+import { COVER_ID_BY_ISBN } from "@/data/coverOverrides";
 
 interface BookCardProps {
   book: Book;
@@ -20,6 +21,8 @@ export default function BookCard({ book, size = "md", showStats = false }: BookC
     xl: "w-52 h-76",
   };
 
+  const coverId = COVER_ID_BY_ISBN[book.id];
+
   return (
     <div className="flex flex-col items-center">
       <Link href={`/book/${book.id}`} className="group relative block focus:outline-none">
@@ -34,14 +37,16 @@ export default function BookCard({ book, size = "md", showStats = false }: BookC
             title={book.title}
             author={book.author}
             isbn={book.id}
+            coverId={coverId}
             bookId={book.id}
             size="M"
+            priority
             className="w-full h-full"
             imgClassName="w-full h-full object-cover select-none group-hover:scale-105 transition-transform duration-700 ease-out"
           />
 
           <div className="absolute inset-0 bg-charcoal/45 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-3 z-20">
-            <span className="text-[10px] uppercase font-semibold tracking-wider text-cream/70 mb-0.5">
+            <span className="text-[10px] uppercase tracking-wider font-semibold text-cream/70 mb-0.5">
               {book.author}
             </span>
             <span className="font-serif text-sm font-bold text-cream leading-tight truncate">
