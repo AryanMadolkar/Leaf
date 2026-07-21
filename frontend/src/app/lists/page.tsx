@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import Header from "@/components/Header";
+import CoverImage from "@/components/CoverImage";
 import { useLeaf } from "@/context/LeafContext";
 import { Layers, Plus, X, Heart, MessageSquare, Check, ArrowRight } from "lucide-react";
 import Link from "next/link";
@@ -128,7 +129,7 @@ export default function ListsPage() {
 
                   {/* Covers row */}
                   <div className="flex gap-2 items-center flex-wrap pt-2 border-t border-cream-border/60">
-                    {list.bookIds.map((bookId) => {
+                    {list.bookIds.slice(0, 10).map((bookId) => {
                       const book = books.find((b) => b.id === bookId);
                       if (!book) return null;
                       return (
@@ -139,18 +140,24 @@ export default function ListsPage() {
                           onClick={(e) => e.stopPropagation()}
                         >
                           <div className="w-9 h-14 rounded overflow-hidden shadow border border-cream-border hover:-translate-y-1.5 transition-transform duration-300">
-                            <img
-                              src={book.coverImage || FALLBACK_COVER}
-                              alt={book.title}
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                (e.currentTarget as HTMLImageElement).src = FALLBACK_COVER;
-                              }}
+                            <CoverImage
+                              src={book.coverImage}
+                              title={book.title}
+                              author={book.author}
+                              bookId={book.id}
+                              size="S"
+                              className="w-full h-full"
+                              imgClassName="w-full h-full object-cover"
                             />
                           </div>
                         </Link>
                       );
                     })}
+                    {list.bookIds.length > 10 && (
+                      <span className="text-[10px] font-bold text-charcoal-muted pl-1">
+                        +{list.bookIds.length - 10}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -420,13 +427,14 @@ export default function ListsPage() {
                           onClick={() => setSelectedList(null)}
                           className="w-16 h-24 rounded overflow-hidden shadow-md border border-cream-border/50 flex-shrink-0 hover:scale-105 transition-transform duration-300"
                         >
-                          <img
-                            src={book.coverImage || FALLBACK_COVER}
-                            alt={book.title}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              (e.currentTarget as HTMLImageElement).src = FALLBACK_COVER;
-                            }}
+                          <CoverImage
+                            src={book.coverImage}
+                            title={book.title}
+                            author={book.author}
+                            bookId={book.id}
+                            size="M"
+                            className="w-full h-full"
+                            imgClassName="w-full h-full object-cover"
                           />
                         </Link>
 

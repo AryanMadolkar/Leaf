@@ -144,6 +144,8 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const storedSessions = localStorage.getItem("leaf_local_sessions");
       const storedStats = localStorage.getItem("leaf_local_stats");
       const storedLists = localStorage.getItem("leaf_local_lists");
+      const listsSeedVersion = localStorage.getItem("leaf_lists_seed_version");
+      const LISTS_SEED_VERSION = "2";
       const storedProfile = localStorage.getItem("leaf_local_profile");
 
       if (storedProfile) {
@@ -181,8 +183,23 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUserStats(initialStats);
       }
 
-      if (storedLists) setLists(JSON.parse(storedLists));
-      else setLists(INITIAL_LISTS);
+      // Refresh built-in curated lists when seed data expands; keep user-created lists.
+      if (storedLists) {
+        const parsed: CuratedList[] = JSON.parse(storedLists);
+        if (listsSeedVersion !== LISTS_SEED_VERSION) {
+          const curatedIds = new Set(INITIAL_LISTS.map((l) => l.id));
+          const userLists = parsed.filter((l) => !curatedIds.has(l.id));
+          const merged = [...INITIAL_LISTS, ...userLists];
+          setLists(merged);
+          localStorage.setItem("leaf_local_lists", JSON.stringify(merged));
+          localStorage.setItem("leaf_lists_seed_version", LISTS_SEED_VERSION);
+        } else {
+          setLists(parsed);
+        }
+      } else {
+        setLists(INITIAL_LISTS);
+        localStorage.setItem("leaf_lists_seed_version", LISTS_SEED_VERSION);
+      }
     } catch (e) {
       console.error("Failed to load local storage data fallback:", e);
     }
