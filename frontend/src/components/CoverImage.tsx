@@ -87,7 +87,12 @@ export default function CoverImage({
           }}
           onLoad={(e) => {
             const img = e.currentTarget;
-            if (img.naturalWidth < 40 || img.naturalHeight < 40) {
+            // Tiny or Google's classic 128×184 missing-cover stub
+            const isStub =
+              img.naturalWidth < 40 ||
+              img.naturalHeight < 40 ||
+              (img.naturalWidth === 128 && img.naturalHeight === 184);
+            if (isStub) {
               const next = nextCoverFallback(currentSrc || "", {
                 isbn: isbn || bookId,
                 title,

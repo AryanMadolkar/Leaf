@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
 import { createHash } from "crypto";
+import { readFile } from "fs/promises";
+import path from "path";
 import { COVER_ID_BY_ISBN } from "@/data/coverOverrides";
+import { LOCAL_COVER_BY_ISBN } from "@/data/localCovers";
 
 export const runtime = "nodejs";
 
 const VALID_SIZES = new Set(["S", "M", "L"]);
 const FETCH_TIMEOUT_MS = 2800;
-const MAX_CANDIDATES = 12;
+const MAX_CANDIDATES = 16;
 const MIN_COVER_BYTES = 2500;
 const MIN_COVER_EDGE = 90;
 
@@ -14,7 +17,16 @@ const MIN_COVER_EDGE = 90;
 const BAD_COVER_SHA256 = new Set([
   // Identical 575×829 JPEG returned for many ISBNs when Google rate-limits
   "5e7f0425abc77878f2a1efe98f12070d7e97b3047d2ce1cd050598230e34e205",
+  // Identical 128×184 JPEG (~10KB) returned when no real cover exists
+  "a9af512c1e52ed9cafd06b8f212bf13940976703ee3a38573df558e28ce31a21",
+  // Identical 800×1153 JPEG (~466KB) shared across unrelated ISBNs
+  "49bbf581de71ea482b8b99b5c120c480d2f07f29d21fc309e43b7d2f517cf437",
+  // Shared grayscale PNG stub (575×750)
+  "3efa8c43e5b4348f303a528c81adf435f0111ea752fe9f0f6241478b60987fa6",
 ]);
+
+const WIKI_UA =
+  "LeafLibrary/1.0 (https://leaf-peach.vercel.app; book-cover-proxy)";
 
 function isFakeIsbn(isbn: string): boolean {
   const clean = isbn.replace(/[^0-9Xx]/g, "");
@@ -98,8 +110,13 @@ function isUsableCover(bytes: ArrayBuffer): boolean {
   const jpeg = jpegDimensions(data);
   if (jpeg) {
     if (jpeg.w < MIN_COVER_EDGE || jpeg.h < MIN_COVER_EDGE) return false;
-    // Rate-limit stub fingerprint: fixed 575×829 @ ~246KB
+    // Classic Google missing-cover thumbnail
+    if (jpeg.w === 128 && jpeg.h === 184) return false;
+    // Rate-limit stub fingerprints
     if (jpeg.w === 575 && jpeg.h === 829 && bytes.byteLength > 240000 && bytes.byteLength < 250000) {
+      return false;
+    }
+    if (jpeg.w === 800 && jpeg.h === 1153 && bytes.byteLength > 450000 && bytes.byteLength < 480000) {
       return false;
     }
     return true;
@@ -108,7 +125,10 @@ function isUsableCover(bytes: ArrayBuffer): boolean {
   return bytes.byteLength >= 5000;
 }
 
-async function fetchCoverBytes(url: string): Promise<{ bytes: ArrayBuffer; contentType: string } | null> {
+async function fetchCoverBytes(
+  url: string,
+  headers?: Record<string, string>
+): Promise<{ bytes: ArrayBuffer; contentType: string } | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
@@ -118,7 +138,8 @@ async function fetchCoverBytes(url: string): Promise<{ bytes: ArrayBuffer; conte
       next: { revalidate: 60 * 60 * 24 * 14 },
       headers: {
         Accept: "image/*,*/*;q=0.8",
-        "User-Agent": "LeafLibrary/1.0 (book cover proxy)",
+        "User-Agent": WIKI_UA,
+        ...headers,
       },
     });
     if (res.status >= 300 && res.status < 400) return null;
@@ -136,14 +157,14 @@ async function fetchCoverBytes(url: string): Promise<{ bytes: ArrayBuffer; conte
   }
 }
 
-async function fetchJson<T>(url: string): Promise<T | null> {
+async function fetchJson<T>(url: string, headers?: Record<string, string>): Promise<T | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
     const res = await fetch(url, {
       signal: controller.signal,
       next: { revalidate: 60 * 60 * 24 * 7 },
-      headers: { "User-Agent": "LeafLibrary/1.0 (book cover proxy)" },
+      headers: { "User-Agent": WIKI_UA, ...headers },
     });
     if (!res.ok) return null;
     return (await res.json()) as T;
@@ -154,7 +175,7 @@ async function fetchJson<T>(url: string): Promise<T | null> {
   }
 }
 
-type SearchDoc = { cover_i?: number; title?: string; isbn?: string[] };
+type SearchDoc = { cover_i?: number; title?: string; isbn?: string[]; key?: string };
 
 async function candidatesFromTitleAuthor(
   title: string,
@@ -165,7 +186,7 @@ async function candidatesFromTitleAuthor(
   const q = new URLSearchParams({
     title: title.trim(),
     limit: "12",
-    fields: "cover_i,title,isbn",
+    fields: "cover_i,title,isbn,key",
   });
   if (author) q.set("author", author);
   const data = await fetchJson<{ docs?: SearchDoc[] }>(
@@ -203,6 +224,28 @@ async function candidatesFromTitleAuthor(
   return out;
 }
 
+/** Extra live cover IDs attached to an Open Library work. */
+async function coverIdsFromWorkKey(workKey: string): Promise<number[]> {
+  const key = workKey.startsWith("/") ? workKey : `/${workKey}`;
+  const data = await fetchJson<{ covers?: number[] }>(`https://openlibrary.org${key}.json`);
+  const covers = (data?.covers || []).filter((id) => id > 0);
+  return covers.slice(0, 6);
+}
+
+async function workKeyFromTitleAuthor(title: string, author?: string | null): Promise<string | null> {
+  const q = new URLSearchParams({
+    title: title.trim(),
+    limit: "3",
+    fields: "key,title",
+  });
+  if (author) q.set("author", author);
+  const data = await fetchJson<{ docs?: SearchDoc[] }>(
+    `https://openlibrary.org/search.json?${q.toString()}`
+  );
+  const doc = data?.docs?.[0];
+  return doc?.key || null;
+}
+
 /** Fresh cover id from Open Library books API (often newer than search cover_i). */
 async function coverIdFromBooksApi(isbn: string): Promise<number | null> {
   const clean = cleanIsbn(isbn);
@@ -215,6 +258,73 @@ async function coverIdFromBooksApi(isbn: string): Promise<number | null> {
   const url = entry?.cover?.large || entry?.cover?.medium || "";
   const m = url.match(/\/b\/id\/(\d+)/);
   return m ? Number(m[1]) : null;
+}
+
+type WikiSummary = {
+  title?: string;
+  type?: string;
+  thumbnail?: { source?: string };
+  originalimage?: { source?: string };
+};
+
+async function coverFromWikipedia(title: string): Promise<{ bytes: ArrayBuffer; contentType: string } | null> {
+  const needle = title.trim();
+  if (!needle || needle.length < 3) return null;
+
+  const attempts = [
+    needle,
+    `${needle} (novel)`,
+    `${needle} (book)`,
+    `${needle} (novella)`,
+  ];
+
+  for (const attempt of attempts) {
+    const summary = await fetchJson<WikiSummary>(
+      `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(attempt)}`
+    );
+    if (!summary || summary.type === "disambiguation") continue;
+    const imageUrl = summary.originalimage?.source || summary.thumbnail?.source;
+    if (!imageUrl) continue;
+    const cover = await fetchCoverBytes(imageUrl);
+    if (cover) return cover;
+  }
+
+  // OpenSearch fallback for fuzzy title matches
+  const open = await fetchJson<[string, string[], string[], string[]]>(
+    `https://en.wikipedia.org/w/api.php?action=opensearch&limit=5&namespace=0&format=json&search=${encodeURIComponent(needle)}`
+  );
+  const titles = open?.[1] || [];
+  for (const t of titles.slice(0, 4)) {
+    if (!t.toLowerCase().includes(needle.toLowerCase().slice(0, Math.min(12, needle.length)))) {
+      continue;
+    }
+    const summary = await fetchJson<WikiSummary>(
+      `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(t)}`
+    );
+    const imageUrl = summary?.originalimage?.source || summary?.thumbnail?.source;
+    if (!imageUrl) continue;
+    const cover = await fetchCoverBytes(imageUrl);
+    if (cover) return cover;
+  }
+
+  return null;
+}
+
+async function localCoverBytes(isbn: string | null): Promise<{ bytes: ArrayBuffer; contentType: string } | null> {
+  if (!isbn) return null;
+  const publicPath = LOCAL_COVER_BY_ISBN[isbn];
+  if (!publicPath) return null;
+  try {
+    const filePath = path.join(process.cwd(), "public", publicPath.replace(/^\//, ""));
+    const buf = await readFile(filePath);
+    const bytes = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+    if (!isUsableCover(bytes)) return null;
+    const ext = path.extname(filePath).toLowerCase();
+    const contentType = ext === ".png" ? "image/png" : "image/jpeg";
+    return { bytes, contentType };
+  } catch {
+    return null;
+  }
 }
 
 type CoverPayload = { bytes: ArrayBuffer; contentType: string };
@@ -255,13 +365,18 @@ export async function GET(request: Request) {
     if (!value || isFakeIsbn(value)) return;
     const clean = cleanIsbn(value);
     if (!clean) return;
-    // zoom 1 often still unique when zoom 3 is a shared rate-limit stub
-    for (const zoom of [1, 3, 4]) {
+    // Prefer larger zooms; zoom 1 is almost always the shared 128×184 stub
+    for (const zoom of [4, 3, 1]) {
       if (state.cover) return;
       const url = googleCoverByIsbn(clean, zoom);
       if (!url) continue;
       await tryUrl(`gbooks:${clean}:z${zoom}`, url);
     }
+  }
+
+  // 0) Bundled static covers for known titles with dead remotes
+  if (!state.cover) {
+    state.cover = await localCoverBytes(isbn);
   }
 
   // 1) Mapped / explicit Open Library cover IDs (unique per book when alive)
@@ -279,31 +394,54 @@ export async function GET(request: Request) {
       if (state.cover) break;
       if (c.kind === "id") await tryId(c.value);
     }
+    // Work-level cover list often has older live IDs when search cover_i is dead
+    if (!state.cover) {
+      const workKey = await workKeyFromTitleAuthor(title, author);
+      if (workKey) {
+        const workCovers = await coverIdsFromWorkKey(workKey);
+        for (const cid of workCovers) {
+          if (state.cover) break;
+          await tryId(cid);
+        }
+      }
+    }
     for (const c of candidates) {
       if (state.cover) break;
       if (c.kind === "isbn") {
         await tryId(await coverIdFromBooksApi(c.value));
         await tryOlIsbn(c.value);
-        await tryGoogleIsbn(c.value);
+        // Skip Google here — tried later after Wikipedia
       }
     }
   }
 
-  // 3) Direct OL ISBN + Google for primary ISBN
+  // 3) Direct OL ISBN
   await tryOlIsbn(isbn);
+
+  // 4) Wikipedia before Google — Google often returns shared stubs that burn latency
+  if (!state.cover && title) {
+    state.cover = await coverFromWikipedia(title);
+  }
+
+  // 5) Google content endpoint (stub fingerprints rejected in isUsableCover)
   await tryGoogleIsbn(isbn);
 
-  // 4) Looser title search without author
+  // 6) Looser title search without author
   if (!state.cover && title && author) {
     const loose = await candidatesFromTitleAuthor(title, null);
     for (const c of loose) {
       if (state.cover) break;
       if (c.kind === "id") await tryId(c.value);
       else {
-        await tryGoogleIsbn(c.value);
         await tryOlIsbn(c.value);
+        await tryGoogleIsbn(c.value);
       }
     }
+  }
+
+  // 7) Wikipedia again after looser OL search (in case title+author missed)
+  if (!state.cover && title) {
+    state.cover = await coverFromWikipedia(title);
   }
 
   const payload = state.cover;
@@ -318,8 +456,9 @@ export async function GET(request: Request) {
     status: 200,
     headers: {
       "Content-Type": payload.contentType,
-      "Cache-Control": "public, max-age=31536000, immutable",
-      "CDN-Cache-Control": "public, s-maxage=31536000, immutable",
+      // Version query (?v=) busts caches when resolution strategy changes
+      "Cache-Control": "public, max-age=604800, stale-while-revalidate=86400",
+      "CDN-Cache-Control": "public, s-maxage=604800, stale-while-revalidate=86400",
       "X-Content-Type-Options": "nosniff",
     },
   });

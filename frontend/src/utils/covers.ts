@@ -1,11 +1,12 @@
 import { COVER_ID_BY_ISBN } from "@/data/coverOverrides";
+import { LOCAL_COVER_BY_ISBN } from "@/data/localCovers";
 
 export type CoverSize = "S" | "M" | "L";
 
 type CoverMeta = { title?: string; author?: string; isbn?: string };
 
 /** Cache-bust when cover resolution strategy changes. */
-const COVER_VERSION = "5";
+const COVER_VERSION = "6";
 
 /** Real ISBN-10 / ISBN-13 only — not Open Library work keys like OL29049148W. */
 export function normalizeIsbn(value: string | null | undefined): string | null {
@@ -130,6 +131,11 @@ export function resolveCoverUrl(
     isbn: isbn || undefined,
   };
 
+  // 0) Bundled static covers beat dead remotes / CDN-cached stubs
+  if (isbn && LOCAL_COVER_BY_ISBN[isbn]) {
+    return `${LOCAL_COVER_BY_ISBN[isbn]}?v=${COVER_VERSION}`;
+  }
+
   // 1) ISBN-first — catalog books all have real ISBN-13s
   if (isbn) return coverUrlFromIsbn(isbn, size, meta);
 
@@ -191,7 +197,8 @@ export function nextCoverFallback(
   if (hadId && isbn) {
     return coverUrlFromIsbn(isbn, size, { title, author });
   }
-  if (isbn && !u.searchParams.get("isbn")) {
+  // Local static path or stale proxy URL without isbn param
+  if (isbn && (!u.searchParams.get("isbn") || failedSrc.startsWith("/covers/"))) {
     return coverUrlFromIsbn(isbn, size, { title, author });
   }
   if (title) {
