@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from "react";
 import Header from "@/components/Header";
 import CoverImage from "@/components/CoverImage";
+import { COVER_ID_BY_ISBN } from "@/data/coverOverrides";
 import { useLeaf } from "@/context/LeafContext";
 import { Layers, Plus, X, Heart, MessageSquare, Check, ArrowRight } from "lucide-react";
 import Link from "next/link";
@@ -144,8 +145,10 @@ export default function ListsPage() {
                               src={book.coverImage}
                               title={book.title}
                               author={book.author}
+                              isbn={book.id}
+                              coverId={COVER_ID_BY_ISBN[book.id]}
                               bookId={book.id}
-                              size="S"
+                              size="M"
                               className="w-full h-full"
                               imgClassName="w-full h-full object-cover"
                             />
@@ -431,6 +434,8 @@ export default function ListsPage() {
                             src={book.coverImage}
                             title={book.title}
                             author={book.author}
+                            isbn={book.id}
+                            coverId={COVER_ID_BY_ISBN[book.id]}
                             bookId={book.id}
                             size="M"
                             className="w-full h-full"

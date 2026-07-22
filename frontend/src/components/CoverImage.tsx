@@ -71,7 +71,11 @@ export default function CoverImage({
           onError={() => setFailed(true)}
           onLoad={(e) => {
             const img = e.currentTarget;
-            if (img.naturalWidth < 40 || img.naturalHeight < 40) {
+            // Reject Google's missing-cover stub; allow small OL S thumbnails (~36×58)
+            const isStub =
+              (img.naturalWidth === 128 && img.naturalHeight === 184) ||
+              (img.naturalWidth < 20 && img.naturalHeight < 20);
+            if (isStub) {
               setFailed(true);
             }
           }}
