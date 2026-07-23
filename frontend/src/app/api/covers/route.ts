@@ -32,12 +32,17 @@ function googleBooksUrl(isbn: string): string {
 }
 
 async function fetchCoverBytes(url: string): Promise<{ bytes: ArrayBuffer; contentType: string } | null> {
+  // Some cover IDs redirect through slow archive.org mirrors; bail out fast
+  // so the caller still has time to try the next fallback.
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 4000);
   try {
     const res = await fetch(url, {
       // Cache at the edge for a month after first successful fetch
       next: { revalidate: 60 * 60 * 24 * 30 },
       redirect: "follow",
       headers: { Accept: "image/*,*/*;q=0.8" },
+      signal: controller.signal,
     });
     if (!res.ok) return null;
     const bytes = await res.arrayBuffer();
@@ -49,6 +54,8 @@ async function fetchCoverBytes(url: string): Promise<{ bytes: ArrayBuffer; conte
     };
   } catch {
     return null;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
