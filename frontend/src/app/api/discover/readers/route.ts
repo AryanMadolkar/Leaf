@@ -175,13 +175,15 @@ export async function GET(request: Request) {
     // non-personalized part is still cached server-side via unstable_cache.
     if (type === "new") {
       // Deliberately ignores `limit` — shows everyone who joined recently.
-      const base = await getNewReadersBase();
+      // The base list is cached across all viewers, so "exclude me" happens
+      // here per-request rather than inside the cached query.
+      const base = (await getNewReadersBase()).filter((r) => r.id !== user?.id);
       const followingSet = await fetchFollowingSet(user?.id, base.map((r) => r.id));
       return NextResponse.json({ success: true, readers: withFollowing(base, followingSet) });
     }
 
     if (type === "active") {
-      const base = await getActiveReadersBase(limit);
+      const base = (await getActiveReadersBase(limit)).filter((r) => r.id !== user?.id);
       const followingSet = await fetchFollowingSet(user?.id, base.map((r) => r.id));
       return NextResponse.json({ success: true, readers: withFollowing(base, followingSet) });
     }
