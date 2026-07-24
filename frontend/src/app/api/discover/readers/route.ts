@@ -7,7 +7,6 @@ type ProfileRef = {
   id: string;
   username: string;
   display_name: string | null;
-  avatar_url: string | null;
 };
 
 type StatsProfileRow = {
@@ -29,25 +28,43 @@ type ReaderBase = {
 
 type Reader = ReaderBase & { isFollowing: boolean };
 
-// Some profiles have a raw base64 data: URI saved as avatar_url instead of a
-// storage link — multiple MB of text. Selecting/caching that at list scale
-// is what was actually making this endpoint slow (and blew unstable_cache's
-// 2MB item limit). Real avatar URLs are a few hundred chars at most; drop
-// anything absurdly larger and let the client fall back to a DiceBear avatar.
-const MAX_AVATAR_URL_LENGTH = 2000;
+/**
+ * Resolve avatars for a batch of profile ids without ever selecting the raw
+ * avatar_url column for everyone — some profiles store their custom picture
+ * as a raw base64 data: URI (several MB of text), and selecting that at list
+ * scale is what made this endpoint slow. Short real URLs come back directly;
+ * anything stored as a data: URI is pointed at the same-origin /api/avatar
+ * proxy instead, which serves the real photo without bloating this response.
+ */
+async function resolveAvatars(ids: string[]): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  if (ids.length === 0) return map;
+  const supabase = createAdminClient();
 
-function sanitizeAvatar(avatarUrl: string | null | undefined): string {
-  if (!avatarUrl || avatarUrl.length > MAX_AVATAR_URL_LENGTH) return "";
-  return avatarUrl;
+  const [{ data: realUrlRows }, { data: dataUriRows }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("id, avatar_url")
+      .in("id", ids)
+      .not("avatar_url", "is", null)
+      .neq("avatar_url", "")
+      .not("avatar_url", "like", "data:%"),
+    supabase.from("profiles").select("id").in("id", ids).like("avatar_url", "data:%"),
+  ]);
+
+  ((realUrlRows || []) as { id: string; avatar_url: string }[]).forEach((r) => map.set(r.id, r.avatar_url));
+  ((dataUriRows || []) as { id: string }[]).forEach((r) => map.set(r.id, `/api/avatar/${r.id}`));
+
+  return map;
 }
 
-function toReaderBase(row: StatsProfileRow): ReaderBase | null {
+function toReaderBase(row: StatsProfileRow, avatarMap: Map<string, string>): ReaderBase | null {
   if (!row.profile) return null;
   return {
     id: row.profile.id,
     username: row.profile.username,
     name: row.profile.display_name || "Reader",
-    avatar: sanitizeAvatar(row.profile.avatar_url),
+    avatar: avatarMap.get(row.profile.id) || "",
     topGenre: row.favorite_genre || "Fiction",
     streak: row.reading_streak || 0,
   };
@@ -79,46 +96,49 @@ const getActiveReadersBase = unstable_cache(
     const supabase = createAdminClient();
     const { data, error } = await supabase
       .from("user_stats")
-      .select("user_id, reading_streak, favorite_genre, profile:profiles!inner(id, username, display_name, avatar_url)")
-      .not("profile.avatar_url", "like", "data:%")
+      .select("user_id, reading_streak, favorite_genre, profile:profiles!inner(id, username, display_name)")
       .gt("reading_streak", 0)
       .order("reading_streak", { ascending: false })
       .limit(limit);
     if (error) throw error;
 
-    return ((data || []) as unknown as StatsProfileRow[])
-      .map(toReaderBase)
+    const rows = (data || []) as unknown as StatsProfileRow[];
+    const avatarMap = await resolveAvatars(rows.map((r) => r.user_id));
+
+    return rows
+      .map((r) => toReaderBase(r, avatarMap))
       .filter((r): r is ReaderBase => r !== null);
   },
   ["discover-readers-active"],
   { revalidate: 120, tags: ["discover-readers-active"] }
 );
 
+// Safety ceiling only — not a UX cap. "New Readers" is meant to show
+// everyone who joined in the last 30 days; this just bounds the query if
+// the community ever grows huge.
+const NEW_READERS_SAFETY_LIMIT = 200;
+
 const getNewReadersBase = unstable_cache(
-  async (limit: number): Promise<ReaderBase[]> => {
+  async (): Promise<ReaderBase[]> => {
     const supabase = createAdminClient();
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
     const { data: profiles, error } = await supabase
       .from("profiles")
-      .select("id, username, display_name, avatar_url, joined_at")
+      .select("id, username, display_name, joined_at")
       .gte("joined_at", thirtyDaysAgo)
-      // Skip rows with a raw base64 data: URI saved as avatar_url instead of a
-      // storage link — some are several MB and were the actual source of the
-      // multi-second query time (and blew unstable_cache's 2MB item limit).
-      .not("avatar_url", "like", "data:%")
       .order("joined_at", { ascending: false })
-      .limit(limit);
+      .limit(NEW_READERS_SAFETY_LIMIT);
     if (error) throw error;
 
     const rows = (profiles || []) as (ProfileRef & { joined_at: string })[];
     const ids = rows.map((p) => p.id);
     if (ids.length === 0) return [];
 
-    const { data: statsRows } = await supabase
-      .from("user_stats")
-      .select("user_id, reading_streak, favorite_genre")
-      .in("user_id", ids);
+    const [{ data: statsRows }, avatarMap] = await Promise.all([
+      supabase.from("user_stats").select("user_id, reading_streak, favorite_genre").in("user_id", ids),
+      resolveAvatars(ids),
+    ]);
 
     const statsMap = new Map<string, { reading_streak: number | null; favorite_genre: string | null }>();
     ((statsRows || []) as { user_id: string; reading_streak: number | null; favorite_genre: string | null }[]).forEach(
@@ -131,7 +151,7 @@ const getNewReadersBase = unstable_cache(
         id: p.id,
         username: p.username,
         name: p.display_name || "Reader",
-        avatar: sanitizeAvatar(p.avatar_url),
+        avatar: avatarMap.get(p.id) || "",
         topGenre: stats?.favorite_genre || "Fiction",
         streak: stats?.reading_streak || 0,
       };
@@ -154,7 +174,8 @@ export async function GET(request: Request) {
     // whoever's browser (or a shared CDN cache) served it next. The expensive
     // non-personalized part is still cached server-side via unstable_cache.
     if (type === "new") {
-      const base = await getNewReadersBase(limit);
+      // Deliberately ignores `limit` — shows everyone who joined recently.
+      const base = await getNewReadersBase();
       const followingSet = await fetchFollowingSet(user?.id, base.map((r) => r.id));
       return NextResponse.json({ success: true, readers: withFollowing(base, followingSet) });
     }
