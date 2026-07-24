@@ -12,9 +12,9 @@ import Link from "next/link";
 import { TrendingUp, Layers, BookOpen, Star, Sparkles, ArrowRight, Flame, Compass, Loader2 } from "lucide-react";
 import type { Book } from "@/data/mockData";
 
-async function fetchReaders(type: "active" | "similar" | "new", limit = 10): Promise<Reader[]> {
+async function fetchReaders(type: "active" | "new", limit = 10): Promise<Reader[]> {
   try {
-    const res = await authFetch(`/api/discover/readers?type=${type}&limit=${limit}`);
+    const res = await authFetch(`/api/discover/readers?type=${type}&limit=${limit}`, { cache: "no-store" });
     if (!res.ok) return [];
     const data = await res.json();
     return data.success ? data.readers : [];
@@ -69,7 +69,7 @@ function ReaderRow({
 }
 
 export default function HomeFeed() {
-  const { reviews, books, lists, diaryLogs, currentUser, isAuthenticated } = useLeaf();
+  const { reviews, books, lists, diaryLogs, currentUser } = useLeaf();
   const [recentlyLoggedByUsers, setRecentlyLoggedByUsers] = useState<Book[]>([]);
 
   useEffect(() => {
@@ -94,8 +94,6 @@ export default function HomeFeed() {
   // slow one (e.g. Similar Taste) doesn't hold up the others.
   const [activeReaders, setActiveReaders] = useState<Reader[]>([]);
   const [activeLoading, setActiveLoading] = useState(true);
-  const [similarReaders, setSimilarReaders] = useState<Reader[]>([]);
-  const [similarLoading, setSimilarLoading] = useState(isAuthenticated);
   const [newReaders, setNewReaders] = useState<Reader[]>([]);
   const [newLoading, setNewLoading] = useState(true);
 
@@ -126,25 +124,6 @@ export default function HomeFeed() {
       cancelled = true;
     };
   }, []);
-
-  useEffect(() => {
-    if (!isAuthenticated) {
-      setSimilarReaders([]);
-      setSimilarLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setSimilarLoading(true);
-    fetchReaders("similar").then((r) => {
-      if (!cancelled) {
-        setSimilarReaders(r);
-        setSimilarLoading(false);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [isAuthenticated]);
 
   // Fallback while loading / if API returns empty: prefer other users' reviews, then catalog
   const recentlyFinished = useMemo(() => {
@@ -359,17 +338,6 @@ export default function HomeFeed() {
             readers={activeReaders}
             loading={activeLoading}
           />
-
-          {isAuthenticated && (
-            <ReaderRow
-              title="Similar Taste"
-              description="Readers who share your favorite genre or books"
-              icon={Sparkles}
-              readers={similarReaders}
-              loading={similarLoading}
-              emptyMessage="Follow more readers to get suggestions."
-            />
-          )}
 
           <ReaderRow
             title="New Readers"
