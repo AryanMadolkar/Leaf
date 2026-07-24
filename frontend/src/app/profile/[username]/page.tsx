@@ -473,6 +473,15 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
                     )}
                   </button>
                 )}
+
+                {/* View Bookshelf */}
+                <Link
+                  href={`/u/${targetUser.username}/library`}
+                  className="h-7 px-3.5 rounded-lg text-[10px] font-semibold flex items-center gap-1.5 transition-all shadow-sm bg-cream border border-cream-border text-charcoal hover:bg-cream-dark/80"
+                >
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span>View Bookshelf</span>
+                </Link>
               </div>
               <p className="text-xs text-charcoal-muted font-medium">@{targetUser.username}</p>
             </div>

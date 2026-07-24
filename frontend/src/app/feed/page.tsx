@@ -4,14 +4,72 @@ import React, { useEffect, useMemo, useState } from "react";
 import Header from "@/components/Header";
 import BookCard from "@/components/BookCard";
 import CoverImage from "@/components/CoverImage";
+import ReaderCard, { type Reader } from "@/components/ReaderCard";
 import { StarDisplay } from "@/components/ReviewCard";
 import { useLeaf } from "@/context/LeafContext";
+import { authFetch } from "@/utils/auth/client";
 import Link from "next/link";
-import { TrendingUp, Layers, BookOpen, Star, Sparkles, ArrowRight } from "lucide-react";
+import { TrendingUp, Layers, BookOpen, Star, Sparkles, ArrowRight, Flame, Compass, Loader2 } from "lucide-react";
 import type { Book } from "@/data/mockData";
 
+async function fetchReaders(type: "active" | "similar" | "new", limit = 10): Promise<Reader[]> {
+  try {
+    const res = await authFetch(`/api/discover/readers?type=${type}&limit=${limit}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.success ? data.readers : [];
+  } catch (err) {
+    console.error(`Failed to load ${type} readers:`, err);
+    return [];
+  }
+}
+
+/** Discover Readers horizontal scroller — each row loads and renders independently. */
+function ReaderRow({
+  title,
+  description,
+  icon: Icon,
+  readers,
+  loading,
+  emptyMessage,
+}: {
+  title: string;
+  description: string;
+  icon: React.ElementType;
+  readers: Reader[];
+  loading: boolean;
+  emptyMessage?: string;
+}) {
+  if (!loading && readers.length === 0 && !emptyMessage) return null;
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <Icon className="w-4 h-4 text-brand" />
+        <h4 className="font-serif text-base font-bold text-charcoal">{title}</h4>
+      </div>
+      <p className="text-[10px] text-charcoal-muted uppercase tracking-wider font-semibold -mt-2">{description}</p>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="w-5 h-5 text-brand animate-spin" />
+        </div>
+      ) : readers.length === 0 ? (
+        <p className="text-xs text-charcoal-muted italic py-6 text-center bg-cream border border-cream-border rounded-xl">
+          {emptyMessage}
+        </p>
+      ) : (
+        <div className="flex gap-4 overflow-x-auto pb-2 pt-1 snap-x scrollbar-thin scrollbar-thumb-brand-muted/20 hover:scrollbar-thumb-brand-muted/40">
+          {readers.map((reader) => (
+            <ReaderCard key={reader.id} reader={reader} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function HomeFeed() {
-  const { reviews, books, lists, diaryLogs, currentUser } = useLeaf();
+  const { reviews, books, lists, diaryLogs, currentUser, isAuthenticated } = useLeaf();
   const [recentlyLoggedByUsers, setRecentlyLoggedByUsers] = useState<Book[]>([]);
 
   useEffect(() => {
@@ -31,6 +89,62 @@ export default function HomeFeed() {
       cancelled = true;
     };
   }, []);
+
+  // Discover Readers — each section fetched and loaded independently so a
+  // slow one (e.g. Similar Taste) doesn't hold up the others.
+  const [activeReaders, setActiveReaders] = useState<Reader[]>([]);
+  const [activeLoading, setActiveLoading] = useState(true);
+  const [similarReaders, setSimilarReaders] = useState<Reader[]>([]);
+  const [similarLoading, setSimilarLoading] = useState(isAuthenticated);
+  const [newReaders, setNewReaders] = useState<Reader[]>([]);
+  const [newLoading, setNewLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setActiveLoading(true);
+    fetchReaders("active").then((r) => {
+      if (!cancelled) {
+        setActiveReaders(r);
+        setActiveLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setNewLoading(true);
+    fetchReaders("new").then((r) => {
+      if (!cancelled) {
+        setNewReaders(r);
+        setNewLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setSimilarReaders([]);
+      setSimilarLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setSimilarLoading(true);
+    fetchReaders("similar").then((r) => {
+      if (!cancelled) {
+        setSimilarReaders(r);
+        setSimilarLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated]);
 
   // Fallback while loading / if API returns empty: prefer other users' reviews, then catalog
   const recentlyFinished = useMemo(() => {
@@ -229,6 +343,41 @@ export default function HomeFeed() {
               </div>
             ))}
           </div>
+        </section>
+
+        {/* Discover Readers */}
+        <section className="mb-10 bg-cream-card border border-cream-border rounded-2xl p-6 shadow-sm space-y-8">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-brand" />
+            <h2 className="font-serif text-lg font-bold text-charcoal">Discover Readers</h2>
+          </div>
+
+          <ReaderRow
+            title="Active Readers"
+            description="Readers on a current streak"
+            icon={Flame}
+            readers={activeReaders}
+            loading={activeLoading}
+          />
+
+          {isAuthenticated && (
+            <ReaderRow
+              title="Similar Taste"
+              description="Readers who share your favorite genre or books"
+              icon={Sparkles}
+              readers={similarReaders}
+              loading={similarLoading}
+              emptyMessage="Follow more readers to get suggestions."
+            />
+          )}
+
+          <ReaderRow
+            title="New Readers"
+            description="Recently joined the Leaf community"
+            icon={Compass}
+            readers={newReaders}
+            loading={newLoading}
+          />
         </section>
 
         {/* Two Column Feed Structure */}
