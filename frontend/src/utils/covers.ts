@@ -88,13 +88,17 @@ export function resolveCoverUrl(
   const meta = {
     title: opts?.title || undefined,
     author: opts?.author || undefined,
+    isbn: opts?.isbn || undefined,
   };
 
-  if (opts?.coverId) return coverUrlFromCoverId(opts.coverId, size);
+  if (opts?.coverId) return coverUrlFromCoverId(opts.coverId, size, meta);
 
   const lookupKey = opts?.isbn || opts?.bookId || "";
   if (lookupKey && COVER_ID_BY_ISBN[lookupKey]) {
-    return coverUrlFromCoverId(COVER_ID_BY_ISBN[lookupKey], size);
+    return coverUrlFromCoverId(COVER_ID_BY_ISBN[lookupKey], size, {
+      ...meta,
+      isbn: meta.isbn || lookupKey,
+    });
   }
 
   const raw = (coverImage || "").trim();

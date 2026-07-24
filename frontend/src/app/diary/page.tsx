@@ -3,6 +3,7 @@
 import React from "react";
 import Header from "@/components/Header";
 import CoverImage from "@/components/CoverImage";
+import { COVER_ID_BY_ISBN } from "@/data/coverOverrides";
 import { StarDisplay } from "@/components/ReviewCard";
 import { useLeaf } from "@/context/LeafContext";
 import { Calendar, BookOpen } from "lucide-react";
@@ -100,6 +101,8 @@ export default function ReadingDiaryPage() {
                               src={cover}
                               title={title}
                               author={author}
+                              isbn={bookId}
+                              coverId={COVER_ID_BY_ISBN[bookId]}
                               bookId={bookId}
                               className="w-9 h-14 rounded shadow-sm border border-cream-border hover:scale-95 transition-transform"
                               imgClassName="w-full h-full object-cover"

@@ -1,9 +1,15 @@
+import { createHash } from "crypto";
 import { NextResponse } from "next/server";
 import { COVER_ID_BY_ISBN } from "@/data/coverOverrides";
 
 export const runtime = "nodejs";
 
 const VALID_SIZES = new Set(["S", "M", "L"]);
+
+// Google Books serves this exact "image not available" graphic (128x170
+// grayscale PNG) for any ISBN it doesn't have art for, instead of a 404 —
+// it must be fingerprinted and rejected or it gets cached as a real cover.
+const GOOGLE_BOOKS_PLACEHOLDER_HASH = "e89e0e364e83c0ecfba5da41007c9a2c";
 
 function upstreamUrl(params: {
   id?: string | null;
@@ -32,23 +38,34 @@ function googleBooksUrl(isbn: string): string {
 }
 
 async function fetchCoverBytes(url: string): Promise<{ bytes: ArrayBuffer; contentType: string } | null> {
+  // Some cover IDs redirect through slow archive.org mirrors; bail out fast
+  // so the caller still has time to try the next fallback.
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 4000);
   try {
     const res = await fetch(url, {
       // Cache at the edge for a month after first successful fetch
       next: { revalidate: 60 * 60 * 24 * 30 },
       redirect: "follow",
       headers: { Accept: "image/*,*/*;q=0.8" },
+      signal: controller.signal,
     });
     if (!res.ok) return null;
     const bytes = await res.arrayBuffer();
     // Open Library blank GIFs are tiny
     if (bytes.byteLength < 200) return null;
+    // Google Books "image not available" stub — same bytes every time
+    if (createHash("md5").update(Buffer.from(bytes)).digest("hex") === GOOGLE_BOOKS_PLACEHOLDER_HASH) {
+      return null;
+    }
     return {
       bytes,
       contentType: res.headers.get("Content-Type") || "image/jpeg",
     };
   } catch {
     return null;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
