@@ -5,21 +5,37 @@ import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import BookCard from "@/components/BookCard";
 import CoverImage from "@/components/CoverImage";
+import ReaderCard, { type Reader } from "@/components/ReaderCard";
 import { useLeaf } from "@/context/LeafContext";
 import { Book } from "@/data/mockData";
 import type { CatalogShelf } from "@/utils/bookCatalog";
 import { isFakeBookId } from "@/utils/bookCatalog";
 import { COVER_ID_BY_ISBN } from "@/data/coverOverrides";
+import { authFetch } from "@/utils/auth/client";
 import {
   buildGenreDistribution,
   canonicalGenresForBook,
   favoriteGenreFromTags,
 } from "@/utils/genreUtils";
-import { 
-  Sparkles, BookOpen, Star, Award, Compass, 
+import {
+  Sparkles, BookOpen, Star, Award, Compass, Users, Flame,
   ChevronRight, Loader2, Library, Plus, MessageSquare, History, RefreshCw, Dice5
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+
+async function fetchReaders(type: "active" | "similar" | "new", limit = 10): Promise<Reader[]> {
+  try {
+    const res = await authFetch(`/api/discover/readers?type=${type}&limit=${limit}`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.success ? data.readers : [];
+  } catch (err) {
+    console.error(`Failed to load ${type} readers:`, err);
+    return [];
+  }
+}
 
 type ShelfConfig = { key: CatalogShelf; title: string; description: string; icon: React.ElementType };
 
@@ -52,7 +68,7 @@ async function fetchShelf(shelf: CatalogShelf, limit = 12): Promise<Book[]> {
 
 export default function DiscoverPage() {
   const router = useRouter();
-  const { books, diaryLogs, logBook, currentUser } = useLeaf();
+  const { books, diaryLogs, logBook, currentUser, isAuthenticated } = useLeaf();
 
   // Hero featured book (server-cached, rotates daily)
   const [heroBook, setHeroBook] = useState<Book | null>(null);
@@ -63,6 +79,31 @@ export default function DiscoverPage() {
   const [shelfData, setShelfData] = useState<Record<string, Book[]>>({});
   const [leaderboard, setLeaderboard] = useState<Book[]>([]);
   const [shelvesLoading, setShelvesLoading] = useState(true);
+
+  // Discover Readers
+  const [activeReaders, setActiveReaders] = useState<Reader[]>([]);
+  const [similarReaders, setSimilarReaders] = useState<Reader[]>([]);
+  const [newReaders, setNewReaders] = useState<Reader[]>([]);
+  const [readersLoading, setReadersLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadReaders() {
+      setReadersLoading(true);
+      try {
+        const [active, similar, newOnes] = await Promise.all([
+          fetchReaders("active"),
+          isAuthenticated ? fetchReaders("similar") : Promise.resolve([]),
+          fetchReaders("new"),
+        ]);
+        setActiveReaders(active);
+        setSimilarReaders(similar);
+        setNewReaders(newOnes);
+      } finally {
+        setReadersLoading(false);
+      }
+    }
+    loadReaders();
+  }, [isAuthenticated]);
 
   // Quick Action Shelf Drawer/Log Modal state
   const [logModalBook, setLogModalBook] = useState<Book | null>(null);
@@ -305,6 +346,48 @@ export default function DiscoverPage() {
     );
   };
 
+  // Discover Readers horizontal scroller helper
+  const ReaderRow = ({
+    title,
+    description,
+    icon: Icon,
+    readers,
+    emptyMessage,
+  }: {
+    title: string;
+    description: string;
+    icon: any;
+    readers: Reader[];
+    emptyMessage?: string;
+  }) => {
+    if (readers.length === 0 && !emptyMessage) return null;
+    return (
+      <section className="space-y-4">
+        <div className="flex items-end justify-between border-b border-cream-border/60 pb-2">
+          <div className="space-y-1">
+            <h3 className="font-serif text-xl font-bold text-charcoal flex items-center gap-2">
+              <Icon className="w-5 h-5 text-brand" />
+              {title}
+            </h3>
+            <p className="text-[10px] text-charcoal-muted font-sans font-medium uppercase tracking-wider">{description}</p>
+          </div>
+        </div>
+
+        {readers.length === 0 ? (
+          <p className="text-xs text-charcoal-muted italic py-6 text-center bg-cream-card border border-cream-border rounded-2xl">
+            {emptyMessage}
+          </p>
+        ) : (
+          <div className="flex gap-4 overflow-x-auto pb-4 pt-1 snap-x scrollbar-thin scrollbar-thumb-brand-muted/20 hover:scrollbar-thumb-brand-muted/40">
+            {readers.map((reader) => (
+              <ReaderCard key={reader.id} reader={reader} showFollow={isAuthenticated} />
+            ))}
+          </div>
+        )}
+      </section>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-cream flex flex-col font-sans select-none">
       <Header />
@@ -459,6 +542,44 @@ export default function DiscoverPage() {
                   </div>
                 </div>
               </section>
+            )}
+
+            {/* Discover Readers */}
+            {readersLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-6 h-6 text-brand animate-spin" />
+              </div>
+            ) : (
+              <div className="space-y-12 border-t border-cream-border/60 pt-10">
+                <div className="flex items-center gap-2">
+                  <Users className="w-5 h-5 text-brand" />
+                  <h2 className="font-serif text-2xl font-bold text-charcoal">Discover Readers</h2>
+                </div>
+
+                <ReaderRow
+                  title="Active Readers"
+                  description="Readers on a current streak"
+                  icon={Flame}
+                  readers={activeReaders}
+                />
+
+                {isAuthenticated && (
+                  <ReaderRow
+                    title="Similar Taste"
+                    description="Readers who share your favorite genre or books"
+                    icon={Sparkles}
+                    readers={similarReaders}
+                    emptyMessage="Follow more readers to get suggestions."
+                  />
+                )}
+
+                <ReaderRow
+                  title="New Readers"
+                  description="Recently joined the Leaf community"
+                  icon={Compass}
+                  readers={newReaders}
+                />
+              </div>
             )}
 
             {/* Personalized Recommendations Section */}
