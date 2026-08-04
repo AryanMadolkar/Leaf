@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Link, Redirect, Tabs } from "expo-router";
-import { ActivityIndicator, Pressable, View } from "react-native";
+import { ActivityIndicator, Image, Pressable, Text, View } from "react-native";
 
 import Colors from "@/constants/Colors";
 import { useColorScheme } from "@/components/useColorScheme";
@@ -33,8 +33,17 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Feed",
           tabBarIcon: ({ color, size }) => <Ionicons name="home" color={color} size={size} />,
+          headerTitle: () => (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Image
+                source={require("@/assets/images/leaf-logo.png")}
+                style={{ width: 24, height: 24 }}
+                resizeMode="contain"
+              />
+              <Text style={{ fontSize: 18, fontWeight: "700", color: Colors[colorScheme].text }}>Leaf</Text>
+            </View>
+          ),
           headerRight: () => (
             <Link href="/search" asChild>
               <Pressable style={{ marginRight: 16 }}>

@@ -1,5 +1,4 @@
 import crypto from "crypto";
-import { createClient } from "@/utils/supabase/server";
 import { createPublicClient } from "@/utils/supabase/public";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { Book, INITIAL_BOOKS } from "@/data/mockData";
@@ -274,7 +273,7 @@ export async function getCachedBook(query: string): Promise<Book | null> {
   });
   if (localMatch) return localMatch;
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const cleanKey = query.startsWith("/works/") ? query : `/works/${query}`;
 
   try {

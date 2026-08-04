@@ -2,18 +2,19 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
-  Image,
-  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { useRouter } from "expo-router";
 import { authFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import type { Book, Reader } from "@/lib/types";
 import ReaderCard from "@/components/ReaderCard";
+import BookCover from "@/components/BookCover";
+import { colors, fonts } from "@/constants/theme";
 
 async function fetchReaders(type: "active" | "new"): Promise<Reader[]> {
   try {
@@ -59,7 +60,8 @@ function ReaderSection({ title, readers, loading }: { title: string; readers: Re
 }
 
 export default function FeedScreen() {
-  const { user, logout } = useAuth();
+  const router = useRouter();
+  const { user } = useAuth();
   const [activeReaders, setActiveReaders] = useState<Reader[]>([]);
   const [newReaders, setNewReaders] = useState<Reader[]>([]);
   const [recentBooks, setRecentBooks] = useState<Book[]>([]);
@@ -99,13 +101,8 @@ export default function FeedScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
       <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>Welcome back,</Text>
-          <Text style={styles.name}>{user?.display_name || "Reader"}</Text>
-        </View>
-        <Pressable onPress={logout} style={styles.logoutButton}>
-          <Text style={styles.logoutText}>Sign Out</Text>
-        </Pressable>
+        <Text style={styles.greeting}>Welcome back,</Text>
+        <Text style={styles.name}>{user?.display_name || "Reader"}</Text>
       </View>
 
       <View style={styles.section}>
@@ -123,15 +120,13 @@ export default function FeedScreen() {
             contentContainerStyle={{ gap: 12 }}
             renderItem={({ item }) => (
               <View style={styles.bookCard}>
-                {item.coverImage ? (
-                  <Image source={{ uri: item.coverImage }} style={styles.bookCover} />
-                ) : (
-                  <View style={[styles.bookCover, styles.bookCoverFallback]}>
-                    <Text style={styles.bookCoverTitle} numberOfLines={3}>
-                      {item.title}
-                    </Text>
-                  </View>
-                )}
+                <BookCover
+                  uri={item.coverImage}
+                  title={item.title}
+                  width={100}
+                  height={148}
+                  onPress={() => router.push(`/book/${item.id}` as any)}
+                />
                 <Text style={styles.bookTitle} numberOfLines={1}>
                   {item.title}
                 </Text>
@@ -151,26 +146,15 @@ export default function FeedScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#faf7f2" },
+  container: { flex: 1, backgroundColor: colors.cream },
   content: { padding: 20, gap: 28, paddingBottom: 48 },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  greeting: { fontSize: 13, color: "#8a7f72" },
-  name: { fontSize: 22, fontWeight: "700", color: "#2a2420" },
-  logoutButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#e4dccf",
-  },
-  logoutText: { fontSize: 12, fontWeight: "600", color: "#2a2420" },
+  header: { gap: 2 },
+  greeting: { fontSize: 13, color: colors.charcoalMuted, fontFamily: fonts.sans },
+  name: { fontSize: 26, fontFamily: fonts.serif, color: colors.charcoal },
   section: { gap: 10 },
-  sectionTitle: { fontSize: 16, fontWeight: "700", color: "#2a2420" },
-  emptyText: { fontSize: 12, color: "#8a7f72", fontStyle: "italic" },
+  sectionTitle: { fontSize: 18, fontFamily: fonts.serif, color: colors.charcoal },
+  emptyText: { fontSize: 12, color: colors.charcoalMuted, fontStyle: "italic", fontFamily: fonts.sans },
   bookCard: { width: 100, gap: 4 },
-  bookCover: { width: 100, height: 148, borderRadius: 8, backgroundColor: "#e8e0d4" },
-  bookCoverFallback: { alignItems: "center", justifyContent: "center", padding: 8 },
-  bookCoverTitle: { fontSize: 10, fontWeight: "700", color: "#3f6b4f", textAlign: "center" },
-  bookTitle: { fontSize: 11, fontWeight: "700", color: "#2a2420" },
-  bookAuthor: { fontSize: 10, color: "#8a7f72" },
+  bookTitle: { fontSize: 11, fontFamily: fonts.sansBold, color: colors.charcoal },
+  bookAuthor: { fontSize: 10, color: colors.charcoalMuted, fontFamily: fonts.sans },
 });

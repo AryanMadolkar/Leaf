@@ -9,12 +9,16 @@ import {
   Text,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { authFetch } from "@/lib/api";
-import type { LibraryPayload, LibraryShelf } from "@/lib/types";
+import type { Book, LibraryPayload, LibraryShelf } from "@/lib/types";
 import BookCover from "@/components/BookCover";
+import Bookshelf from "@/components/Bookshelf";
+import { colors, fonts } from "@/constants/theme";
 
 const ALL_SHELF_ID = "__all__";
+type ViewMode = "shelf" | "grid";
 
 export default function LibraryScreen() {
   const router = useRouter();
@@ -23,6 +27,7 @@ export default function LibraryScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeShelfId, setActiveShelfId] = useState<string>(ALL_SHELF_ID);
+  const [viewMode, setViewMode] = useState<ViewMode>("shelf");
 
   const load = useCallback(async () => {
     try {
@@ -61,6 +66,8 @@ export default function LibraryScreen() {
     return library.books.filter((b) => idSet.has(b.id));
   }, [library, shelves, activeShelfId]);
 
+  const openBook = (book: Book) => router.push(`/book/${book.id}` as any);
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -77,8 +84,8 @@ export default function LibraryScreen() {
     );
   }
 
-  return (
-    <View style={styles.container}>
+  const header = (
+    <>
       <View style={styles.statsRow}>
         <StatTile label="Books" value={library.stats.books} />
         <StatTile label="Authors" value={library.stats.authors} />
@@ -86,54 +93,82 @@ export default function LibraryScreen() {
         <StatTile label="Genres" value={library.stats.genres} />
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.shelfTabs}
-        contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }}
-      >
-        <ShelfChip
-          label={`All (${library.books.length})`}
-          active={activeShelfId === ALL_SHELF_ID}
-          onPress={() => setActiveShelfId(ALL_SHELF_ID)}
-        />
-        {shelves.map((shelf) => (
+      <View style={styles.toolbar}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ flex: 1 }}
+          contentContainerStyle={{ gap: 8 }}
+        >
           <ShelfChip
-            key={shelf.id}
-            label={`${shelf.name} (${shelf.bookIds.length})`}
-            active={activeShelfId === shelf.id}
-            onPress={() => setActiveShelfId(shelf.id)}
+            label={`All (${library.books.length})`}
+            active={activeShelfId === ALL_SHELF_ID}
+            onPress={() => setActiveShelfId(ALL_SHELF_ID)}
           />
-        ))}
-      </ScrollView>
+          {shelves.map((shelf) => (
+            <ShelfChip
+              key={shelf.id}
+              label={`${shelf.name} (${shelf.bookIds.length})`}
+              active={activeShelfId === shelf.id}
+              onPress={() => setActiveShelfId(shelf.id)}
+            />
+          ))}
+        </ScrollView>
 
-      <FlatList
-        data={visibleBooks}
-        keyExtractor={(b) => b.id}
-        numColumns={3}
-        columnWrapperStyle={{ gap: 12 }}
+        <View style={styles.viewToggle}>
+          <Pressable
+            onPress={() => setViewMode("shelf")}
+            style={[styles.viewToggleButton, viewMode === "shelf" && styles.viewToggleButtonActive]}
+          >
+            <Ionicons name="library" size={16} color={viewMode === "shelf" ? colors.white : colors.charcoalMuted} />
+          </Pressable>
+          <Pressable
+            onPress={() => setViewMode("grid")}
+            style={[styles.viewToggleButton, viewMode === "grid" && styles.viewToggleButtonActive]}
+          >
+            <Ionicons name="grid" size={16} color={viewMode === "grid" ? colors.white : colors.charcoalMuted} />
+          </Pressable>
+        </View>
+      </View>
+    </>
+  );
+
+  if (viewMode === "shelf") {
+    return (
+      <ScrollView
+        style={styles.container}
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        ListEmptyComponent={<Text style={styles.emptyText}>Nothing on this shelf yet.</Text>}
-        renderItem={({ item }) => (
-          <View style={styles.bookCell}>
-            <BookCover
-              uri={item.coverImage}
-              title={item.title}
-              width={100}
-              height={148}
-              onPress={() => router.push(`/book/${item.id}` as any)}
-            />
-            <Text style={styles.bookTitle} numberOfLines={2}>
-              {item.title}
-            </Text>
-            <Text style={styles.bookAuthor} numberOfLines={1}>
-              {item.author}
-            </Text>
-          </View>
-        )}
-      />
-    </View>
+      >
+        {header}
+        <Bookshelf books={visibleBooks} onPressBook={openBook} />
+      </ScrollView>
+    );
+  }
+
+  return (
+    <FlatList
+      style={styles.container}
+      data={visibleBooks}
+      keyExtractor={(b) => b.id}
+      numColumns={3}
+      columnWrapperStyle={{ gap: 12 }}
+      contentContainerStyle={styles.content}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      ListHeaderComponent={header}
+      ListEmptyComponent={<Text style={styles.emptyText}>Nothing on this shelf yet.</Text>}
+      renderItem={({ item }) => (
+        <View style={styles.bookCell}>
+          <BookCover uri={item.coverImage} title={item.title} width={100} height={148} onPress={() => openBook(item)} />
+          <Text style={styles.bookTitle} numberOfLines={2}>
+            {item.title}
+          </Text>
+          <Text style={styles.bookAuthor} numberOfLines={1}>
+            {item.author}
+          </Text>
+        </View>
+      )}
+    />
   );
 }
 
@@ -155,38 +190,46 @@ function StatTile({ label, value }: { label: string; value: number }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#faf7f2" },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#faf7f2" },
-  errorText: { fontSize: 13, color: "#8a7f72" },
+  container: { flex: 1, backgroundColor: colors.cream },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.cream },
+  errorText: { fontSize: 13, color: colors.charcoalMuted, fontFamily: fonts.sans },
   content: { padding: 16, paddingTop: 12, gap: 14, paddingBottom: 48 },
   statsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    backgroundColor: "#fff",
+    backgroundColor: colors.creamCard,
     borderWidth: 1,
-    borderColor: "#e4dccf",
+    borderColor: colors.creamBorder,
     borderRadius: 16,
     padding: 16,
-    margin: 16,
     marginBottom: 12,
   },
   statTile: { alignItems: "center" },
-  statValue: { fontSize: 18, fontWeight: "700", color: "#2a2420" },
-  statLabel: { fontSize: 10, color: "#8a7f72", textTransform: "uppercase", fontWeight: "600" },
-  shelfTabs: { flexGrow: 0, marginBottom: 4 },
+  statValue: { fontSize: 18, fontFamily: fonts.sansBold, color: colors.charcoal },
+  statLabel: { fontSize: 10, color: colors.charcoalMuted, textTransform: "uppercase", fontFamily: fonts.sansSemiBold },
+  toolbar: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 6 },
   chip: {
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#e4dccf",
-    backgroundColor: "#fff",
+    borderColor: colors.creamBorder,
+    backgroundColor: colors.creamCard,
   },
-  chipActive: { backgroundColor: "#3f6b4f", borderColor: "#3f6b4f" },
-  chipText: { fontSize: 12, fontWeight: "600", color: "#2a2420" },
-  chipTextActive: { color: "#fff" },
-  emptyText: { fontSize: 12, color: "#8a7f72", fontStyle: "italic", textAlign: "center", marginTop: 24 },
+  chipActive: { backgroundColor: colors.brand, borderColor: colors.brand },
+  chipText: { fontSize: 12, fontFamily: fonts.sansSemiBold, color: colors.charcoal },
+  chipTextActive: { color: colors.white },
+  viewToggle: {
+    flexDirection: "row",
+    borderWidth: 1,
+    borderColor: colors.creamBorder,
+    borderRadius: 10,
+    overflow: "hidden",
+  },
+  viewToggleButton: { paddingHorizontal: 10, paddingVertical: 8, backgroundColor: colors.creamCard },
+  viewToggleButtonActive: { backgroundColor: colors.brand },
+  emptyText: { fontSize: 12, color: colors.charcoalMuted, fontStyle: "italic", textAlign: "center", marginTop: 24 },
   bookCell: { flex: 1 / 3, gap: 4, marginBottom: 16 },
-  bookTitle: { fontSize: 11, fontWeight: "700", color: "#2a2420" },
-  bookAuthor: { fontSize: 10, color: "#8a7f72" },
+  bookTitle: { fontSize: 11, fontFamily: fonts.sansBold, color: colors.charcoal },
+  bookAuthor: { fontSize: 10, color: colors.charcoalMuted, fontFamily: fonts.sans },
 });

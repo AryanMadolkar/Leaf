@@ -79,7 +79,7 @@ export default function SignupScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#faf7f2" },
   content: { flex: 1, justifyContent: "center", paddingHorizontal: 24, gap: 12 },
-  title: { fontSize: 32, fontWeight: "700", textAlign: "center", color: "#2a2420" },
+  title: { fontFamily: "InstrumentSerif_400Regular", fontSize: 40, textAlign: "center", color: "#2a2420" },
   subtitle: { fontSize: 14, textAlign: "center", color: "#8a7f72", marginBottom: 16 },
   error: { color: "#b3261e", fontSize: 13, textAlign: "center", marginBottom: 4 },
   input: {

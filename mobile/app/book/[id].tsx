@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useLocalSearchParams } from "expo-router";
+import { Stack, useLocalSearchParams } from "expo-router";
 import { authFetch } from "@/lib/api";
 import type { Book } from "@/lib/types";
 import BookCover from "@/components/BookCover";
+import { colors, fonts } from "@/constants/theme";
 
 export default function BookDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -43,6 +44,7 @@ export default function BookDetailScreen() {
   if (error || !book) {
     return (
       <View style={styles.center}>
+        <Stack.Screen options={{ title: "Book" }} />
         <Text style={styles.errorText}>{error || "Book not found"}</Text>
       </View>
     );
@@ -50,6 +52,7 @@ export default function BookDetailScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <Stack.Screen options={{ title: book.title }} />
       <View style={styles.hero}>
         <BookCover uri={book.coverImage} title={book.title} width={130} height={192} />
         <View style={styles.heroInfo}>
@@ -78,25 +81,25 @@ export default function BookDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#faf7f2" },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#faf7f2" },
-  errorText: { fontSize: 13, color: "#8a7f72" },
+  container: { flex: 1, backgroundColor: colors.cream },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.cream },
+  errorText: { fontSize: 13, color: colors.charcoalMuted, fontFamily: fonts.sans },
   content: { padding: 20, gap: 20, paddingBottom: 48 },
   hero: { flexDirection: "row", gap: 16 },
   heroInfo: { flex: 1, gap: 4, justifyContent: "center" },
-  title: { fontSize: 20, fontWeight: "700", color: "#2a2420" },
-  author: { fontSize: 13, color: "#8a7f72" },
-  meta: { fontSize: 12, color: "#a89d8e", marginTop: 4 },
-  rating: { fontSize: 13, fontWeight: "700", color: "#c9a13b", marginTop: 6 },
+  title: { fontSize: 22, fontFamily: fonts.serif, color: colors.charcoal },
+  author: { fontSize: 13, color: colors.charcoalMuted, fontFamily: fonts.sans },
+  meta: { fontSize: 12, color: colors.charcoalMuted, fontFamily: fonts.sans, marginTop: 4 },
+  rating: { fontSize: 13, fontFamily: fonts.sansBold, color: colors.gold, marginTop: 6 },
   genreRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   genreBadge: {
-    backgroundColor: "#fff",
+    backgroundColor: colors.creamCard,
     borderWidth: 1,
-    borderColor: "#e4dccf",
+    borderColor: colors.creamBorder,
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
-  genreText: { fontSize: 11, fontWeight: "600", color: "#8a7f72" },
-  description: { fontSize: 13, color: "#4a4238", lineHeight: 20 },
+  genreText: { fontSize: 11, fontFamily: fonts.sansSemiBold, color: colors.charcoalMuted },
+  description: { fontSize: 13, color: colors.charcoalLight, fontFamily: fonts.sans, lineHeight: 20 },
 });
