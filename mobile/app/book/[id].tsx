@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { authFetch } from "@/lib/api";
 import type { Book } from "@/lib/types";
 import BookCover from "@/components/BookCover";
+import LogBookModal from "@/components/LogBookModal";
 import { colors, fonts } from "@/constants/theme";
 
 export default function BookDetailScreen() {
@@ -11,6 +13,8 @@ export default function BookDetailScreen() {
   const [book, setBook] = useState<Book | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [justLogged, setJustLogged] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -65,6 +69,12 @@ export default function BookDetailScreen() {
         </View>
       </View>
 
+      <Pressable style={styles.addButton} onPress={() => setModalOpen(true)}>
+        <Ionicons name="add" size={16} color={colors.white} />
+        <Text style={styles.addButtonText}>Add to Library</Text>
+      </Pressable>
+      {justLogged && <Text style={styles.savedText}>Saved to your library.</Text>}
+
       {book.genres.length > 0 && (
         <View style={styles.genreRow}>
           {book.genres.slice(0, 5).map((g) => (
@@ -76,6 +86,17 @@ export default function BookDetailScreen() {
       )}
 
       <Text style={styles.description}>{book.description}</Text>
+
+      <LogBookModal
+        visible={modalOpen}
+        bookId={book.id}
+        bookTitle={book.title}
+        onClose={() => setModalOpen(false)}
+        onLogged={() => {
+          setJustLogged(true);
+          setTimeout(() => setJustLogged(false), 3000);
+        }}
+      />
     </ScrollView>
   );
 }
@@ -91,6 +112,18 @@ const styles = StyleSheet.create({
   author: { fontSize: 13, color: colors.charcoalMuted, fontFamily: fonts.sans },
   meta: { fontSize: 12, color: colors.charcoalMuted, fontFamily: fonts.sans, marginTop: 4 },
   rating: { fontSize: 13, fontFamily: fonts.sansBold, color: colors.gold, marginTop: 6 },
+  addButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: colors.brand,
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginTop: -8,
+  },
+  addButtonText: { fontSize: 13, fontFamily: fonts.sansBold, color: colors.white },
+  savedText: { fontSize: 12, fontFamily: fonts.sans, color: colors.brand, textAlign: "center", marginTop: -12 },
   genreRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   genreBadge: {
     backgroundColor: colors.creamCard,

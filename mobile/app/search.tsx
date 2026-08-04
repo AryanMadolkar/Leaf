@@ -9,10 +9,12 @@ import {
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { authFetch } from "@/lib/api";
 import { resolveMediaUrl } from "@/lib/media";
 import type { Book } from "@/lib/types";
 import BookCover from "@/components/BookCover";
+import LogBookModal from "@/components/LogBookModal";
 import { colors, fonts } from "@/constants/theme";
 
 type UserResult = {
@@ -33,6 +35,7 @@ export default function SearchScreen() {
   const [books, setBooks] = useState<Book[]>([]);
   const [users, setUsers] = useState<UserResult[]>([]);
   const [loading, setLoading] = useState(false);
+  const [logBook, setLogBook] = useState<Book | null>(null);
 
   const runSearch = useCallback(async (q: string) => {
     if (q.trim().length < 2) {
@@ -83,13 +86,18 @@ export default function SearchScreen() {
         <View style={styles.grid}>
           {books.map((book) => (
             <View key={book.id} style={styles.bookCell}>
-              <BookCover
-                uri={book.coverImage}
-                title={book.title}
-                width={100}
-                height={148}
-                onPress={() => router.push(`/book/${book.id}` as any)}
-              />
+              <View>
+                <BookCover
+                  uri={book.coverImage}
+                  title={book.title}
+                  width={100}
+                  height={148}
+                  onPress={() => router.push(`/book/${book.id}` as any)}
+                />
+                <Pressable style={styles.logButton} onPress={() => setLogBook(book)}>
+                  <Ionicons name="add" size={14} color={colors.white} />
+                </Pressable>
+              </View>
               <Text style={styles.bookTitle} numberOfLines={2}>
                 {book.title}
               </Text>
@@ -133,6 +141,15 @@ export default function SearchScreen() {
           )}
         </View>
       )}
+
+      {logBook && (
+        <LogBookModal
+          visible
+          bookId={logBook.id}
+          bookTitle={logBook.title}
+          onClose={() => setLogBook(null)}
+        />
+      )}
     </View>
   );
 }
@@ -170,6 +187,19 @@ const styles = StyleSheet.create({
   tabButtonText: { fontSize: 12, fontFamily: fonts.sansSemiBold, color: colors.charcoal },
   tabButtonTextActive: { color: colors.white },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 12, paddingHorizontal: 16 },
+  logButton: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.brand,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: colors.cream,
+  },
   bookCell: { width: 100, gap: 4 },
   bookTitle: { fontSize: 11, fontFamily: fonts.sansBold, color: colors.charcoal },
   bookAuthor: { fontSize: 10, color: colors.charcoalMuted, fontFamily: fonts.sans },
