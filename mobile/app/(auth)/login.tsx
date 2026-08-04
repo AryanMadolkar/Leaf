@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { Link } from "expo-router";
 import { useAuth } from "@/lib/auth";
+import { colors, fonts } from "@/constants/theme";
 
 export default function LoginScreen() {
   const { login } = useAuth();
@@ -63,7 +64,7 @@ export default function LoginScreen() {
           onPress={handleSubmit}
           disabled={submitting || !email || !password}
         >
-          {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign In</Text>}
+          {submitting ? <ActivityIndicator color={colors.white} /> : <Text style={styles.buttonText}>Sign In</Text>}
         </Pressable>
 
         <Link href="/(auth)/signup" style={styles.link}>
@@ -75,29 +76,30 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#faf7f2" },
+  container: { flex: 1, backgroundColor: colors.cream },
   content: { flex: 1, justifyContent: "center", paddingHorizontal: 24, gap: 12 },
-  title: { fontFamily: "InstrumentSerif_400Regular", fontSize: 40, textAlign: "center", color: "#2a2420" },
-  subtitle: { fontSize: 14, textAlign: "center", color: "#8a7f72", marginBottom: 16 },
-  error: { color: "#b3261e", fontSize: 13, textAlign: "center", marginBottom: 4 },
+  title: { fontFamily: fonts.serif, fontSize: 44, textAlign: "center", color: colors.charcoal },
+  subtitle: { fontSize: 14, fontFamily: fonts.sans, textAlign: "center", color: colors.charcoalMuted, marginBottom: 16 },
+  error: { color: colors.error, fontSize: 13, fontFamily: fonts.sans, textAlign: "center", marginBottom: 4 },
   input: {
     borderWidth: 1,
-    borderColor: "#e4dccf",
+    borderColor: colors.creamBorder,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 15,
-    backgroundColor: "#fff",
+    fontFamily: fonts.sans,
+    backgroundColor: colors.creamCard,
   },
   button: {
-    backgroundColor: "#3f6b4f",
+    backgroundColor: colors.brand,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
     marginTop: 8,
   },
   buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+  buttonText: { color: colors.white, fontFamily: fonts.sansBold, fontSize: 15 },
   link: { marginTop: 16, alignSelf: "center" },
-  linkText: { color: "#3f6b4f", fontSize: 13, fontWeight: "600" },
+  linkText: { color: colors.brand, fontSize: 13, fontFamily: fonts.sansSemiBold },
 });

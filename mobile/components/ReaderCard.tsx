@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { authFetch } from "@/lib/api";
 import { resolveMediaUrl } from "@/lib/media";
 import type { Reader } from "@/lib/types";
+import { colors, fonts } from "@/constants/theme";
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -71,7 +72,7 @@ export default function ReaderCard({ reader }: { reader: Reader }) {
         style={[styles.followButton, isFollowing && styles.followingButton]}
       >
         {pending ? (
-          <ActivityIndicator size="small" color={isFollowing ? "#2a2420" : "#fff"} />
+          <ActivityIndicator size="small" color={isFollowing ? colors.charcoal : colors.white} />
         ) : (
           <Text style={[styles.followText, isFollowing && styles.followingText]}>
             {isFollowing ? "Following" : "Follow"}
@@ -88,24 +89,24 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 6,
     alignItems: "center",
-    backgroundColor: "#fff",
+    backgroundColor: colors.creamCard,
     borderWidth: 1,
-    borderColor: "#e4dccf",
+    borderColor: colors.creamBorder,
     borderRadius: 16,
   },
-  avatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: "#e8e0d4" },
+  avatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.creamDark },
   avatarFallback: { alignItems: "center", justifyContent: "center" },
-  avatarInitials: { fontWeight: "700", color: "#3f6b4f" },
-  name: { fontSize: 12, fontWeight: "700", color: "#2a2420" },
-  username: { fontSize: 10, color: "#8a7f72" },
+  avatarInitials: { fontFamily: fonts.sansBold, color: colors.brand },
+  name: { fontSize: 12, fontFamily: fonts.sansBold, color: colors.charcoal },
+  username: { fontSize: 10, color: colors.charcoalMuted, fontFamily: fonts.sans },
   badgeRow: { flexDirection: "row", gap: 6, marginTop: 2 },
   genreBadge: {
     fontSize: 9,
-    fontWeight: "600",
-    color: "#8a7f72",
-    backgroundColor: "#faf7f2",
+    fontFamily: fonts.sansSemiBold,
+    color: colors.charcoalMuted,
+    backgroundColor: colors.cream,
     borderWidth: 1,
-    borderColor: "#e4dccf",
+    borderColor: colors.creamBorder,
     borderRadius: 999,
     paddingHorizontal: 8,
     paddingVertical: 2,
@@ -113,8 +114,8 @@ const styles = StyleSheet.create({
   },
   streakBadge: {
     fontSize: 9,
-    fontWeight: "700",
-    color: "#3f6b4f",
+    fontFamily: fonts.sansBold,
+    color: colors.brand,
     backgroundColor: "#e8f0e9",
     borderRadius: 999,
     paddingHorizontal: 8,
@@ -126,9 +127,9 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 8,
     alignItems: "center",
-    backgroundColor: "#3f6b4f",
+    backgroundColor: colors.brand,
   },
-  followingButton: { backgroundColor: "#efe9de" },
-  followText: { fontSize: 11, fontWeight: "700", color: "#fff" },
-  followingText: { color: "#2a2420" },
+  followingButton: { backgroundColor: colors.creamDark },
+  followText: { fontSize: 11, fontFamily: fonts.sansBold, color: colors.white },
+  followingText: { color: colors.charcoal },
 });

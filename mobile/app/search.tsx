@@ -13,6 +13,7 @@ import { authFetch } from "@/lib/api";
 import { resolveMediaUrl } from "@/lib/media";
 import type { Book } from "@/lib/types";
 import BookCover from "@/components/BookCover";
+import { colors, fonts } from "@/constants/theme";
 
 type UserResult = {
   id: string;
@@ -145,39 +146,46 @@ function TabButton({ label, active, onPress }: { label: string; active: boolean;
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#faf7f2" },
+  container: { flex: 1, backgroundColor: colors.cream },
   searchBar: { padding: 16 },
   input: {
     borderWidth: 1,
-    borderColor: "#e4dccf",
+    borderColor: colors.creamBorder,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 14,
-    backgroundColor: "#fff",
+    fontFamily: fonts.sans,
+    backgroundColor: colors.creamCard,
   },
   tabs: { flexDirection: "row", gap: 8, paddingHorizontal: 16, marginBottom: 12 },
-  tabButton: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999, borderWidth: 1, borderColor: "#e4dccf" },
-  tabButtonActive: { backgroundColor: "#3f6b4f", borderColor: "#3f6b4f" },
-  tabButtonText: { fontSize: 12, fontWeight: "600", color: "#2a2420" },
-  tabButtonTextActive: { color: "#fff" },
+  tabButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.creamBorder,
+  },
+  tabButtonActive: { backgroundColor: colors.brand, borderColor: colors.brand },
+  tabButtonText: { fontSize: 12, fontFamily: fonts.sansSemiBold, color: colors.charcoal },
+  tabButtonTextActive: { color: colors.white },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 12, paddingHorizontal: 16 },
   bookCell: { width: 100, gap: 4 },
-  bookTitle: { fontSize: 11, fontWeight: "700", color: "#2a2420" },
-  bookAuthor: { fontSize: 10, color: "#8a7f72" },
-  emptyText: { fontSize: 12, color: "#8a7f72", fontStyle: "italic", marginTop: 12 },
+  bookTitle: { fontSize: 11, fontFamily: fonts.sansBold, color: colors.charcoal },
+  bookAuthor: { fontSize: 10, color: colors.charcoalMuted, fontFamily: fonts.sans },
+  emptyText: { fontSize: 12, color: colors.charcoalMuted, fontStyle: "italic", marginTop: 12, fontFamily: fonts.sans },
   userRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    backgroundColor: "#fff",
+    backgroundColor: colors.creamCard,
     borderWidth: 1,
-    borderColor: "#e4dccf",
+    borderColor: colors.creamBorder,
     borderRadius: 12,
     padding: 12,
   },
-  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#e8e0d4" },
+  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.creamDark },
   avatarFallback: {},
-  userName: { fontSize: 13, fontWeight: "700", color: "#2a2420" },
-  userHandle: { fontSize: 11, color: "#8a7f72" },
+  userName: { fontSize: 13, fontFamily: fonts.sansBold, color: colors.charcoal },
+  userHandle: { fontSize: 11, color: colors.charcoalMuted, fontFamily: fonts.sans },
 });

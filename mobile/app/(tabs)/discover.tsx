@@ -8,9 +8,11 @@ import {
   Text,
   View,
 } from "react-native";
+import { useRouter } from "expo-router";
 import { authFetch } from "@/lib/api";
 import type { Book } from "@/lib/types";
 import BookCover from "@/components/BookCover";
+import { colors, fonts } from "@/constants/theme";
 
 const SHELVES: { key: string; title: string }[] = [
   { key: "trending", title: "Trending This Week" },
@@ -40,6 +42,7 @@ async function fetchShelf(shelf: string): Promise<Book[]> {
 }
 
 export default function DiscoverScreen() {
+  const router = useRouter();
   const [featured, setFeatured] = useState<Book | null>(null);
   const [shelves, setShelves] = useState<Record<string, Book[]>>({});
   const [loading, setLoading] = useState(true);
@@ -90,7 +93,13 @@ export default function DiscoverScreen() {
         <View style={styles.hero}>
           <Text style={styles.heroLabel}>Featured Volume of the Day</Text>
           <View style={styles.heroBody}>
-            <BookCover uri={featured.coverImage} title={featured.title} width={90} height={132} />
+            <BookCover
+              uri={featured.coverImage}
+              title={featured.title}
+              width={90}
+              height={132}
+              onPress={() => router.push(`/book/${featured.id}` as any)}
+            />
             <View style={styles.heroInfo}>
               <Text style={styles.heroTitle} numberOfLines={2}>
                 {featured.title}
@@ -120,7 +129,13 @@ export default function DiscoverScreen() {
               contentContainerStyle={{ gap: 12 }}
               renderItem={({ item }) => (
                 <View style={styles.bookCard}>
-                  <BookCover uri={item.coverImage} title={item.title} width={100} height={148} />
+                  <BookCover
+                    uri={item.coverImage}
+                    title={item.title}
+                    width={100}
+                    height={148}
+                    onPress={() => router.push(`/book/${item.id}` as any)}
+                  />
                   <Text style={styles.bookTitle} numberOfLines={1}>
                     {item.title}
                   </Text>
@@ -138,26 +153,32 @@ export default function DiscoverScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#faf7f2" },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#faf7f2" },
+  container: { flex: 1, backgroundColor: colors.cream },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.cream },
   content: { padding: 16, gap: 24, paddingBottom: 48 },
   hero: {
-    backgroundColor: "#fff",
+    backgroundColor: colors.creamCard,
     borderWidth: 1,
-    borderColor: "#e4dccf",
+    borderColor: colors.creamBorder,
     borderRadius: 16,
     padding: 16,
     gap: 10,
   },
-  heroLabel: { fontSize: 9, fontWeight: "700", color: "#3f6b4f", textTransform: "uppercase", letterSpacing: 0.5 },
+  heroLabel: {
+    fontSize: 9,
+    fontFamily: fonts.sansBold,
+    color: colors.brand,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
   heroBody: { flexDirection: "row", gap: 12 },
   heroInfo: { flex: 1, gap: 4, justifyContent: "center" },
-  heroTitle: { fontSize: 16, fontWeight: "700", color: "#2a2420" },
-  heroAuthor: { fontSize: 11, color: "#8a7f72" },
-  heroDescription: { fontSize: 11, color: "#6b6255", lineHeight: 16 },
+  heroTitle: { fontSize: 18, fontFamily: fonts.serif, color: colors.charcoal },
+  heroAuthor: { fontSize: 11, color: colors.charcoalMuted, fontFamily: fonts.sans },
+  heroDescription: { fontSize: 11, color: colors.charcoalLight, fontFamily: fonts.sans, lineHeight: 16 },
   section: { gap: 10 },
-  sectionTitle: { fontSize: 16, fontWeight: "700", color: "#2a2420" },
+  sectionTitle: { fontSize: 18, fontFamily: fonts.serif, color: colors.charcoal },
   bookCard: { width: 100, gap: 4 },
-  bookTitle: { fontSize: 11, fontWeight: "700", color: "#2a2420" },
-  bookAuthor: { fontSize: 10, color: "#8a7f72" },
+  bookTitle: { fontSize: 11, fontFamily: fonts.sansBold, color: colors.charcoal },
+  bookAuthor: { fontSize: 10, color: colors.charcoalMuted, fontFamily: fonts.sans },
 });

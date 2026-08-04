@@ -12,6 +12,7 @@ import {
 import { authFetch } from "@/lib/api";
 import { resolveMediaUrl } from "@/lib/media";
 import type { ProfileData, ProfileStats } from "@/lib/profile";
+import { colors, fonts } from "@/constants/theme";
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -125,20 +126,14 @@ export default function ProfileView({ username, onLogout }: { username: string; 
           </View>
         </View>
 
-        {profile.isMe ? (
-          onLogout && (
-            <Pressable onPress={onLogout} style={styles.logoutButton}>
-              <Text style={styles.logoutText}>Sign Out</Text>
-            </Pressable>
-          )
-        ) : (
+        {!profile.isMe && (
           <Pressable
             onPress={toggleFollow}
             disabled={followPending}
             style={[styles.followButton, profile.isFollowing && styles.followingButton]}
           >
             {followPending ? (
-              <ActivityIndicator size="small" color={profile.isFollowing ? "#2a2420" : "#fff"} />
+              <ActivityIndicator size="small" color={profile.isFollowing ? colors.charcoal : colors.white} />
             ) : (
               <Text style={[styles.followText, profile.isFollowing && styles.followingText]}>
                 {profile.isFollowing ? "Following" : "Follow"}
@@ -170,6 +165,12 @@ export default function ProfileView({ username, onLogout }: { username: string; 
           </View>
         </>
       )}
+
+      {profile.isMe && onLogout && (
+        <Pressable onPress={onLogout} style={styles.logoutButton}>
+          <Text style={styles.logoutText}>Sign Out</Text>
+        </Pressable>
+      )}
     </ScrollView>
   );
 }
@@ -187,55 +188,56 @@ function StatCard({ label, value, suffix = "" }: { label: string; value: number;
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#faf7f2" },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#faf7f2" },
-  errorText: { fontSize: 13, color: "#8a7f72" },
+  container: { flex: 1, backgroundColor: colors.cream },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.cream },
+  errorText: { fontSize: 13, color: colors.charcoalMuted, fontFamily: fonts.sans },
   content: { padding: 16, gap: 14, paddingBottom: 48 },
   header: { alignItems: "center", gap: 4, paddingVertical: 12 },
-  avatar: { width: 84, height: 84, borderRadius: 42, backgroundColor: "#e8e0d4", marginBottom: 8 },
+  avatar: { width: 84, height: 84, borderRadius: 42, backgroundColor: colors.creamDark, marginBottom: 8 },
   avatarFallback: { alignItems: "center", justifyContent: "center" },
-  avatarInitials: { fontSize: 24, fontWeight: "700", color: "#3f6b4f" },
-  name: { fontSize: 20, fontWeight: "700", color: "#2a2420" },
-  username: { fontSize: 12, color: "#8a7f72" },
-  bio: { fontSize: 12, color: "#6b6255", textAlign: "center", marginTop: 6, paddingHorizontal: 24 },
+  avatarInitials: { fontSize: 24, fontFamily: fonts.sansBold, color: colors.brand },
+  name: { fontSize: 24, fontFamily: fonts.serif, color: colors.charcoal },
+  username: { fontSize: 12, color: colors.charcoalMuted, fontFamily: fonts.sans },
+  bio: { fontSize: 12, color: colors.charcoalLight, fontFamily: fonts.sans, textAlign: "center", marginTop: 6, paddingHorizontal: 24 },
   countsRow: { flexDirection: "row", gap: 28, marginTop: 12 },
   countItem: { alignItems: "center" },
-  countValue: { fontSize: 15, fontWeight: "700", color: "#2a2420" },
-  countLabel: { fontSize: 10, color: "#8a7f72", textTransform: "uppercase", fontWeight: "600" },
+  countValue: { fontSize: 15, fontFamily: fonts.sansBold, color: colors.charcoal },
+  countLabel: { fontSize: 10, color: colors.charcoalMuted, textTransform: "uppercase", fontFamily: fonts.sansSemiBold },
   followButton: {
     marginTop: 14,
     paddingHorizontal: 24,
     paddingVertical: 9,
     borderRadius: 10,
-    backgroundColor: "#3f6b4f",
+    backgroundColor: colors.brand,
   },
-  followingButton: { backgroundColor: "#efe9de" },
-  followText: { fontSize: 13, fontWeight: "700", color: "#fff" },
-  followingText: { color: "#2a2420" },
+  followingButton: { backgroundColor: colors.creamDark },
+  followText: { fontSize: 13, fontFamily: fonts.sansBold, color: colors.white },
+  followingText: { color: colors.charcoal },
   logoutButton: {
-    marginTop: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
+    marginTop: 8,
+    alignSelf: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#e4dccf",
+    borderColor: colors.creamBorder,
   },
-  logoutText: { fontSize: 12, fontWeight: "600", color: "#2a2420" },
+  logoutText: { fontSize: 12, fontFamily: fonts.sansSemiBold, color: colors.charcoal },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   statCard: {
     flexGrow: 1,
     flexBasis: "45%",
-    backgroundColor: "#fff",
+    backgroundColor: colors.creamCard,
     borderWidth: 1,
-    borderColor: "#e4dccf",
+    borderColor: colors.creamBorder,
     borderRadius: 14,
     padding: 16,
     alignItems: "center",
     gap: 4,
   },
-  statValue: { fontSize: 22, fontWeight: "700", color: "#2a2420" },
-  statLabel: { fontSize: 10, color: "#8a7f72", textTransform: "uppercase", fontWeight: "600", textAlign: "center" },
-  card: { backgroundColor: "#fff", borderWidth: 1, borderColor: "#e4dccf", borderRadius: 14, padding: 16, gap: 4 },
-  cardLabel: { fontSize: 10, color: "#8a7f72", textTransform: "uppercase", fontWeight: "600" },
-  cardValue: { fontSize: 18, fontWeight: "700", color: "#2a2420" },
+  statValue: { fontSize: 22, fontFamily: fonts.sansBold, color: colors.charcoal },
+  statLabel: { fontSize: 10, color: colors.charcoalMuted, textTransform: "uppercase", fontFamily: fonts.sansSemiBold, textAlign: "center" },
+  card: { backgroundColor: colors.creamCard, borderWidth: 1, borderColor: colors.creamBorder, borderRadius: 14, padding: 16, gap: 4 },
+  cardLabel: { fontSize: 10, color: colors.charcoalMuted, textTransform: "uppercase", fontFamily: fonts.sansSemiBold },
+  cardValue: { fontSize: 18, fontFamily: fonts.sansBold, color: colors.charcoal },
 });

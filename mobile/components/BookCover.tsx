@@ -1,6 +1,7 @@
 import React from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { resolveMediaUrl } from "@/lib/media";
+import { colors, fonts } from "@/constants/theme";
 
 export default function BookCover({
   uri,
@@ -31,7 +32,7 @@ export default function BookCover({
 }
 
 const styles = StyleSheet.create({
-  cover: { borderRadius: 8, backgroundColor: "#e8e0d4" },
+  cover: { borderRadius: 8, backgroundColor: colors.creamDark },
   fallback: { alignItems: "center", justifyContent: "center", padding: 8 },
-  fallbackText: { fontSize: 10, fontWeight: "700", color: "#3f6b4f", textAlign: "center" },
+  fallbackText: { fontSize: 10, fontFamily: fonts.sansBold, color: colors.brand, textAlign: "center" },
 });
