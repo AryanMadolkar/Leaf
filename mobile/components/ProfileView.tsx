@@ -13,6 +13,7 @@ import { authFetch } from "@/lib/api";
 import { resolveMediaUrl } from "@/lib/media";
 import type { ProfileData, ProfileStats } from "@/lib/profile";
 import { colors, fonts } from "@/constants/theme";
+import FollowListModal from "@/components/FollowListModal";
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -28,6 +29,7 @@ export default function ProfileView({ username, onLogout }: { username: string; 
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [followPending, setFollowPending] = useState(false);
+  const [listModal, setListModal] = useState<"followers" | "following" | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -116,14 +118,14 @@ export default function ProfileView({ username, onLogout }: { username: string; 
         {!!profile.bio && <Text style={styles.bio}>{profile.bio}</Text>}
 
         <View style={styles.countsRow}>
-          <View style={styles.countItem}>
+          <Pressable style={styles.countItem} onPress={() => setListModal("followers")}>
             <Text style={styles.countValue}>{profile.followersCount}</Text>
             <Text style={styles.countLabel}>Followers</Text>
-          </View>
-          <View style={styles.countItem}>
+          </Pressable>
+          <Pressable style={styles.countItem} onPress={() => setListModal("following")}>
             <Text style={styles.countValue}>{profile.followingCount}</Text>
             <Text style={styles.countLabel}>Following</Text>
-          </View>
+          </Pressable>
         </View>
 
         {!profile.isMe && (
@@ -170,6 +172,15 @@ export default function ProfileView({ username, onLogout }: { username: string; 
         <Pressable onPress={onLogout} style={styles.logoutButton}>
           <Text style={styles.logoutText}>Sign Out</Text>
         </Pressable>
+      )}
+
+      {listModal && (
+        <FollowListModal
+          visible
+          userId={profile.id}
+          type={listModal}
+          onClose={() => setListModal(null)}
+        />
       )}
     </ScrollView>
   );

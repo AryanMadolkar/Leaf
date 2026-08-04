@@ -2,16 +2,21 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Modal,
   Pressable,
   RefreshControl,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { authFetch } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import { API_BASE_URL } from "@/lib/config";
 import type { Book, LibraryPayload, LibraryShelf } from "@/lib/types";
 import BookCover from "@/components/BookCover";
 import Bookshelf from "@/components/Bookshelf";
@@ -22,12 +27,16 @@ type ViewMode = "shelf" | "grid";
 
 export default function LibraryScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const [library, setLibrary] = useState<LibraryPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeShelfId, setActiveShelfId] = useState<string>(ALL_SHELF_ID);
   const [viewMode, setViewMode] = useState<ViewMode>("shelf");
+  const [newShelfOpen, setNewShelfOpen] = useState(false);
+  const [newShelfName, setNewShelfName] = useState("");
+  const [creatingShelf, setCreatingShelf] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -68,6 +77,40 @@ export default function LibraryScreen() {
 
   const openBook = (book: Book) => router.push(`/book/${book.id}` as any);
 
+  const shareLibrary = async () => {
+    if (!user) return;
+    try {
+      await Share.share({
+        message: `Check out my bookshelf on Leaf: ${API_BASE_URL}/u/${user.username}/library`,
+        url: `${API_BASE_URL}/u/${user.username}/library`,
+      });
+    } catch {
+      // user cancelled or share failed — nothing to do
+    }
+  };
+
+  const createShelf = async () => {
+    const name = newShelfName.trim();
+    if (!name) return;
+    setCreatingShelf(true);
+    try {
+      const res = await authFetch("/api/library", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "create_shelf", name }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "Could not create shelf");
+      setLibrary(data.library);
+      setNewShelfName("");
+      setNewShelfOpen(false);
+    } catch {
+      // silently keep the modal open — user can retry
+    } finally {
+      setCreatingShelf(false);
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -93,44 +136,93 @@ export default function LibraryScreen() {
         <StatTile label="Genres" value={library.stats.genres} />
       </View>
 
-      <View style={styles.toolbar}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={{ flex: 1 }}
-          contentContainerStyle={{ gap: 8 }}
-        >
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.shelfRow}
+        contentContainerStyle={styles.shelfRowContent}
+      >
+        <ShelfChip
+          label={`All (${library.books.length})`}
+          active={activeShelfId === ALL_SHELF_ID}
+          onPress={() => setActiveShelfId(ALL_SHELF_ID)}
+        />
+        {shelves.map((shelf) => (
           <ShelfChip
-            label={`All (${library.books.length})`}
-            active={activeShelfId === ALL_SHELF_ID}
-            onPress={() => setActiveShelfId(ALL_SHELF_ID)}
+            key={shelf.id}
+            label={`${shelf.name} (${shelf.bookIds.length})`}
+            active={activeShelfId === shelf.id}
+            onPress={() => setActiveShelfId(shelf.id)}
           />
-          {shelves.map((shelf) => (
-            <ShelfChip
-              key={shelf.id}
-              label={`${shelf.name} (${shelf.bookIds.length})`}
-              active={activeShelfId === shelf.id}
-              onPress={() => setActiveShelfId(shelf.id)}
-            />
-          ))}
-        </ScrollView>
+        ))}
+        <Pressable style={styles.newShelfChip} onPress={() => setNewShelfOpen(true)}>
+          <Ionicons name="add" size={14} color={colors.brand} />
+          <Text style={styles.newShelfChipText}>New Shelf</Text>
+        </Pressable>
+      </ScrollView>
 
-        <View style={styles.viewToggle}>
-          <Pressable
-            onPress={() => setViewMode("shelf")}
-            style={[styles.viewToggleButton, viewMode === "shelf" && styles.viewToggleButtonActive]}
-          >
-            <Ionicons name="library" size={16} color={viewMode === "shelf" ? colors.white : colors.charcoalMuted} />
-          </Pressable>
-          <Pressable
-            onPress={() => setViewMode("grid")}
-            style={[styles.viewToggleButton, viewMode === "grid" && styles.viewToggleButtonActive]}
-          >
-            <Ionicons name="grid" size={16} color={viewMode === "grid" ? colors.white : colors.charcoalMuted} />
+      <View style={styles.toolbar}>
+        <Text style={styles.resultsText}>
+          {visibleBooks.length} {visibleBooks.length === 1 ? "book" : "books"}
+        </Text>
+
+        <View style={styles.toolbarActions}>
+          <View style={styles.viewToggle}>
+            <Pressable
+              onPress={() => setViewMode("shelf")}
+              style={[styles.viewToggleButton, viewMode === "shelf" && styles.viewToggleButtonActive]}
+            >
+              <Ionicons name="library" size={15} color={viewMode === "shelf" ? colors.white : colors.charcoalMuted} />
+            </Pressable>
+            <Pressable
+              onPress={() => setViewMode("grid")}
+              style={[styles.viewToggleButton, viewMode === "grid" && styles.viewToggleButtonActive]}
+            >
+              <Ionicons name="grid" size={15} color={viewMode === "grid" ? colors.white : colors.charcoalMuted} />
+            </Pressable>
+          </View>
+
+          <Pressable onPress={shareLibrary} style={styles.shareButton}>
+            <Ionicons name="share-outline" size={16} color={colors.charcoalMuted} />
           </Pressable>
         </View>
       </View>
     </>
+  );
+
+  const newShelfModal = (
+    <Modal visible={newShelfOpen} transparent animationType="fade" onRequestClose={() => setNewShelfOpen(false)}>
+      <View style={styles.modalBackdrop}>
+        <View style={styles.modalSheet}>
+          <Text style={styles.modalTitle}>New Shelf</Text>
+          <TextInput
+            style={styles.modalInput}
+            placeholder="Shelf name"
+            value={newShelfName}
+            onChangeText={setNewShelfName}
+            autoFocus
+          />
+          <View style={styles.modalActions}>
+            <Pressable
+              style={styles.modalCancel}
+              onPress={() => {
+                setNewShelfOpen(false);
+                setNewShelfName("");
+              }}
+            >
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </Pressable>
+            <Pressable style={styles.modalSave} onPress={createShelf} disabled={creatingShelf}>
+              {creatingShelf ? (
+                <ActivityIndicator size="small" color={colors.white} />
+              ) : (
+                <Text style={styles.modalSaveText}>Create</Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 
   if (viewMode === "shelf") {
@@ -142,6 +234,7 @@ export default function LibraryScreen() {
       >
         {header}
         <Bookshelf books={visibleBooks} onPressBook={openBook} />
+        {newShelfModal}
       </ScrollView>
     );
   }
@@ -156,6 +249,7 @@ export default function LibraryScreen() {
       contentContainerStyle={styles.content}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       ListHeaderComponent={header}
+      ListFooterComponent={newShelfModal}
       ListEmptyComponent={<Text style={styles.emptyText}>Nothing on this shelf yet.</Text>}
       renderItem={({ item }) => (
         <View style={styles.bookCell}>
@@ -204,13 +298,30 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
   },
-  statTile: { alignItems: "center" },
-  statValue: { fontSize: 18, fontFamily: fonts.sansBold, color: colors.charcoal },
-  statLabel: { fontSize: 10, color: colors.charcoalMuted, textTransform: "uppercase", fontFamily: fonts.sansSemiBold },
-  toolbar: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 6 },
+  statTile: { alignItems: "center", gap: 2 },
+  statValue: { fontSize: 20, fontFamily: fonts.sansBold, color: colors.charcoal },
+  statLabel: { fontSize: 9, color: colors.charcoalMuted, textTransform: "uppercase", fontFamily: fonts.sansSemiBold, letterSpacing: 0.4 },
+  shelfRow: { flexGrow: 0 },
+  shelfRowContent: { flexDirection: "row", gap: 8, paddingRight: 4 },
+  toolbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 2,
+    marginBottom: 4,
+  },
+  toolbarActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  resultsText: { fontSize: 12, color: colors.charcoalMuted, fontFamily: fonts.sans },
+  shareButton: {
+    padding: 9,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.creamBorder,
+    backgroundColor: colors.creamCard,
+  },
   chip: {
     paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingVertical: 8,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: colors.creamBorder,
@@ -219,6 +330,18 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: colors.brand, borderColor: colors.brand },
   chipText: { fontSize: 12, fontFamily: fonts.sansSemiBold, color: colors.charcoal },
   chipTextActive: { color: colors.white },
+  newShelfChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.brand,
+    borderStyle: "dashed",
+  },
+  newShelfChipText: { fontSize: 12, fontFamily: fonts.sansSemiBold, color: colors.brand },
   viewToggle: {
     flexDirection: "row",
     borderWidth: 1,
@@ -232,4 +355,23 @@ const styles = StyleSheet.create({
   bookCell: { flex: 1 / 3, gap: 4, marginBottom: 16 },
   bookTitle: { fontSize: 11, fontFamily: fonts.sansBold, color: colors.charcoal },
   bookAuthor: { fontSize: 10, color: colors.charcoalMuted, fontFamily: fonts.sans },
+  modalBackdrop: { flex: 1, backgroundColor: "rgba(28,28,26,0.4)", justifyContent: "center", padding: 24 },
+  modalSheet: { backgroundColor: colors.cream, borderRadius: 20, padding: 20, gap: 12 },
+  modalTitle: { fontSize: 18, fontFamily: fonts.serif, color: colors.charcoal },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: colors.creamBorder,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    fontFamily: fonts.sans,
+    backgroundColor: colors.creamCard,
+    color: colors.charcoal,
+  },
+  modalActions: { flexDirection: "row", justifyContent: "flex-end", gap: 10 },
+  modalCancel: { paddingHorizontal: 16, paddingVertical: 10 },
+  modalCancelText: { fontSize: 13, fontFamily: fonts.sansSemiBold, color: colors.charcoalMuted },
+  modalSave: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10, backgroundColor: colors.brand },
+  modalSaveText: { fontSize: 13, fontFamily: fonts.sansBold, color: colors.white },
 });

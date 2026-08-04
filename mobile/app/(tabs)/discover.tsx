@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -17,7 +18,18 @@ import { colors, fonts } from "@/constants/theme";
 const SHELVES: { key: string; title: string }[] = [
   { key: "trending", title: "Trending This Week" },
   { key: "all-time-greats", title: "All-Time Greats" },
+  { key: "most-added", title: "Most Added This Month" },
+  { key: "booktok", title: "BookTok Favorites" },
   { key: "award-winners", title: "Award Winners" },
+  { key: "modern-classics", title: "Modern Classics" },
+  { key: "scifi", title: "Sci-Fi Essentials" },
+  { key: "fantasy", title: "Fantasy Essentials" },
+  { key: "literary", title: "Literary Fiction" },
+  { key: "mystery", title: "Mystery & Thriller" },
+  { key: "romance", title: "Romance Pillars" },
+  { key: "historical", title: "Historical Fiction" },
+  { key: "biography", title: "Biography & Memoir" },
+  { key: "nonfiction", title: "Non-Fiction Bestsellers" },
 ];
 
 async function fetchFeatured(): Promise<Book | null> {
@@ -31,9 +43,9 @@ async function fetchFeatured(): Promise<Book | null> {
   }
 }
 
-async function fetchShelf(shelf: string): Promise<Book[]> {
+async function fetchShelf(shelf: string, limit = 12): Promise<Book[]> {
   try {
-    const res = await authFetch(`/api/books/catalog?shelf=${shelf}&limit=12`);
+    const res = await authFetch(`/api/books/catalog?shelf=${shelf}&limit=${limit}`);
     const data = await res.json();
     return res.ok && data.success ? data.books : [];
   } catch {
@@ -45,13 +57,15 @@ export default function DiscoverScreen() {
   const router = useRouter();
   const [featured, setFeatured] = useState<Book | null>(null);
   const [shelves, setShelves] = useState<Record<string, Book[]>>({});
+  const [leaderboard, setLeaderboard] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
-    const [featuredBook, shelfResults] = await Promise.all([
+    const [featuredBook, shelfResults, lb] = await Promise.all([
       fetchFeatured(),
       Promise.all(SHELVES.map(async (s) => ({ key: s.key, books: await fetchShelf(s.key) }))),
+      fetchShelf("leaderboard", 25),
     ]);
     setFeatured(featuredBook);
     const map: Record<string, Book[]> = {};
@@ -59,6 +73,7 @@ export default function DiscoverScreen() {
       map[r.key] = r.books;
     });
     setShelves(map);
+    setLeaderboard(lb);
   }, []);
 
   useEffect(() => {
@@ -148,6 +163,33 @@ export default function DiscoverScreen() {
           </View>
         );
       })}
+
+      {leaderboard.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Top 25 Books on Leaf</Text>
+          <View style={{ gap: 8 }}>
+            {leaderboard.map((book, idx) => (
+              <Pressable
+                key={book.id}
+                style={styles.leaderboardRow}
+                onPress={() => router.push(`/book/${book.id}` as any)}
+              >
+                <Text style={styles.rank}>{idx + 1}</Text>
+                <BookCover uri={book.coverImage} title={book.title} width={40} height={58} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.bookTitle} numberOfLines={1}>
+                    {book.title}
+                  </Text>
+                  <Text style={styles.bookAuthor} numberOfLines={1}>
+                    {book.author}
+                  </Text>
+                </View>
+                {book.averageRating > 0 && <Text style={styles.rating}>★ {book.averageRating.toFixed(1)}</Text>}
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -181,4 +223,16 @@ const styles = StyleSheet.create({
   bookCard: { width: 100, gap: 4 },
   bookTitle: { fontSize: 11, fontFamily: fonts.sansBold, color: colors.charcoal },
   bookAuthor: { fontSize: 10, color: colors.charcoalMuted, fontFamily: fonts.sans },
+  leaderboardRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: colors.creamCard,
+    borderWidth: 1,
+    borderColor: colors.creamBorder,
+    borderRadius: 10,
+    padding: 8,
+  },
+  rank: { width: 20, textAlign: "center", fontSize: 13, fontFamily: fonts.serif, color: colors.brandMuted },
+  rating: { fontSize: 10, fontFamily: fonts.sansBold, color: colors.gold },
 });

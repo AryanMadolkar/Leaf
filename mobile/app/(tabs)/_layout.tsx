@@ -79,6 +79,13 @@ export default function TabLayout() {
         options={{
           title: "Profile",
           tabBarIcon: ({ color, size }) => <Ionicons name="person-circle" color={color} size={size} />,
+          headerRight: () => (
+            <Link href="/settings" asChild>
+              <Pressable style={{ marginRight: 16 }}>
+                <Ionicons name="settings-outline" size={22} color={Colors[colorScheme].text} />
+              </Pressable>
+            </Link>
+          ),
         }}
       />
     </Tabs>

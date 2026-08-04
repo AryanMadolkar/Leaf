@@ -14,7 +14,19 @@ import { useAuth } from "@/lib/auth";
 import type { Book, Reader } from "@/lib/types";
 import ReaderCard from "@/components/ReaderCard";
 import BookCover from "@/components/BookCover";
+import ReviewCard, { type Review } from "@/components/ReviewCard";
 import { colors, fonts } from "@/constants/theme";
+
+async function fetchReviews(): Promise<Review[]> {
+  try {
+    const res = await authFetch("/api/reviews?limit=10");
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.success ? data.reviews : [];
+  } catch {
+    return [];
+  }
+}
 
 async function fetchReaders(type: "active" | "new"): Promise<Reader[]> {
   try {
@@ -65,23 +77,29 @@ export default function FeedScreen() {
   const [activeReaders, setActiveReaders] = useState<Reader[]>([]);
   const [newReaders, setNewReaders] = useState<Reader[]>([]);
   const [recentBooks, setRecentBooks] = useState<Book[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [loadingReaders, setLoadingReaders] = useState(true);
   const [loadingBooks, setLoadingBooks] = useState(true);
+  const [loadingReviews, setLoadingReviews] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     setLoadingReaders(true);
     setLoadingBooks(true);
-    const [active, fresh, books] = await Promise.all([
+    setLoadingReviews(true);
+    const [active, fresh, books, recentReviews] = await Promise.all([
       fetchReaders("active"),
       fetchReaders("new"),
       fetchRecentlyLogged(),
+      fetchReviews(),
     ]);
     setActiveReaders(active);
     setNewReaders(fresh);
     setRecentBooks(books);
+    setReviews(recentReviews);
     setLoadingReaders(false);
     setLoadingBooks(false);
+    setLoadingReviews(false);
   }, []);
 
   useEffect(() => {
@@ -141,6 +159,21 @@ export default function FeedScreen() {
 
       <ReaderSection title="Active Readers" readers={activeReaders} loading={loadingReaders} />
       <ReaderSection title="New Readers" readers={newReaders} loading={loadingReaders} />
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Recent Reviews</Text>
+        {loadingReviews ? (
+          <ActivityIndicator style={{ marginVertical: 16 }} />
+        ) : reviews.length === 0 ? (
+          <Text style={styles.emptyText}>No reviews yet.</Text>
+        ) : (
+          <View style={{ gap: 10 }}>
+            {reviews.map((r) => (
+              <ReviewCard key={r.id} review={r} />
+            ))}
+          </View>
+        )}
+      </View>
     </ScrollView>
   );
 }
