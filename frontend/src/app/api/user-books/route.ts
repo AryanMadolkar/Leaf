@@ -6,6 +6,7 @@ import { getRequestUser } from "@/utils/auth/getRequestUser";
 import { recalculateUserStats } from "@/utils/supabaseStats";
 import { getBookById, ensureBookRow } from "@/utils/booksApi";
 import { mapUserBookToDiaryLog } from "@/utils/diaryLogs";
+import { addBooksToCollectionShelf } from "@/utils/library";
 
 // 1. Environment verification helper
 function verifyEnv() {
@@ -309,6 +310,13 @@ export async function POST(request: Request) {
       dbResponse = res;
       console.log("[DEBUG] [user-books] Database insert response:", dbResponse);
       if (res.error) throw res.error;
+    }
+
+    // Keep Library shelves in sync (mobile Library reads library_shelf_books, not user_books alone)
+    try {
+      await addBooksToCollectionShelf(user.id, [resolvedBookId]);
+    } catch (shelfErr) {
+      console.error("[DEBUG] [user-books] Failed to add book to collection shelf:", shelfErr);
     }
 
     // 8. Upsert into public reviews feed table if review is provided

@@ -348,7 +348,11 @@ export async function searchLocalBooks(query: string): Promise<Book[]> {
 export async function searchOpenLibraryRemote(query: string): Promise<Book[]> {
   const res = await fetch(
     `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=12`,
-    { next: { revalidate: 300 } }
+    {
+      next: { revalidate: 300 },
+      // Open Library is often slow/unreachable — fail fast so shelf scan isn't blocked for 10s+ per book.
+      signal: AbortSignal.timeout(4000),
+    }
   );
   if (!res.ok) return [];
 

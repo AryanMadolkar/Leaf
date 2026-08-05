@@ -35,8 +35,9 @@ export async function GET(request: Request) {
     const supabase = createAdminClient();
     const { searchParams } = new URL(request.url);
     const limit = Math.min(Number(searchParams.get("limit") || 20), 50);
+    const bookId = searchParams.get("bookId")?.trim() || "";
 
-    const { data, error } = await supabase
+    let query = supabase
       .from("reviews")
       .select(`
         id,
@@ -51,6 +52,12 @@ export async function GET(request: Request) {
       `)
       .order("created_at", { ascending: false })
       .limit(limit);
+
+    if (bookId) {
+      query = query.eq("book_id", bookId);
+    }
+
+    const { data, error } = await query;
 
     if (error) throw error;
 

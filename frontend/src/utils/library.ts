@@ -218,7 +218,93 @@ export async function ensureLibraryForUser(userId: string) {
     }
   }
 
+  // Keep collection in sync with user_books (mobile logs/import only write user_books)
+  await syncUserBooksOntoCollection(admin, userId);
+
   return settings;
+}
+
+/** Append any user_books missing from the collection shelf. */
+async function syncUserBooksOntoCollection(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string,
+) {
+  const { data: shelves } = await admin
+    .from("library_shelves")
+    .select("id, system_key, slug")
+    .eq("user_id", userId);
+  const collectionId = (shelves || []).find(
+    (s: any) => s.system_key === "collection" || s.slug === "collection",
+  )?.id;
+  if (!collectionId) return;
+
+  const [{ data: userBooks }, { data: membership }] = await Promise.all([
+    admin.from("user_books").select("book_id").eq("user_id", userId),
+    admin.from("library_shelf_books").select("book_id, position").eq("shelf_id", collectionId),
+  ]);
+
+  const onShelf = new Set((membership || []).map((m: any) => m.book_id).filter(Boolean));
+  const missing = (userBooks || [])
+    .map((ub: any) => ub.book_id as string)
+    .filter((id) => id && !onShelf.has(id));
+  if (!missing.length) return;
+
+  const maxPos = (membership || []).reduce(
+    (max: number, m: any) => Math.max(max, typeof m.position === "number" ? m.position : -1),
+    -1,
+  );
+  let pos = maxPos + 1;
+  const rows = missing.map((book_id) => ({
+    shelf_id: collectionId,
+    book_id,
+    position: pos++,
+  }));
+
+  await admin.from("library_shelf_books").upsert(rows, { onConflict: "shelf_id,book_id" });
+}
+
+/** Ensure one or more books appear on the user's Collection shelf (Library UI source of truth). */
+export async function addBooksToCollectionShelf(userId: string, bookIds: string[]) {
+  const ids = Array.from(new Set(bookIds.filter(Boolean)));
+  if (!ids.length) return;
+
+  const admin = createAdminClient();
+  await ensureLibraryForUser(userId);
+
+  const { data: shelves } = await admin
+    .from("library_shelves")
+    .select("id, system_key, slug")
+    .eq("user_id", userId);
+  const collectionId = (shelves || []).find(
+    (s: any) => s.system_key === "collection" || s.slug === "collection",
+  )?.id;
+  if (!collectionId) return;
+
+  const { data: existing } = await admin
+    .from("library_shelf_books")
+    .select("book_id")
+    .eq("shelf_id", collectionId)
+    .in("book_id", ids);
+  const already = new Set((existing || []).map((r: any) => r.book_id));
+  const toAdd = ids.filter((id) => !already.has(id));
+  if (!toAdd.length) return;
+
+  const { data: last } = await admin
+    .from("library_shelf_books")
+    .select("position")
+    .eq("shelf_id", collectionId)
+    .order("position", { ascending: false })
+    .limit(1);
+  let pos = (last?.[0]?.position ?? -1) + 1;
+
+  await admin.from("library_shelf_books").upsert(
+    toAdd.map((book_id) => ({
+      shelf_id: collectionId,
+      book_id,
+      position: pos++,
+    })),
+    { onConflict: "shelf_id,book_id" },
+  );
 }
 
 export async function fetchLibraryPayload(userId: string): Promise<LibraryPayload> {

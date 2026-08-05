@@ -5,6 +5,7 @@ import { getRequestUser } from "@/utils/auth/getRequestUser";
 import { recalculateUserStats } from "@/utils/supabaseStats";
 import { getBookById, ensureBookRow } from "@/utils/booksApi";
 import { mapUserBookToDiaryLog } from "@/utils/diaryLogs";
+import { addBooksToCollectionShelf } from "@/utils/library";
 
 export async function GET(request: Request) {
   try {
@@ -145,6 +146,12 @@ export async function POST(request: Request) {
           created_at: new Date().toISOString(),
           current_page: endPage,
         });
+    }
+
+    try {
+      await addBooksToCollectionShelf(user.id, [resolvedBookId]);
+    } catch (shelfErr) {
+      console.error("[reading-sessions] Failed to add book to collection shelf:", shelfErr);
     }
 
     // 4. Recalculate stats dynamically in PostgreSQL

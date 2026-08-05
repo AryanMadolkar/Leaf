@@ -20,9 +20,10 @@
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
-        "CAMERA",
-        "READ_MEDIA_IMAGES",
-        "READ_EXTERNAL_STORAGE"
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
@@ -54,7 +55,11 @@
       "typedRoutes": true
     },
     "extra": {
-      "apiBaseUrl": "https://leaf-peach.vercel.app"
+      "apiBaseUrl": "https://leaf-peach.vercel.app",
+      "router": {},
+      "eas": {
+        "projectId": "df13f459-66c8-45d4-a066-b5ab06255f6f"
+      }
     }
   }
 }
