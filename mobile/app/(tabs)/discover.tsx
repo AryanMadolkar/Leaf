@@ -1,7 +1,6 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  FlatList,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -11,6 +10,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { authFetch } from "@/lib/api";
+import { bookHref } from "@/lib/navigation";
 import type { Book } from "@/lib/types";
 import BookCover from "@/components/BookCover";
 import { colors, fonts } from "@/constants/theme";
@@ -31,6 +31,9 @@ const SHELVES: { key: string; title: string }[] = [
   { key: "biography", title: "Biography & Memoir" },
   { key: "nonfiction", title: "Non-Fiction Bestsellers" },
 ];
+
+const PRIORITY_SHELVES = SHELVES.slice(0, 4);
+const REST_SHELVES = SHELVES.slice(4);
 
 async function fetchFeatured(): Promise<Book | null> {
   try {
@@ -53,47 +56,94 @@ async function fetchShelf(shelf: string, limit = 12): Promise<Book[]> {
   }
 }
 
+function toShelfMap(results: { key: string; books: Book[] }[]): Record<string, Book[]> {
+  const map: Record<string, Book[]> = {};
+  results.forEach((r) => {
+    map[r.key] = r.books;
+  });
+  return map;
+}
+
 export default function DiscoverScreen() {
   const router = useRouter();
   const [featured, setFeatured] = useState<Book | null>(null);
   const [shelves, setShelves] = useState<Record<string, Book[]>>({});
   const [leaderboard, setLeaderboard] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const cancelledRef = useRef(false);
 
   const load = useCallback(async () => {
-    const [featuredBook, shelfResults, lb] = await Promise.all([
+    cancelledRef.current = false;
+
+    const [featuredBook, priorityResults, lb] = await Promise.all([
       fetchFeatured(),
-      Promise.all(SHELVES.map(async (s) => ({ key: s.key, books: await fetchShelf(s.key) }))),
+      Promise.all(PRIORITY_SHELVES.map(async (s) => ({ key: s.key, books: await fetchShelf(s.key) }))),
       fetchShelf("leaderboard", 25),
     ]);
+
+    if (cancelledRef.current) return;
+
+    const priorityMap = toShelfMap(priorityResults);
     setFeatured(featuredBook);
-    const map: Record<string, Book[]> = {};
-    shelfResults.forEach((r) => {
-      map[r.key] = r.books;
-    });
-    setShelves(map);
+    setShelves(priorityMap);
     setLeaderboard(lb);
+
+    const hasPriority = priorityResults.some((r) => r.books.length > 0);
+    const failed = !featuredBook && !hasPriority && lb.length === 0;
+    setLoadFailed(failed);
+    setLoading(false);
+
+    if (failed || REST_SHELVES.length === 0) return;
+
+    setLoadingMore(true);
+    const restResults = await Promise.all(
+      REST_SHELVES.map(async (s) => ({ key: s.key, books: await fetchShelf(s.key) }))
+    );
+    if (cancelledRef.current) return;
+    setShelves((prev) => ({ ...prev, ...toShelfMap(restResults) }));
+    setLoadingMore(false);
   }, []);
 
   useEffect(() => {
-    (async () => {
-      setLoading(true);
-      await load();
-      setLoading(false);
-    })();
+    cancelledRef.current = false;
+    setLoading(true);
+    load();
+    return () => {
+      cancelledRef.current = true;
+    };
   }, [load]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
+    setLoadingMore(false);
     await load();
-    setRefreshing(false);
+    if (!cancelledRef.current) setRefreshing(false);
   }, [load]);
 
   if (loading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator />
+      </View>
+    );
+  }
+
+  if (loadFailed) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.errorText}>Couldn’t load Discover</Text>
+        <Pressable
+          style={styles.retryButton}
+          onPress={async () => {
+            setLoading(true);
+            await load();
+          }}
+        >
+          <Text style={styles.retryText}>Try again</Text>
+        </Pressable>
       </View>
     );
   }
@@ -113,7 +163,7 @@ export default function DiscoverScreen() {
               title={featured.title}
               width={90}
               height={132}
-              onPress={() => router.push(`/book/${featured.id}` as any)}
+              onPress={() => router.push(bookHref(featured.id))}
             />
             <View style={styles.heroInfo}>
               <Text style={styles.heroTitle} numberOfLines={2}>
@@ -136,20 +186,15 @@ export default function DiscoverScreen() {
         return (
           <View key={s.key} style={styles.section}>
             <Text style={styles.sectionTitle}>{s.title}</Text>
-            <FlatList
-              data={books}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              keyExtractor={(b) => b.id}
-              contentContainerStyle={{ gap: 12 }}
-              renderItem={({ item }) => (
-                <View style={styles.bookCard}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
+              {books.map((item) => (
+                <View key={item.id} style={styles.bookCard}>
                   <BookCover
                     uri={item.coverImage}
                     title={item.title}
                     width={100}
                     height={148}
-                    onPress={() => router.push(`/book/${item.id}` as any)}
+                    onPress={() => router.push(bookHref(item.id))}
                   />
                   <Text style={styles.bookTitle} numberOfLines={1}>
                     {item.title}
@@ -158,22 +203,24 @@ export default function DiscoverScreen() {
                     {item.author}
                   </Text>
                 </View>
-              )}
-            />
+              ))}
+            </ScrollView>
           </View>
         );
       })}
+
+      {loadingMore && (
+        <View style={styles.moreLoading}>
+          <ActivityIndicator />
+        </View>
+      )}
 
       {leaderboard.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Top 25 Books on Leaf</Text>
           <View style={{ gap: 8 }}>
             {leaderboard.map((book, idx) => (
-              <Pressable
-                key={book.id}
-                style={styles.leaderboardRow}
-                onPress={() => router.push(`/book/${book.id}` as any)}
-              >
+              <Pressable key={book.id} style={styles.leaderboardRow} onPress={() => router.push(bookHref(book.id))}>
                 <Text style={styles.rank}>{idx + 1}</Text>
                 <BookCover uri={book.coverImage} title={book.title} width={40} height={58} />
                 <View style={{ flex: 1 }}>
@@ -196,7 +243,15 @@ export default function DiscoverScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.cream },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.cream },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.cream, gap: 12 },
+  errorText: { fontSize: 13, color: colors.charcoalMuted, fontFamily: fonts.sans },
+  retryButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: colors.brand,
+  },
+  retryText: { fontSize: 13, fontFamily: fonts.sansBold, color: colors.white },
   content: { padding: 16, gap: 24, paddingBottom: 48 },
   hero: {
     backgroundColor: colors.creamCard,
@@ -223,6 +278,7 @@ const styles = StyleSheet.create({
   bookCard: { width: 100, gap: 4 },
   bookTitle: { fontSize: 11, fontFamily: fonts.sansBold, color: colors.charcoal },
   bookAuthor: { fontSize: 10, color: colors.charcoalMuted, fontFamily: fonts.sans },
+  moreLoading: { paddingVertical: 8, alignItems: "center" },
   leaderboardRow: {
     flexDirection: "row",
     alignItems: "center",

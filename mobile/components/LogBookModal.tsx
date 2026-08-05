@@ -56,6 +56,7 @@ export default function LogBookModal({
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.backdrop}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         <View style={styles.sheet}>
           <Text style={styles.title}>Add to Library</Text>
           <Text style={styles.subtitle} numberOfLines={1}>
@@ -82,7 +83,7 @@ export default function LogBookModal({
               <Text style={styles.label}>Your Rating</Text>
               <View style={styles.starsRow}>
                 {[1, 2, 3, 4, 5].map((star) => (
-                  <Pressable key={star} onPress={() => setRating(star)}>
+                  <Pressable key={star} onPress={() => setRating(star)} hitSlop={6}>
                     <Text style={[styles.star, rating >= star && styles.starActive]}>★</Text>
                   </Pressable>
                 ))}
@@ -92,6 +93,7 @@ export default function LogBookModal({
               <TextInput
                 style={styles.textarea}
                 placeholder="Share your thoughts..."
+                placeholderTextColor={colors.charcoalMuted}
                 value={review}
                 onChangeText={setReview}
                 multiline
@@ -146,6 +148,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: fonts.sans,
     backgroundColor: colors.creamCard,
+    color: colors.charcoal,
     minHeight: 70,
     textAlignVertical: "top",
   },

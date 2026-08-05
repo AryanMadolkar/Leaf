@@ -1,7 +1,6 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  FlatList,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -11,10 +10,12 @@ import {
 import { useRouter } from "expo-router";
 import { authFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { bookHref } from "@/lib/navigation";
 import type { Book, Reader } from "@/lib/types";
 import ReaderCard from "@/components/ReaderCard";
 import BookCover from "@/components/BookCover";
 import ReviewCard, { type Review } from "@/components/ReviewCard";
+import { SectionHeader } from "@/components/ui";
 import { colors, fonts } from "@/constants/theme";
 
 async function fetchReviews(): Promise<Review[]> {
@@ -54,18 +55,19 @@ function ReaderSection({ title, readers, loading }: { title: string; readers: Re
   if (!loading && readers.length === 0) return null;
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <SectionHeader title={title} />
       {loading ? (
-        <ActivityIndicator style={{ marginVertical: 16 }} />
+        <ActivityIndicator color={colors.brand} style={{ marginVertical: 16 }} />
       ) : (
-        <FlatList
-          data={readers}
+        <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          keyExtractor={(r) => r.id}
-          contentContainerStyle={{ gap: 12 }}
-          renderItem={({ item }) => <ReaderCard reader={item} />}
-        />
+          contentContainerStyle={{ gap: 12, paddingVertical: 4 }}
+        >
+          {readers.map((item) => (
+            <ReaderCard key={item.id} reader={item} />
+          ))}
+        </ScrollView>
       )}
     </View>
   );
@@ -74,6 +76,7 @@ function ReaderSection({ title, readers, loading }: { title: string; readers: Re
 export default function FeedScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const cancelledRef = useRef(false);
   const [activeReaders, setActiveReaders] = useState<Reader[]>([]);
   const [newReaders, setNewReaders] = useState<Reader[]>([]);
   const [recentBooks, setRecentBooks] = useState<Book[]>([]);
@@ -93,6 +96,7 @@ export default function FeedScreen() {
       fetchRecentlyLogged(),
       fetchReviews(),
     ]);
+    if (cancelledRef.current) return;
     setActiveReaders(active);
     setNewReaders(fresh);
     setRecentBooks(books);
@@ -103,71 +107,74 @@ export default function FeedScreen() {
   }, []);
 
   useEffect(() => {
+    cancelledRef.current = false;
     load();
+    return () => {
+      cancelledRef.current = true;
+    };
   }, [load]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await load();
-    setRefreshing(false);
+    if (!cancelledRef.current) setRefreshing(false);
   }, [load]);
 
   return (
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} />}
     >
       <View style={styles.header}>
-        <Text style={styles.greeting}>Welcome back,</Text>
+        <Text style={styles.greeting}>Welcome back</Text>
         <Text style={styles.name}>{user?.display_name || "Reader"}</Text>
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Recently Logged</Text>
+        <SectionHeader title="Recently logged" subtitle="Fresh from your circle" />
         {loadingBooks ? (
-          <ActivityIndicator style={{ marginVertical: 16 }} />
+          <ActivityIndicator color={colors.brand} style={{ marginVertical: 16 }} />
         ) : recentBooks.length === 0 ? (
           <Text style={styles.emptyText}>No books logged yet.</Text>
         ) : (
-          <FlatList
-            data={recentBooks}
+          <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            keyExtractor={(b) => b.id}
-            contentContainerStyle={{ gap: 12 }}
-            renderItem={({ item }) => (
-              <View style={styles.bookCard}>
+            contentContainerStyle={{ gap: 14, paddingVertical: 6 }}
+          >
+            {recentBooks.map((item) => (
+              <View key={item.id} style={styles.bookCard}>
                 <BookCover
                   uri={item.coverImage}
                   title={item.title}
-                  width={100}
-                  height={148}
-                  onPress={() => router.push(`/book/${item.id}` as any)}
+                  width={104}
+                  height={154}
+                  onPress={() => router.push(bookHref(item.id))}
                 />
-                <Text style={styles.bookTitle} numberOfLines={1}>
+                <Text style={styles.bookTitle} numberOfLines={2}>
                   {item.title}
                 </Text>
                 <Text style={styles.bookAuthor} numberOfLines={1}>
                   {item.author}
                 </Text>
               </View>
-            )}
-          />
+            ))}
+          </ScrollView>
         )}
       </View>
 
-      <ReaderSection title="Active Readers" readers={activeReaders} loading={loadingReaders} />
-      <ReaderSection title="New Readers" readers={newReaders} loading={loadingReaders} />
+      <ReaderSection title="Active readers" readers={activeReaders} loading={loadingReaders} />
+      <ReaderSection title="New readers" readers={newReaders} loading={loadingReaders} />
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Recent Reviews</Text>
+        <SectionHeader title="Recent reviews" subtitle="Notes from the community" />
         {loadingReviews ? (
-          <ActivityIndicator style={{ marginVertical: 16 }} />
+          <ActivityIndicator color={colors.brand} style={{ marginVertical: 16 }} />
         ) : reviews.length === 0 ? (
           <Text style={styles.emptyText}>No reviews yet.</Text>
         ) : (
-          <View style={{ gap: 10 }}>
+          <View style={{ gap: 12 }}>
             {reviews.map((r) => (
               <ReviewCard key={r.id} review={r} />
             ))}
@@ -180,14 +187,25 @@ export default function FeedScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.cream },
-  content: { padding: 20, gap: 28, paddingBottom: 48 },
-  header: { gap: 2 },
-  greeting: { fontSize: 13, color: colors.charcoalMuted, fontFamily: fonts.sans },
-  name: { fontSize: 26, fontFamily: fonts.serif, color: colors.charcoal },
-  section: { gap: 10 },
-  sectionTitle: { fontSize: 18, fontFamily: fonts.serif, color: colors.charcoal },
-  emptyText: { fontSize: 12, color: colors.charcoalMuted, fontStyle: "italic", fontFamily: fonts.sans },
-  bookCard: { width: 100, gap: 4 },
-  bookTitle: { fontSize: 11, fontFamily: fonts.sansBold, color: colors.charcoal },
-  bookAuthor: { fontSize: 10, color: colors.charcoalMuted, fontFamily: fonts.sans },
+  content: { padding: 20, gap: 30, paddingBottom: 56 },
+  header: { gap: 2, paddingTop: 4, paddingBottom: 8 },
+  greeting: { fontSize: 15, color: colors.charcoalMuted, fontFamily: fonts.sans },
+  name: {
+    fontSize: 28,
+    fontFamily: fonts.serif,
+    color: colors.charcoal,
+    letterSpacing: -0.4,
+    lineHeight: 34,
+  },
+  section: { gap: 12 },
+  emptyText: {
+    fontSize: 13,
+    color: colors.charcoalMuted,
+    fontStyle: "italic",
+    fontFamily: fonts.sans,
+    paddingVertical: 8,
+  },
+  bookCard: { width: 104, gap: 6 },
+  bookTitle: { fontSize: 12, fontFamily: fonts.sansSemiBold, color: colors.charcoal, lineHeight: 15 },
+  bookAuthor: { fontSize: 11, color: colors.charcoalMuted, fontFamily: fonts.sans },
 });

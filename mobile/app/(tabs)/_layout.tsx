@@ -1,20 +1,78 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Link, Redirect, Tabs } from "expo-router";
-import { ActivityIndicator, Image, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Image, Platform, Pressable, Text, View } from "react-native";
 
 import Colors from "@/constants/Colors";
+import { colors, fonts, radii, shadows } from "@/constants/theme";
 import { useColorScheme } from "@/components/useColorScheme";
 import { useClientOnlyValue } from "@/components/useClientOnlyValue";
 import { useAuth } from "@/lib/auth";
 
+function LeafHeaderTitle() {
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
+      <View
+        style={{
+          width: 28,
+          height: 28,
+          borderRadius: 8,
+          backgroundColor: colors.brandWash,
+          alignItems: "center",
+          justifyContent: "center",
+          borderWidth: 1,
+          borderColor: "rgba(46,77,56,0.12)",
+        }}
+      >
+        <Image
+          source={require("@/assets/images/leaf-logo.png")}
+          style={{ width: 16, height: 16 }}
+          resizeMode="contain"
+        />
+      </View>
+      <Text
+        style={{
+          fontSize: 20,
+          fontFamily: fonts.serif,
+          color: colors.charcoal,
+          letterSpacing: -0.4,
+        }}
+      >
+        Leaf
+      </Text>
+    </View>
+  );
+}
+
+function HeaderIcon({ href, name }: { href: "/search" | "/settings"; name: keyof typeof Ionicons.glyphMap }) {
+  return (
+    <Link href={href} asChild>
+      <Pressable
+        style={({ pressed }) => ({
+          width: 40,
+          height: 40,
+          borderRadius: radii.pill,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: pressed ? colors.creamDark : "transparent",
+        })}
+        hitSlop={8}
+      >
+        <Ionicons name={name} size={20} color={colors.charcoal} />
+      </Pressable>
+    </Link>
+  );
+}
+
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const { isLoading, isAuthenticated } = useAuth();
+  // Must run before any early return — conditional hooks break React's rules.
+  const headerShown = useClientOnlyValue(false, true);
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-        <ActivityIndicator />
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.cream }}>
+        <ActivityIndicator color={colors.brand} />
       </View>
     );
   }
@@ -27,29 +85,42 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: Colors[colorScheme].tint,
-        headerShown: useClientOnlyValue(false, true),
+        tabBarInactiveTintColor: colors.charcoalMuted,
+        tabBarLabelStyle: {
+          fontFamily: fonts.sansSemiBold,
+          fontSize: 10,
+          letterSpacing: 0.2,
+        },
+        tabBarStyle: {
+          backgroundColor: colors.creamCard,
+          borderTopColor: colors.creamBorder,
+          borderTopWidth: StyleSheetHairline(),
+          height: Platform.OS === "ios" ? 88 : 64,
+          paddingTop: 6,
+          ...shadows.soft,
+        },
+        headerShown,
+        headerStyle: {
+          backgroundColor: colors.cream,
+          borderBottomWidth: StyleSheetHairline(),
+          borderBottomColor: colors.creamBorder,
+          ...shadows.soft,
+        },
+        headerShadowVisible: false,
+        headerTitle: () => <LeafHeaderTitle />,
+        headerRight: () => (
+          <View style={{ paddingRight: 12 }}>
+            <HeaderIcon href="/search" name="search" />
+          </View>
+        ),
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          tabBarIcon: ({ color, size }) => <Ionicons name="home" color={color} size={size} />,
-          headerTitle: () => (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <Image
-                source={require("@/assets/images/leaf-logo.png")}
-                style={{ width: 24, height: 24 }}
-                resizeMode="contain"
-              />
-              <Text style={{ fontSize: 18, fontWeight: "700", color: Colors[colorScheme].text }}>Leaf</Text>
-            </View>
-          ),
-          headerRight: () => (
-            <Link href="/search" asChild>
-              <Pressable style={{ marginRight: 16 }}>
-                <Ionicons name="search" size={22} color={Colors[colorScheme].text} />
-              </Pressable>
-            </Link>
+          title: "Home",
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? "home" : "home-outline"} color={color} size={size} />
           ),
         }}
       />
@@ -57,37 +128,48 @@ export default function TabLayout() {
         name="discover"
         options={{
           title: "Discover",
-          tabBarIcon: ({ color, size }) => <Ionicons name="sparkles" color={color} size={size} />,
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? "sparkles" : "sparkles-outline"} color={color} size={size} />
+          ),
         }}
       />
       <Tabs.Screen
         name="library"
         options={{
           title: "Library",
-          tabBarIcon: ({ color, size }) => <Ionicons name="library" color={color} size={size} />,
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? "library" : "library-outline"} color={color} size={size} />
+          ),
         }}
       />
       <Tabs.Screen
         name="diary"
         options={{
           title: "Diary",
-          tabBarIcon: ({ color, size }) => <Ionicons name="calendar" color={color} size={size} />,
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? "calendar" : "calendar-outline"} color={color} size={size} />
+          ),
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: "Profile",
-          tabBarIcon: ({ color, size }) => <Ionicons name="person-circle" color={color} size={size} />,
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? "person-circle" : "person-circle-outline"} color={color} size={size} />
+          ),
           headerRight: () => (
-            <Link href="/settings" asChild>
-              <Pressable style={{ marginRight: 16 }}>
-                <Ionicons name="settings-outline" size={22} color={Colors[colorScheme].text} />
-              </Pressable>
-            </Link>
+            <View style={{ flexDirection: "row", alignItems: "center", paddingRight: 8, gap: 2 }}>
+              <HeaderIcon href="/search" name="search" />
+              <HeaderIcon href="/settings" name="settings-outline" />
+            </View>
           ),
         }}
       />
     </Tabs>
   );
+}
+
+function StyleSheetHairline() {
+  return Platform.OS === "web" ? 1 : 0.5;
 }

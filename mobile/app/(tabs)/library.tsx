@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  FlatList,
+  Alert,
+  Dimensions,
   Modal,
   Pressable,
   RefreshControl,
@@ -17,12 +18,15 @@ import { useRouter } from "expo-router";
 import { authFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { API_BASE_URL } from "@/lib/config";
+import { bookHref } from "@/lib/navigation";
 import type { Book, LibraryPayload, LibraryShelf } from "@/lib/types";
 import BookCover from "@/components/BookCover";
 import Bookshelf from "@/components/Bookshelf";
 import { colors, fonts } from "@/constants/theme";
 
 const ALL_SHELF_ID = "__all__";
+const GRID_GAP = 12;
+const GRID_COLS = 3;
 type ViewMode = "shelf" | "grid";
 
 export default function LibraryScreen() {
@@ -37,6 +41,9 @@ export default function LibraryScreen() {
   const [newShelfOpen, setNewShelfOpen] = useState(false);
   const [newShelfName, setNewShelfName] = useState("");
   const [creatingShelf, setCreatingShelf] = useState(false);
+  const [createShelfError, setCreateShelfError] = useState<string | null>(null);
+  const [contentWidth, setContentWidth] = useState(Dimensions.get("window").width - 32);
+  const cancelledRef = useRef(false);
 
   const load = useCallback(async () => {
     try {
@@ -44,24 +51,28 @@ export default function LibraryScreen() {
       const res = await authFetch("/api/library");
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || "Could not load library");
-      setLibrary(data.library);
+      if (!cancelledRef.current) setLibrary(data.library);
     } catch (err: any) {
-      setError(err.message || "Could not load library");
+      if (!cancelledRef.current) setError(err.message || "Could not load library");
     }
   }, []);
 
   useEffect(() => {
+    cancelledRef.current = false;
     (async () => {
       setLoading(true);
       await load();
-      setLoading(false);
+      if (!cancelledRef.current) setLoading(false);
     })();
+    return () => {
+      cancelledRef.current = true;
+    };
   }, [load]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await load();
-    setRefreshing(false);
+    if (!cancelledRef.current) setRefreshing(false);
   }, [load]);
 
   const shelves: LibraryShelf[] = library?.shelves || [];
@@ -75,17 +86,26 @@ export default function LibraryScreen() {
     return library.books.filter((b) => idSet.has(b.id));
   }, [library, shelves, activeShelfId]);
 
-  const openBook = (book: Book) => router.push(`/book/${book.id}` as any);
+  const coverWidth = Math.floor((contentWidth - GRID_GAP * (GRID_COLS - 1)) / GRID_COLS);
+  const coverHeight = Math.round(coverWidth * 1.48);
+
+  const openBook = (book: Book) => router.push(bookHref(book.id));
 
   const shareLibrary = async () => {
-    if (!user) return;
+    if (!user) {
+      Alert.alert("Sign in required", "Sign in to share your library.");
+      return;
+    }
     try {
+      const url = `${API_BASE_URL}/u/${user.username}/library`;
       await Share.share({
-        message: `Check out my bookshelf on Leaf: ${API_BASE_URL}/u/${user.username}/library`,
-        url: `${API_BASE_URL}/u/${user.username}/library`,
+        message: `Check out my bookshelf on Leaf: ${url}`,
+        url,
       });
-    } catch {
-      // user cancelled or share failed — nothing to do
+    } catch (err: any) {
+      if (err?.message && !/cancel|dismiss/i.test(err.message)) {
+        Alert.alert("Couldn’t share", err.message);
+      }
     }
   };
 
@@ -93,6 +113,7 @@ export default function LibraryScreen() {
     const name = newShelfName.trim();
     if (!name) return;
     setCreatingShelf(true);
+    setCreateShelfError(null);
     try {
       const res = await authFetch("/api/library", {
         method: "POST",
@@ -103,18 +124,25 @@ export default function LibraryScreen() {
       if (!res.ok || !data.success) throw new Error(data.error || "Could not create shelf");
       setLibrary(data.library);
       setNewShelfName("");
+      setCreateShelfError(null);
       setNewShelfOpen(false);
-    } catch {
-      // silently keep the modal open — user can retry
+    } catch (err: any) {
+      setCreateShelfError(err.message || "Could not create shelf");
     } finally {
       setCreatingShelf(false);
     }
   };
 
+  const closeNewShelfModal = () => {
+    setNewShelfOpen(false);
+    setNewShelfName("");
+    setCreateShelfError(null);
+  };
+
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator />
+        <ActivityIndicator color={colors.brand} />
       </View>
     );
   }
@@ -123,146 +151,162 @@ export default function LibraryScreen() {
     return (
       <View style={styles.center}>
         <Text style={styles.errorText}>{error || "Library unavailable"}</Text>
-      </View>
-    );
-  }
-
-  const header = (
-    <>
-      <View style={styles.statsRow}>
-        <StatTile label="Books" value={library.stats.books} />
-        <StatTile label="Authors" value={library.stats.authors} />
-        <StatTile label="Pages" value={library.stats.pages} />
-        <StatTile label="Genres" value={library.stats.genres} />
-      </View>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.shelfRow}
-        contentContainerStyle={styles.shelfRowContent}
-      >
-        <ShelfChip
-          label={`All (${library.books.length})`}
-          active={activeShelfId === ALL_SHELF_ID}
-          onPress={() => setActiveShelfId(ALL_SHELF_ID)}
-        />
-        {shelves.map((shelf) => (
-          <ShelfChip
-            key={shelf.id}
-            label={`${shelf.name} (${shelf.bookIds.length})`}
-            active={activeShelfId === shelf.id}
-            onPress={() => setActiveShelfId(shelf.id)}
-          />
-        ))}
-        <Pressable style={styles.newShelfChip} onPress={() => setNewShelfOpen(true)}>
-          <Ionicons name="add" size={14} color={colors.brand} />
-          <Text style={styles.newShelfChipText}>New Shelf</Text>
+        <Pressable
+          style={styles.retryButton}
+          onPress={async () => {
+            setLoading(true);
+            await load();
+            setLoading(false);
+          }}
+        >
+          <Text style={styles.retryText}>Try again</Text>
         </Pressable>
-      </ScrollView>
-
-      <View style={styles.toolbar}>
-        <Text style={styles.resultsText}>
-          {visibleBooks.length} {visibleBooks.length === 1 ? "book" : "books"}
-        </Text>
-
-        <View style={styles.toolbarActions}>
-          <View style={styles.viewToggle}>
-            <Pressable
-              onPress={() => setViewMode("shelf")}
-              style={[styles.viewToggleButton, viewMode === "shelf" && styles.viewToggleButtonActive]}
-            >
-              <Ionicons name="library" size={15} color={viewMode === "shelf" ? colors.white : colors.charcoalMuted} />
-            </Pressable>
-            <Pressable
-              onPress={() => setViewMode("grid")}
-              style={[styles.viewToggleButton, viewMode === "grid" && styles.viewToggleButtonActive]}
-            >
-              <Ionicons name="grid" size={15} color={viewMode === "grid" ? colors.white : colors.charcoalMuted} />
-            </Pressable>
-          </View>
-
-          <Pressable onPress={shareLibrary} style={styles.shareButton}>
-            <Ionicons name="share-outline" size={16} color={colors.charcoalMuted} />
-          </Pressable>
-        </View>
       </View>
-    </>
-  );
-
-  const newShelfModal = (
-    <Modal visible={newShelfOpen} transparent animationType="fade" onRequestClose={() => setNewShelfOpen(false)}>
-      <View style={styles.modalBackdrop}>
-        <View style={styles.modalSheet}>
-          <Text style={styles.modalTitle}>New Shelf</Text>
-          <TextInput
-            style={styles.modalInput}
-            placeholder="Shelf name"
-            value={newShelfName}
-            onChangeText={setNewShelfName}
-            autoFocus
-          />
-          <View style={styles.modalActions}>
-            <Pressable
-              style={styles.modalCancel}
-              onPress={() => {
-                setNewShelfOpen(false);
-                setNewShelfName("");
-              }}
-            >
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </Pressable>
-            <Pressable style={styles.modalSave} onPress={createShelf} disabled={creatingShelf}>
-              {creatingShelf ? (
-                <ActivityIndicator size="small" color={colors.white} />
-              ) : (
-                <Text style={styles.modalSaveText}>Create</Text>
-              )}
-            </Pressable>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
-
-  if (viewMode === "shelf") {
-    return (
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      >
-        {header}
-        <Bookshelf books={visibleBooks} onPressBook={openBook} />
-        {newShelfModal}
-      </ScrollView>
     );
   }
 
   return (
-    <FlatList
-      style={styles.container}
-      data={visibleBooks}
-      keyExtractor={(b) => b.id}
-      numColumns={3}
-      columnWrapperStyle={{ gap: 12 }}
-      contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      ListHeaderComponent={header}
-      ListFooterComponent={newShelfModal}
-      ListEmptyComponent={<Text style={styles.emptyText}>Nothing on this shelf yet.</Text>}
-      renderItem={({ item }) => (
-        <View style={styles.bookCell}>
-          <BookCover uri={item.coverImage} title={item.title} width={100} height={148} onPress={() => openBook(item)} />
-          <Text style={styles.bookTitle} numberOfLines={2}>
-            {item.title}
-          </Text>
-          <Text style={styles.bookAuthor} numberOfLines={1}>
-            {item.author}
-          </Text>
+    <View style={styles.container}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        nestedScrollEnabled
+        onLayout={(e) => {
+          const w = e.nativeEvent.layout.width - 32;
+          if (w > 0 && Math.abs(w - contentWidth) > 1) setContentWidth(w);
+        }}
+      >
+        <View style={styles.statsRow}>
+          <StatTile label="Books" value={library.stats.books} />
+          <StatTile label="Authors" value={library.stats.authors} />
+          <StatTile label="Pages" value={library.stats.pages} />
+          <StatTile label="Genres" value={library.stats.genres} />
         </View>
-      )}
-    />
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          nestedScrollEnabled
+          style={styles.shelfRow}
+          contentContainerStyle={styles.shelfRowContent}
+        >
+          <ShelfChip
+            label={`All (${library.books.length})`}
+            active={activeShelfId === ALL_SHELF_ID}
+            onPress={() => setActiveShelfId(ALL_SHELF_ID)}
+          />
+          {shelves.map((shelf) => (
+            <ShelfChip
+              key={shelf.id}
+              label={`${shelf.name} (${shelf.bookIds.length})`}
+              active={activeShelfId === shelf.id}
+              onPress={() => setActiveShelfId(shelf.id)}
+            />
+          ))}
+          <Pressable style={styles.newShelfChip} onPress={() => setNewShelfOpen(true)}>
+            <Ionicons name="add" size={14} color={colors.brand} />
+            <Text style={styles.newShelfChipText}>New Shelf</Text>
+          </Pressable>
+        </ScrollView>
+
+        <View style={styles.toolbar}>
+          <Text style={styles.resultsText}>
+            {visibleBooks.length} {visibleBooks.length === 1 ? "book" : "books"}
+          </Text>
+
+          <View style={styles.toolbarActions}>
+            <View style={styles.viewToggle}>
+              <Pressable
+                onPress={() => setViewMode("shelf")}
+                style={[styles.viewToggleButton, viewMode === "shelf" && styles.viewToggleButtonActive]}
+                hitSlop={4}
+              >
+                <Ionicons name="library" size={15} color={viewMode === "shelf" ? colors.white : colors.charcoalMuted} />
+              </Pressable>
+              <Pressable
+                onPress={() => setViewMode("grid")}
+                style={[styles.viewToggleButton, viewMode === "grid" && styles.viewToggleButtonActive]}
+                hitSlop={4}
+              >
+                <Ionicons name="grid" size={15} color={viewMode === "grid" ? colors.white : colors.charcoalMuted} />
+              </Pressable>
+            </View>
+
+            <Pressable onPress={() => router.push("/scan-shelf")} style={styles.shareButton} hitSlop={4}>
+              <Ionicons name="camera-outline" size={16} color={colors.charcoalMuted} />
+            </Pressable>
+
+            <Pressable onPress={shareLibrary} style={styles.shareButton} hitSlop={4}>
+              <Ionicons name="share-outline" size={16} color={colors.charcoalMuted} />
+            </Pressable>
+          </View>
+        </View>
+
+        {viewMode === "shelf" ? (
+          <Bookshelf books={visibleBooks} onPressBook={openBook} />
+        ) : visibleBooks.length === 0 ? (
+          <Text style={styles.emptyText}>Nothing on this shelf yet.</Text>
+        ) : (
+          <View style={styles.grid}>
+            {visibleBooks.map((item) => (
+              <View key={item.id} style={[styles.bookCell, { width: coverWidth }]}>
+                <BookCover
+                  uri={item.coverImage}
+                  title={item.title}
+                  width={coverWidth}
+                  height={coverHeight}
+                  onPress={() => openBook(item)}
+                />
+                <Text style={styles.bookTitle} numberOfLines={2}>
+                  {item.title}
+                </Text>
+                <Text style={styles.bookAuthor} numberOfLines={1}>
+                  {item.author}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </ScrollView>
+
+      <Modal visible={newShelfOpen} transparent animationType="fade" onRequestClose={closeNewShelfModal}>
+        <View style={styles.modalBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeNewShelfModal} />
+          <View style={styles.modalSheet}>
+            <Text style={styles.modalTitle}>New Shelf</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Shelf name"
+              placeholderTextColor={colors.charcoalMuted}
+              value={newShelfName}
+              onChangeText={(text) => {
+                setNewShelfName(text);
+                if (createShelfError) setCreateShelfError(null);
+              }}
+              autoFocus
+            />
+            {createShelfError && <Text style={styles.modalError}>{createShelfError}</Text>}
+            <View style={styles.modalActions}>
+              <Pressable style={styles.modalCancel} onPress={closeNewShelfModal}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalSave, (!newShelfName.trim() || creatingShelf) && styles.modalSaveDisabled]}
+                onPress={createShelf}
+                disabled={creatingShelf || !newShelfName.trim()}
+              >
+                {creatingShelf ? (
+                  <ActivityIndicator size="small" color={colors.white} />
+                ) : (
+                  <Text style={styles.modalSaveText}>Create</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </View>
   );
 }
 
@@ -285,9 +329,16 @@ function StatTile({ label, value }: { label: string; value: number }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.cream },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.cream },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.cream, gap: 12 },
   errorText: { fontSize: 13, color: colors.charcoalMuted, fontFamily: fonts.sans },
-  content: { padding: 16, paddingTop: 12, gap: 14, paddingBottom: 48 },
+  retryButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: colors.brand,
+  },
+  retryText: { fontSize: 13, fontFamily: fonts.sansBold, color: colors.white },
+  content: { padding: 16, paddingTop: 12, paddingBottom: 48, gap: 14 },
   statsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -296,19 +347,22 @@ const styles = StyleSheet.create({
     borderColor: colors.creamBorder,
     borderRadius: 16,
     padding: 16,
-    marginBottom: 12,
   },
   statTile: { alignItems: "center", gap: 2 },
   statValue: { fontSize: 20, fontFamily: fonts.sansBold, color: colors.charcoal },
-  statLabel: { fontSize: 9, color: colors.charcoalMuted, textTransform: "uppercase", fontFamily: fonts.sansSemiBold, letterSpacing: 0.4 },
+  statLabel: {
+    fontSize: 9,
+    color: colors.charcoalMuted,
+    textTransform: "uppercase",
+    fontFamily: fonts.sansSemiBold,
+    letterSpacing: 0.4,
+  },
   shelfRow: { flexGrow: 0 },
-  shelfRowContent: { flexDirection: "row", gap: 8, paddingRight: 4 },
+  shelfRowContent: { flexDirection: "row", alignItems: "center", gap: 8, paddingRight: 4 },
   toolbar: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 2,
-    marginBottom: 4,
   },
   toolbarActions: { flexDirection: "row", alignItems: "center", gap: 8 },
   resultsText: { fontSize: 12, color: colors.charcoalMuted, fontFamily: fonts.sans },
@@ -351,13 +405,26 @@ const styles = StyleSheet.create({
   },
   viewToggleButton: { paddingHorizontal: 10, paddingVertical: 8, backgroundColor: colors.creamCard },
   viewToggleButtonActive: { backgroundColor: colors.brand },
-  emptyText: { fontSize: 12, color: colors.charcoalMuted, fontStyle: "italic", textAlign: "center", marginTop: 24 },
-  bookCell: { flex: 1 / 3, gap: 4, marginBottom: 16 },
+  emptyText: {
+    fontSize: 12,
+    color: colors.charcoalMuted,
+    fontStyle: "italic",
+    textAlign: "center",
+    marginTop: 24,
+    fontFamily: fonts.sans,
+  },
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: GRID_GAP,
+  },
+  bookCell: { gap: 4 },
   bookTitle: { fontSize: 11, fontFamily: fonts.sansBold, color: colors.charcoal },
   bookAuthor: { fontSize: 10, color: colors.charcoalMuted, fontFamily: fonts.sans },
   modalBackdrop: { flex: 1, backgroundColor: "rgba(28,28,26,0.4)", justifyContent: "center", padding: 24 },
   modalSheet: { backgroundColor: colors.cream, borderRadius: 20, padding: 20, gap: 12 },
   modalTitle: { fontSize: 18, fontFamily: fonts.serif, color: colors.charcoal },
+  modalError: { fontSize: 12, color: colors.error, fontFamily: fonts.sans },
   modalInput: {
     borderWidth: 1,
     borderColor: colors.creamBorder,
@@ -373,5 +440,6 @@ const styles = StyleSheet.create({
   modalCancel: { paddingHorizontal: 16, paddingVertical: 10 },
   modalCancelText: { fontSize: 13, fontFamily: fonts.sansSemiBold, color: colors.charcoalMuted },
   modalSave: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10, backgroundColor: colors.brand },
+  modalSaveDisabled: { opacity: 0.5 },
   modalSaveText: { fontSize: 13, fontFamily: fonts.sansBold, color: colors.white },
 });

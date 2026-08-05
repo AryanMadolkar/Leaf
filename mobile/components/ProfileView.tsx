@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -12,8 +12,11 @@ import {
 import { authFetch } from "@/lib/api";
 import { resolveMediaUrl } from "@/lib/media";
 import type { ProfileData, ProfileStats } from "@/lib/profile";
-import { colors, fonts } from "@/constants/theme";
+import type { FullStatsPayload } from "@/lib/stats";
+import { colors, fonts, radii, shadows } from "@/constants/theme";
 import FollowListModal from "@/components/FollowListModal";
+import ProfileStatsCharts from "@/components/ProfileStatsCharts";
+import { Eyebrow, PrimaryButton, SecondaryButton } from "@/components/ui";
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -23,13 +26,38 @@ function initials(name: string): string {
 }
 
 export default function ProfileView({ username, onLogout }: { username: string; onLogout?: () => void }) {
+  const cancelledRef = useRef(false);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [stats, setStats] = useState<ProfileStats | null>(null);
+  const [fullStats, setFullStats] = useState<FullStatsPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [followPending, setFollowPending] = useState(false);
   const [listModal, setListModal] = useState<"followers" | "following" | null>(null);
+
+  const loadFullStats = useCallback(async (userId: string) => {
+    try {
+      const res = await authFetch(`/api/stats?userId=${encodeURIComponent(userId)}`);
+      const data = await res.json();
+      if (!res.ok || !data.success || !data.charts) {
+        if (!cancelledRef.current) setFullStats(null);
+        return;
+      }
+      if (!cancelledRef.current) {
+        setFullStats({
+          stats: data.stats,
+          charts: data.charts,
+          genreDistribution: data.genreDistribution || [],
+          pace: data.pace,
+          insights: data.insights || [],
+          timeline: data.timeline || [],
+        });
+      }
+    } catch {
+      if (!cancelledRef.current) setFullStats(null);
+    }
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -37,25 +65,33 @@ export default function ProfileView({ username, onLogout }: { username: string; 
       const res = await authFetch(`/api/profile/${encodeURIComponent(username)}`);
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || "Could not load profile");
+      if (cancelledRef.current) return;
       setProfile(data.profile);
       setStats(data.stats);
+      if (data.profile?.id) {
+        await loadFullStats(data.profile.id);
+      }
     } catch (err: any) {
-      setError(err.message || "Could not load profile");
+      if (!cancelledRef.current) setError(err.message || "Could not load profile");
     }
-  }, [username]);
+  }, [username, loadFullStats]);
 
   useEffect(() => {
+    cancelledRef.current = false;
     (async () => {
       setLoading(true);
       await load();
-      setLoading(false);
+      if (!cancelledRef.current) setLoading(false);
     })();
+    return () => {
+      cancelledRef.current = true;
+    };
   }, [load]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await load();
-    setRefreshing(false);
+    if (!cancelledRef.current) setRefreshing(false);
   }, [load]);
 
   const toggleFollow = async () => {
@@ -93,6 +129,16 @@ export default function ProfileView({ username, onLogout }: { username: string; 
     return (
       <View style={styles.center}>
         <Text style={styles.errorText}>{error || "Profile unavailable"}</Text>
+        <Pressable
+          style={styles.retryButton}
+          onPress={async () => {
+            setLoading(true);
+            await load();
+            if (!cancelledRef.current) setLoading(false);
+          }}
+        >
+          <Text style={styles.retryText}>Try again</Text>
+        </Pressable>
       </View>
     );
   }
@@ -106,43 +152,48 @@ export default function ProfileView({ username, onLogout }: { username: string; 
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
       <View style={styles.header}>
-        {avatar ? (
-          <Image source={{ uri: avatar }} style={styles.avatar} />
-        ) : (
-          <View style={[styles.avatar, styles.avatarFallback]}>
-            <Text style={styles.avatarInitials}>{initials(profile.name)}</Text>
-          </View>
-        )}
+        <Eyebrow>{profile.isMe ? "Your profile" : "Reader profile"}</Eyebrow>
+        <View style={styles.avatarRing}>
+          {avatar ? (
+            <Image source={{ uri: avatar }} style={styles.avatar} />
+          ) : (
+            <View style={[styles.avatar, styles.avatarFallback]}>
+              <Text style={styles.avatarInitials}>{initials(profile.name)}</Text>
+            </View>
+          )}
+        </View>
         <Text style={styles.name}>{profile.name}</Text>
         <Text style={styles.username}>@{profile.username}</Text>
         {!!profile.bio && <Text style={styles.bio}>{profile.bio}</Text>}
 
         <View style={styles.countsRow}>
-          <Pressable style={styles.countItem} onPress={() => setListModal("followers")}>
+          <Pressable style={styles.countItem} onPress={() => setListModal("followers")} hitSlop={8}>
             <Text style={styles.countValue}>{profile.followersCount}</Text>
             <Text style={styles.countLabel}>Followers</Text>
           </Pressable>
-          <Pressable style={styles.countItem} onPress={() => setListModal("following")}>
+          <View style={styles.countDivider} />
+          <Pressable style={styles.countItem} onPress={() => setListModal("following")} hitSlop={8}>
             <Text style={styles.countValue}>{profile.followingCount}</Text>
             <Text style={styles.countLabel}>Following</Text>
           </Pressable>
         </View>
 
-        {!profile.isMe && (
-          <Pressable
-            onPress={toggleFollow}
-            disabled={followPending}
-            style={[styles.followButton, profile.isFollowing && styles.followingButton]}
-          >
-            {followPending ? (
-              <ActivityIndicator size="small" color={profile.isFollowing ? colors.charcoal : colors.white} />
-            ) : (
-              <Text style={[styles.followText, profile.isFollowing && styles.followingText]}>
-                {profile.isFollowing ? "Following" : "Follow"}
-              </Text>
-            )}
-          </Pressable>
-        )}
+        {!profile.isMe &&
+          (profile.isFollowing ? (
+            <SecondaryButton
+              label={followPending ? "…" : "Following"}
+              onPress={toggleFollow}
+              disabled={followPending}
+              style={{ marginTop: 14, minWidth: 140 }}
+            />
+          ) : (
+            <PrimaryButton
+              label={followPending ? "…" : "Follow"}
+              onPress={toggleFollow}
+              disabled={followPending}
+              style={{ marginTop: 14, minWidth: 140 }}
+            />
+          ))}
       </View>
 
       {stats && (
@@ -154,8 +205,8 @@ export default function ProfileView({ username, onLogout }: { username: string; 
             <StatCard label="Total Pages Read" value={stats.total_pages_read} />
           </View>
           <View style={styles.grid}>
-            <StatCard label="Current Streak" value={stats.reading_streak} suffix=" 🔥" />
-            <StatCard label="Longest Streak" value={stats.longest_streak} suffix=" 🔥" />
+            <StatCard label="Current Streak" value={stats.reading_streak} suffix=" days" />
+            <StatCard label="Longest Streak" value={stats.longest_streak} suffix=" days" />
           </View>
           <View style={styles.card}>
             <Text style={styles.cardLabel}>Favorite Genre</Text>
@@ -167,6 +218,8 @@ export default function ProfileView({ username, onLogout }: { username: string; 
           </View>
         </>
       )}
+
+      {fullStats ? <ProfileStatsCharts data={fullStats} /> : null}
 
       {profile.isMe && onLogout && (
         <Pressable onPress={onLogout} style={styles.logoutButton}>
@@ -200,38 +253,73 @@ function StatCard({ label, value, suffix = "" }: { label: string; value: number;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.cream },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.cream },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.cream, gap: 12 },
   errorText: { fontSize: 13, color: colors.charcoalMuted, fontFamily: fonts.sans },
-  content: { padding: 16, gap: 14, paddingBottom: 48 },
-  header: { alignItems: "center", gap: 4, paddingVertical: 12 },
-  avatar: { width: 84, height: 84, borderRadius: 42, backgroundColor: colors.creamDark, marginBottom: 8 },
-  avatarFallback: { alignItems: "center", justifyContent: "center" },
-  avatarInitials: { fontSize: 24, fontFamily: fonts.sansBold, color: colors.brand },
-  name: { fontSize: 24, fontFamily: fonts.serif, color: colors.charcoal },
-  username: { fontSize: 12, color: colors.charcoalMuted, fontFamily: fonts.sans },
-  bio: { fontSize: 12, color: colors.charcoalLight, fontFamily: fonts.sans, textAlign: "center", marginTop: 6, paddingHorizontal: 24 },
-  countsRow: { flexDirection: "row", gap: 28, marginTop: 12 },
-  countItem: { alignItems: "center" },
-  countValue: { fontSize: 15, fontFamily: fonts.sansBold, color: colors.charcoal },
-  countLabel: { fontSize: 10, color: colors.charcoalMuted, textTransform: "uppercase", fontFamily: fonts.sansSemiBold },
-  followButton: {
-    marginTop: 14,
-    paddingHorizontal: 24,
-    paddingVertical: 9,
+  retryButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderRadius: 10,
     backgroundColor: colors.brand,
   },
-  followingButton: { backgroundColor: colors.creamDark },
-  followText: { fontSize: 13, fontFamily: fonts.sansBold, color: colors.white },
-  followingText: { color: colors.charcoal },
+  retryText: { fontSize: 13, fontFamily: fonts.sansBold, color: colors.white },
+  content: { padding: 20, gap: 14, paddingBottom: 56 },
+  header: { alignItems: "center", gap: 4, paddingVertical: 16 },
+  avatarRing: {
+    padding: 4,
+    borderRadius: 52,
+    borderWidth: 1,
+    borderColor: colors.creamBorder,
+    backgroundColor: colors.creamCard,
+    marginBottom: 10,
+    ...shadows.soft,
+  },
+  avatar: { width: 88, height: 88, borderRadius: 44, backgroundColor: colors.creamDark },
+  avatarFallback: { alignItems: "center", justifyContent: "center", backgroundColor: colors.brandWash },
+  avatarInitials: { fontSize: 28, fontFamily: fonts.serif, color: colors.brand },
+  name: { fontSize: 28, fontFamily: fonts.serif, color: colors.charcoal, letterSpacing: -0.4 },
+  username: { fontSize: 13, color: colors.charcoalMuted, fontFamily: fonts.sansMedium },
+  bio: {
+    fontSize: 13,
+    color: colors.charcoalLight,
+    fontFamily: fonts.sans,
+    textAlign: "center",
+    marginTop: 8,
+    paddingHorizontal: 24,
+    lineHeight: 19,
+  },
+  countsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 20,
+    marginTop: 16,
+    backgroundColor: colors.creamCard,
+    borderWidth: 1,
+    borderColor: colors.creamBorder,
+    borderRadius: radii.lg,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    ...shadows.soft,
+  },
+  countItem: { alignItems: "center", minWidth: 72 },
+  countDivider: { width: 1, height: 28, backgroundColor: colors.creamBorder },
+  countValue: { fontSize: 17, fontFamily: fonts.sansBold, color: colors.charcoal },
+  countLabel: {
+    fontSize: 10,
+    color: colors.charcoalMuted,
+    textTransform: "uppercase",
+    fontFamily: fonts.sansSemiBold,
+    letterSpacing: 0.5,
+    marginTop: 2,
+  },
   logoutButton: {
     marginTop: 8,
     alignSelf: "center",
     paddingHorizontal: 20,
     paddingVertical: 10,
-    borderRadius: 10,
+    borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.creamBorder,
+    backgroundColor: colors.creamCard,
   },
   logoutText: { fontSize: 12, fontFamily: fonts.sansSemiBold, color: colors.charcoal },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
@@ -241,14 +329,36 @@ const styles = StyleSheet.create({
     backgroundColor: colors.creamCard,
     borderWidth: 1,
     borderColor: colors.creamBorder,
-    borderRadius: 14,
+    borderRadius: radii.lg,
     padding: 16,
     alignItems: "center",
     gap: 4,
+    ...shadows.soft,
   },
-  statValue: { fontSize: 22, fontFamily: fonts.sansBold, color: colors.charcoal },
-  statLabel: { fontSize: 10, color: colors.charcoalMuted, textTransform: "uppercase", fontFamily: fonts.sansSemiBold, textAlign: "center" },
-  card: { backgroundColor: colors.creamCard, borderWidth: 1, borderColor: colors.creamBorder, borderRadius: 14, padding: 16, gap: 4 },
-  cardLabel: { fontSize: 10, color: colors.charcoalMuted, textTransform: "uppercase", fontFamily: fonts.sansSemiBold },
-  cardValue: { fontSize: 18, fontFamily: fonts.sansBold, color: colors.charcoal },
+  statValue: { fontSize: 22, fontFamily: fonts.serif, color: colors.charcoal },
+  statLabel: {
+    fontSize: 10,
+    color: colors.charcoalMuted,
+    textTransform: "uppercase",
+    fontFamily: fonts.sansSemiBold,
+    textAlign: "center",
+    letterSpacing: 0.4,
+  },
+  card: {
+    backgroundColor: colors.creamCard,
+    borderWidth: 1,
+    borderColor: colors.creamBorder,
+    borderRadius: radii.lg,
+    padding: 16,
+    gap: 4,
+    ...shadows.soft,
+  },
+  cardLabel: {
+    fontSize: 10,
+    color: colors.charcoalMuted,
+    textTransform: "uppercase",
+    fontFamily: fonts.sansSemiBold,
+    letterSpacing: 0.5,
+  },
+  cardValue: { fontSize: 18, fontFamily: fonts.serif, color: colors.charcoal },
 });

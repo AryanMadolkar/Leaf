@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { authFetch } from "@/lib/api";
+import { profileHref } from "@/lib/navigation";
 import { resolveMediaUrl } from "@/lib/media";
 import type { Reader } from "@/lib/types";
 import { colors, fonts } from "@/constants/theme";
@@ -17,6 +18,10 @@ export default function ReaderCard({ reader }: { reader: Reader }) {
   const [isFollowing, setIsFollowing] = useState(reader.isFollowing);
   const [pending, setPending] = useState(false);
   const avatar = resolveMediaUrl(reader.avatar);
+
+  useEffect(() => {
+    setIsFollowing(reader.isFollowing);
+  }, [reader.isFollowing, reader.id]);
 
   const toggleFollow = async () => {
     if (pending) return;
@@ -41,7 +46,7 @@ export default function ReaderCard({ reader }: { reader: Reader }) {
     <View style={styles.card}>
       <Pressable
         style={{ alignItems: "center" }}
-        onPress={() => router.push(`/profile/${reader.username}` as any)}
+        onPress={() => router.push(profileHref(reader.username))}
       >
         {avatar ? (
           <Image source={{ uri: avatar }} style={styles.avatar} />
@@ -63,7 +68,7 @@ export default function ReaderCard({ reader }: { reader: Reader }) {
         <Text style={styles.genreBadge} numberOfLines={1}>
           {reader.topGenre}
         </Text>
-        {reader.streak > 0 && <Text style={styles.streakBadge}>🔥 {reader.streak}</Text>}
+        {reader.streak > 0 && <Text style={styles.streakBadge}>{reader.streak}d streak</Text>}
       </View>
 
       <Pressable
@@ -85,21 +90,33 @@ export default function ReaderCard({ reader }: { reader: Reader }) {
 
 const styles = StyleSheet.create({
   card: {
-    width: 148,
+    width: 152,
     padding: 14,
     gap: 6,
     alignItems: "center",
     backgroundColor: colors.creamCard,
     borderWidth: 1,
     borderColor: colors.creamBorder,
-    borderRadius: 16,
+    borderRadius: 18,
+    shadowColor: "#1C1C1A",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    elevation: 3,
   },
-  avatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.creamDark },
-  avatarFallback: { alignItems: "center", justifyContent: "center" },
+  avatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: colors.creamDark,
+    borderWidth: 2,
+    borderColor: colors.cream,
+  },
+  avatarFallback: { alignItems: "center", justifyContent: "center", backgroundColor: colors.brandWash },
   avatarInitials: { fontFamily: fonts.sansBold, color: colors.brand },
-  name: { fontSize: 12, fontFamily: fonts.sansBold, color: colors.charcoal },
+  name: { fontSize: 13, fontFamily: fonts.sansSemiBold, color: colors.charcoal, marginTop: 4 },
   username: { fontSize: 10, color: colors.charcoalMuted, fontFamily: fonts.sans },
-  badgeRow: { flexDirection: "row", gap: 6, marginTop: 2 },
+  badgeRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 6, marginTop: 2 },
   genreBadge: {
     fontSize: 9,
     fontFamily: fonts.sansSemiBold,
@@ -109,27 +126,32 @@ const styles = StyleSheet.create({
     borderColor: colors.creamBorder,
     borderRadius: 999,
     paddingHorizontal: 8,
-    paddingVertical: 2,
-    maxWidth: 80,
+    paddingVertical: 3,
+    maxWidth: 88,
+    overflow: "hidden",
   },
   streakBadge: {
     fontSize: 9,
     fontFamily: fonts.sansBold,
     color: colors.brand,
-    backgroundColor: "#e8f0e9",
+    backgroundColor: colors.brandWash,
     borderRadius: 999,
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
   },
   followButton: {
-    marginTop: 4,
+    marginTop: 6,
     width: "100%",
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingVertical: 8,
+    borderRadius: 10,
     alignItems: "center",
     backgroundColor: colors.brand,
   },
-  followingButton: { backgroundColor: colors.creamDark },
+  followingButton: {
+    backgroundColor: colors.cream,
+    borderWidth: 1,
+    borderColor: colors.creamBorder,
+  },
   followText: { fontSize: 11, fontFamily: fonts.sansBold, color: colors.white },
   followingText: { color: colors.charcoal },
 });

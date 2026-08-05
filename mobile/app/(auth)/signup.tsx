@@ -44,10 +44,17 @@ export default function SignupScreen() {
 
         {error && <Text style={styles.error}>{error}</Text>}
 
-        <TextInput style={styles.input} placeholder="Name" value={name} onChangeText={setName} />
+        <TextInput
+          style={styles.input}
+          placeholder="Name"
+          placeholderTextColor={colors.charcoalMuted}
+          value={name}
+          onChangeText={setName}
+        />
         <TextInput
           style={styles.input}
           placeholder="Email"
+          placeholderTextColor={colors.charcoalMuted}
           autoCapitalize="none"
           keyboardType="email-address"
           value={email}
@@ -56,6 +63,7 @@ export default function SignupScreen() {
         <TextInput
           style={styles.input}
           placeholder="Password (min. 6 characters)"
+          placeholderTextColor={colors.charcoalMuted}
           secureTextEntry
           value={password}
           onChangeText={setPassword}
@@ -96,6 +104,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: fonts.sans,
     backgroundColor: colors.creamCard,
+    color: colors.charcoal,
   },
   button: {
     backgroundColor: colors.brand,

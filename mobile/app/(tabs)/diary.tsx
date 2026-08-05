@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { authFetch } from "@/lib/api";
+import { bookHref } from "@/lib/navigation";
 import type { ReadingLog } from "@/lib/types";
 import BookCover from "@/components/BookCover";
 import { colors, fonts } from "@/constants/theme";
@@ -13,45 +14,76 @@ const STATUS_STYLES: Record<ReadingLog["status"], { label: string; bg: string; f
   Finished: { label: "Finished", bg: colors.creamDark, fg: "#5c5347" },
 };
 
+function formatStars(rating: number): string {
+  const full = Math.floor(rating);
+  const half = rating - full >= 0.25 && rating - full < 0.75;
+  const roundedUp = rating - full >= 0.75 ? 1 : 0;
+  return "★".repeat(full + roundedUp) + (half ? "½" : "");
+}
+
 export default function DiaryScreen() {
   const router = useRouter();
+  const cancelledRef = useRef(false);
   const [logs, setLogs] = useState<ReadingLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
+      setError(null);
       const res = await authFetch("/api/init");
       const data = await res.json();
-      if (res.ok && data.success) {
-        const sorted = [...(data.diaryLogs || [])].sort((a: ReadingLog, b: ReadingLog) =>
-          (b.dateLogged || "").localeCompare(a.dateLogged || "")
-        );
-        setLogs(sorted);
-      }
-    } catch {
-      // keep whatever was already loaded
+      if (!res.ok || !data.success) throw new Error(data.error || "Could not load diary");
+      const sorted = [...(data.diaryLogs || [])].sort((a: ReadingLog, b: ReadingLog) =>
+        (b.dateLogged || "").localeCompare(a.dateLogged || "")
+      );
+      if (!cancelledRef.current) setLogs(sorted);
+    } catch (err: any) {
+      if (!cancelledRef.current) setError(err.message || "Could not load diary");
     }
   }, []);
 
   useEffect(() => {
+    cancelledRef.current = false;
     (async () => {
       setLoading(true);
       await load();
-      setLoading(false);
+      if (!cancelledRef.current) setLoading(false);
     })();
+    return () => {
+      cancelledRef.current = true;
+    };
   }, [load]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await load();
-    setRefreshing(false);
+    if (!cancelledRef.current) setRefreshing(false);
   }, [load]);
 
   if (loading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator />
+      </View>
+    );
+  }
+
+  if (error && logs.length === 0) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.errorText}>{error}</Text>
+        <Pressable
+          style={styles.retryButton}
+          onPress={async () => {
+            setLoading(true);
+            await load();
+            if (!cancelledRef.current) setLoading(false);
+          }}
+        >
+          <Text style={styles.retryText}>Try again</Text>
+        </Pressable>
       </View>
     );
   }
@@ -69,7 +101,10 @@ export default function DiaryScreen() {
       renderItem={({ item }) => {
         const meta = STATUS_STYLES[item.status] || STATUS_STYLES.Finished;
         return (
-          <Pressable style={styles.row} onPress={() => item.bookId && router.push(`/book/${item.bookId}` as any)}>
+          <Pressable
+            style={styles.row}
+            onPress={() => item.bookId && router.push(bookHref(item.bookId))}
+          >
             <BookCover uri={item.bookCover} title={item.bookTitle || "Untitled"} width={52} height={78} />
             <View style={styles.rowInfo}>
               <View style={[styles.statusBadge, { backgroundColor: meta.bg }]}>
@@ -81,7 +116,7 @@ export default function DiaryScreen() {
               <Text style={styles.bookAuthor} numberOfLines={1}>
                 {item.bookAuthor}
               </Text>
-              {item.rating ? <Text style={styles.rating}>{"★".repeat(Math.round(item.rating))}</Text> : null}
+              {item.rating ? <Text style={styles.rating}>{formatStars(item.rating)}</Text> : null}
               <Text style={styles.date}>{item.dateLogged}</Text>
             </View>
           </Pressable>
@@ -93,7 +128,15 @@ export default function DiaryScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.cream },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.cream },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.cream, gap: 12 },
+  errorText: { fontSize: 13, color: colors.charcoalMuted, fontFamily: fonts.sans },
+  retryButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: colors.brand,
+  },
+  retryText: { fontSize: 13, fontFamily: fonts.sansBold, color: colors.white },
   content: { padding: 16, gap: 12, paddingBottom: 48 },
   emptyText: { fontSize: 12, color: colors.charcoalMuted, fontStyle: "italic", textAlign: "center", marginTop: 24 },
   row: {
