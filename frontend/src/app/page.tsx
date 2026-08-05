@@ -19,7 +19,8 @@ import { COVER_ID_BY_ISBN } from "@/data/coverOverrides";
 import { formatRelativeTime } from "@/utils/time";
 
 const APP_DOWNLOAD_URL =
-  process.env.NEXT_PUBLIC_APP_DOWNLOAD_URL || "/leaf.apk";
+  process.env.NEXT_PUBLIC_APP_DOWNLOAD_URL ||
+  "https://expo.dev/artifacts/eas/DNQ1z4u2kC3bQVdn-Qvk3AK7Kn_lsBDCaC5wLCrZtPM.apk";
 
 type StreamReview = {
   id: string;

@@ -65,3 +65,7 @@ next-env.d.ts
 .idea/
 .vscode/
 .gstack/
+
+# Android release artifacts (host via EAS / CDN — too large for git)
+*.apk
+*.aab
