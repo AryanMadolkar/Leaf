@@ -20,7 +20,7 @@ import { formatRelativeTime } from "@/utils/time";
 
 const APP_DOWNLOAD_URL =
   process.env.NEXT_PUBLIC_APP_DOWNLOAD_URL ||
-  "https://expo.dev/artifacts/eas/xDsJ2Hf_aXYYCbvYWazHOKLqAwuPekCO_RS19UaFAJc.apk";
+  "https://expo.dev/artifacts/eas/1neF--A-wsicE9YrIcQQXFoHl4z-JPmBltyq0DCIY84.apk";
 
 type StreamReview = {
   id: string;
