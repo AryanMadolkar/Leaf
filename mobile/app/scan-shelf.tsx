@@ -415,7 +415,6 @@ export default function ScanShelfScreen() {
           <Text style={styles.heroBody}>
             Take a photo of your shelf. We’ll read the spines and match them to books you can add in one tap.
           </Text>
-          {__DEV__ ? <Text style={styles.devHint}>API: {API_BASE_URL}</Text> : null}
 
           {previewUri ? <Image source={{ uri: previewUri }} style={styles.preview} /> : null}
 
@@ -519,7 +518,6 @@ const styles = StyleSheet.create({
   pickContent: { padding: 20, gap: 16, paddingBottom: 48 },
   heroTitle: { fontSize: 26, fontFamily: fonts.serif, color: colors.charcoal },
   heroBody: { fontSize: 14, fontFamily: fonts.sans, color: colors.charcoalMuted, lineHeight: 20 },
-  devHint: { fontSize: 11, fontFamily: fonts.sans, color: colors.charcoalMuted, opacity: 0.7 },
   preview: { width: "100%", height: 220, borderRadius: 14, backgroundColor: colors.creamDark },
   actions: { gap: 10, marginTop: 8 },
   primaryButton: {
