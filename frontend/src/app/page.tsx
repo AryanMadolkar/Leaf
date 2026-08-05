@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import LeafLogo from "@/components/LeafLogo";
 import {
   BookOpen,
+  Download,
   Sparkles,
   Layers,
   Users,
@@ -16,6 +17,9 @@ import UserAvatar from "@/components/UserAvatar";
 import CoverImage from "@/components/CoverImage";
 import { COVER_ID_BY_ISBN } from "@/data/coverOverrides";
 import { formatRelativeTime } from "@/utils/time";
+
+const APP_DOWNLOAD_URL =
+  process.env.NEXT_PUBLIC_APP_DOWNLOAD_URL || "/leaf.apk";
 
 type StreamReview = {
   id: string;
@@ -97,7 +101,15 @@ export default function LandingPage() {
             Leaf
           </span>
         </Link>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          <a
+            href={APP_DOWNLOAD_URL}
+            download
+            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 text-charcoal font-medium text-xs rounded-lg border border-cream-border hover:bg-cream-card transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Download App
+          </a>
           <Link
             href="/auth"
             className="px-4 py-2 bg-charcoal hover:bg-charcoal-light text-cream font-medium text-xs rounded-lg shadow transition-colors"
@@ -125,6 +137,22 @@ export default function LandingPage() {
             <p className="text-base md:text-lg text-charcoal-muted max-w-xl mx-auto leading-relaxed">
               Track what you read. Share what you love. Discover your next literary obsession.
             </p>
+            <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+              <a
+                href={APP_DOWNLOAD_URL}
+                download
+                className="inline-flex items-center gap-2 px-6 py-3 bg-charcoal hover:bg-charcoal-light text-cream font-medium text-sm rounded-lg shadow transition-colors"
+              >
+                <Download className="w-4 h-4" />
+                Download App
+              </a>
+              <Link
+                href="/auth"
+                className="inline-flex items-center px-6 py-3 bg-cream-card hover:bg-cream-dark text-charcoal font-medium text-sm rounded-lg border border-cream-border transition-colors"
+              >
+                Get started
+              </Link>
+            </div>
           </motion.div>
 
           {/* Floating Collage — proxied covers (direct OL ISBN URLs often fail in-browser) */}
