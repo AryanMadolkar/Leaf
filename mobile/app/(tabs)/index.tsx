@@ -15,8 +15,8 @@ import type { Book, Reader } from "@/lib/types";
 import ReaderCard from "@/components/ReaderCard";
 import BookCover from "@/components/BookCover";
 import ReviewCard, { type Review } from "@/components/ReviewCard";
-import { SectionHeader } from "@/components/ui";
-import { colors, fonts } from "@/constants/theme";
+import { AccentMark, ScreenBackdrop, SectionHeader } from "@/components/ui";
+import { colors, fonts, radii, shadows } from "@/constants/theme";
 
 async function fetchReviews(): Promise<Review[]> {
   try {
@@ -62,7 +62,7 @@ function ReaderSection({ title, readers, loading }: { title: string; readers: Re
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 12, paddingVertical: 4 }}
+          contentContainerStyle={{ gap: 12, paddingVertical: 4, paddingRight: 8 }}
         >
           {readers.map((item) => (
             <ReaderCard key={item.id} reader={item} />
@@ -121,91 +121,121 @@ export default function FeedScreen() {
   }, [load]);
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} />}
-    >
-      <View style={styles.header}>
-        <Text style={styles.greeting}>Welcome back</Text>
-        <Text style={styles.name}>{user?.display_name || "Reader"}</Text>
-      </View>
+    <ScreenBackdrop>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} />}
+      >
+        <View style={styles.header}>
+          <Text style={styles.greeting}>Welcome back</Text>
+          <Text style={styles.name}>{user?.display_name || "Reader"}</Text>
+          <AccentMark style={styles.headerAccent} />
+          <Text style={styles.tagline}>Your reading life, gathered in one place.</Text>
+        </View>
 
-      <View style={styles.section}>
-        <SectionHeader title="Recently logged" subtitle="Fresh from your circle" />
-        {loadingBooks ? (
-          <ActivityIndicator color={colors.brand} style={{ marginVertical: 16 }} />
-        ) : recentBooks.length === 0 ? (
-          <Text style={styles.emptyText}>No books logged yet.</Text>
-        ) : (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 14, paddingVertical: 6 }}
-          >
-            {recentBooks.map((item) => (
-              <View key={item.id} style={styles.bookCard}>
-                <BookCover
-                  uri={item.coverImage}
-                  title={item.title}
-                  width={104}
-                  height={154}
-                  onPress={() => router.push(bookHref(item.id))}
-                />
-                <Text style={styles.bookTitle} numberOfLines={2}>
-                  {item.title}
-                </Text>
-                <Text style={styles.bookAuthor} numberOfLines={1}>
-                  {item.author}
-                </Text>
-              </View>
-            ))}
-          </ScrollView>
-        )}
-      </View>
+        <View style={styles.section}>
+          <SectionHeader title="Recently logged" subtitle="Fresh from your circle" />
+          {loadingBooks ? (
+            <ActivityIndicator color={colors.brand} style={{ marginVertical: 16 }} />
+          ) : recentBooks.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyText}>No books logged yet — start with Discover.</Text>
+            </View>
+          ) : (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 16, paddingVertical: 8, paddingRight: 8 }}
+            >
+              {recentBooks.map((item) => (
+                <View key={item.id} style={styles.bookCard}>
+                  <BookCover
+                    uri={item.coverImage}
+                    title={item.title}
+                    width={112}
+                    height={166}
+                    onPress={() => router.push(bookHref(item.id))}
+                  />
+                  <Text style={styles.bookTitle} numberOfLines={2}>
+                    {item.title}
+                  </Text>
+                  <Text style={styles.bookAuthor} numberOfLines={1}>
+                    {item.author}
+                  </Text>
+                </View>
+              ))}
+            </ScrollView>
+          )}
+        </View>
 
-      <ReaderSection title="Active readers" readers={activeReaders} loading={loadingReaders} />
-      <ReaderSection title="New readers" readers={newReaders} loading={loadingReaders} />
+        <ReaderSection title="Active readers" readers={activeReaders} loading={loadingReaders} />
+        <ReaderSection title="New readers" readers={newReaders} loading={loadingReaders} />
 
-      <View style={styles.section}>
-        <SectionHeader title="Recent reviews" subtitle="Notes from the community" />
-        {loadingReviews ? (
-          <ActivityIndicator color={colors.brand} style={{ marginVertical: 16 }} />
-        ) : reviews.length === 0 ? (
-          <Text style={styles.emptyText}>No reviews yet.</Text>
-        ) : (
-          <View style={{ gap: 12 }}>
-            {reviews.map((r) => (
-              <ReviewCard key={r.id} review={r} />
-            ))}
-          </View>
-        )}
-      </View>
-    </ScrollView>
+        <View style={styles.section}>
+          <SectionHeader title="Recent reviews" subtitle="Notes from the community" />
+          {loadingReviews ? (
+            <ActivityIndicator color={colors.brand} style={{ marginVertical: 16 }} />
+          ) : reviews.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyText}>No reviews yet.</Text>
+            </View>
+          ) : (
+            <View style={{ gap: 14 }}>
+              {reviews.map((r) => (
+                <ReviewCard key={r.id} review={r} />
+              ))}
+            </View>
+          )}
+        </View>
+      </ScrollView>
+    </ScreenBackdrop>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.cream },
-  content: { padding: 20, gap: 30, paddingBottom: 56 },
-  header: { gap: 2, paddingTop: 4, paddingBottom: 8 },
-  greeting: { fontSize: 15, color: colors.charcoalMuted, fontFamily: fonts.sans },
+  container: { flex: 1, backgroundColor: "transparent" },
+  content: { padding: 20, gap: 34, paddingBottom: 64 },
+  header: { gap: 6, paddingTop: 8, paddingBottom: 4 },
+  greeting: {
+    fontSize: 12,
+    color: colors.brandMuted,
+    fontFamily: fonts.sansBold,
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+  },
   name: {
-    fontSize: 28,
+    fontSize: 36,
     fontFamily: fonts.serif,
     color: colors.charcoal,
-    letterSpacing: -0.4,
-    lineHeight: 34,
+    letterSpacing: -0.8,
+    lineHeight: 40,
   },
-  section: { gap: 12 },
+  headerAccent: { marginTop: 2 },
+  tagline: {
+    fontSize: 14,
+    fontFamily: fonts.sans,
+    color: colors.charcoalMuted,
+    lineHeight: 20,
+    marginTop: 2,
+    maxWidth: 280,
+  },
+  section: { gap: 14 },
+  emptyCard: {
+    backgroundColor: colors.creamCard,
+    borderWidth: 1,
+    borderColor: colors.creamBorder,
+    borderRadius: radii.lg,
+    padding: 16,
+    ...shadows.soft,
+  },
   emptyText: {
     fontSize: 13,
     color: colors.charcoalMuted,
     fontStyle: "italic",
     fontFamily: fonts.sans,
-    paddingVertical: 8,
   },
-  bookCard: { width: 104, gap: 6 },
-  bookTitle: { fontSize: 12, fontFamily: fonts.sansSemiBold, color: colors.charcoal, lineHeight: 15 },
+  bookCard: { width: 112, gap: 8 },
+  bookTitle: { fontSize: 13, fontFamily: fonts.sansSemiBold, color: colors.charcoal, lineHeight: 16 },
   bookAuthor: { fontSize: 11, color: colors.charcoalMuted, fontFamily: fonts.sans },
 });

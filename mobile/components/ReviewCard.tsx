@@ -4,7 +4,7 @@ import { useRouter } from "expo-router";
 import { bookHref, profileHref } from "@/lib/navigation";
 import { resolveMediaUrl } from "@/lib/media";
 import BookCover from "@/components/BookCover";
-import { colors, fonts } from "@/constants/theme";
+import { colors, fonts, radii, shadows } from "@/constants/theme";
 
 export type Review = {
   id: string;
@@ -85,33 +85,39 @@ const styles = StyleSheet.create({
     backgroundColor: colors.creamCard,
     borderWidth: 1,
     borderColor: colors.creamBorder,
-    borderRadius: 16,
+    borderRadius: 20,
     padding: 16,
-    gap: 10,
+    gap: 12,
     shadowColor: "#1C1C1A",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.06,
-    shadowRadius: 14,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    elevation: 4,
   },
   header: { flexDirection: "row", alignItems: "center", gap: 10 },
-  avatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.creamDark },
+  avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.creamDark },
   avatarFallback: { alignItems: "center", justifyContent: "center", backgroundColor: colors.brandWash },
   avatarInitials: { fontSize: 10, fontFamily: fonts.sansBold, color: colors.brand },
   reviewerName: { fontSize: 13, fontFamily: fonts.sansSemiBold, color: colors.charcoal },
   date: { fontSize: 10, color: colors.charcoalMuted, fontFamily: fonts.sans, marginTop: 1 },
-  rating: { fontSize: 12, color: colors.gold, letterSpacing: 0.5 },
+  rating: { fontSize: 13, color: colors.gold, letterSpacing: 0.6 },
   bookRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: colors.cream,
-    borderRadius: 12,
-    padding: 8,
+    backgroundColor: colors.paper,
+    borderRadius: 14,
+    padding: 10,
     borderWidth: 1,
     borderColor: colors.creamBorder,
   },
   bookLine: { flex: 1, fontSize: 12, fontFamily: fonts.sansSemiBold, color: colors.brand },
   bookAuthor: { fontFamily: fonts.sans, color: colors.charcoalMuted },
-  content: { fontSize: 13, color: colors.charcoalLight, fontFamily: fonts.sans, lineHeight: 19 },
+  content: {
+    fontSize: 14,
+    color: colors.charcoalLight,
+    fontFamily: fonts.serif,
+    lineHeight: 21,
+    letterSpacing: -0.1,
+  },
 });

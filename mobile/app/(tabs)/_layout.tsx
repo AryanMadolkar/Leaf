@@ -2,39 +2,36 @@ import { Ionicons } from "@expo/vector-icons";
 import { Link, Redirect, Tabs } from "expo-router";
 import { ActivityIndicator, Image, Platform, Pressable, Text, View } from "react-native";
 
-import Colors from "@/constants/Colors";
 import { colors, fonts, radii, shadows } from "@/constants/theme";
-import { useColorScheme } from "@/components/useColorScheme";
 import { useClientOnlyValue } from "@/components/useClientOnlyValue";
 import { useAuth } from "@/lib/auth";
 
 function LeafHeaderTitle() {
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
       <View
         style={{
-          width: 28,
-          height: 28,
-          borderRadius: 8,
-          backgroundColor: colors.brandWash,
+          width: 30,
+          height: 30,
+          borderRadius: 9,
+          backgroundColor: colors.brand,
           alignItems: "center",
           justifyContent: "center",
-          borderWidth: 1,
-          borderColor: "rgba(46,77,56,0.12)",
+          ...shadows.soft,
         }}
       >
         <Image
           source={require("@/assets/images/leaf-logo.png")}
-          style={{ width: 16, height: 16 }}
+          style={{ width: 16, height: 16, tintColor: colors.cream }}
           resizeMode="contain"
         />
       </View>
       <Text
         style={{
-          fontSize: 20,
+          fontSize: 22,
           fontFamily: fonts.serif,
           color: colors.charcoal,
-          letterSpacing: -0.4,
+          letterSpacing: -0.5,
         }}
       >
         Leaf
@@ -64,7 +61,6 @@ function HeaderIcon({ href, name }: { href: "/search" | "/settings"; name: keyof
 }
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
   const { isLoading, isAuthenticated } = useAuth();
   // Must run before any early return — conditional hooks break React's rules.
   const headerShown = useClientOnlyValue(false, true);
@@ -84,27 +80,29 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme].tint,
+        tabBarActiveTintColor: colors.brand,
         tabBarInactiveTintColor: colors.charcoalMuted,
         tabBarLabelStyle: {
           fontFamily: fonts.sansSemiBold,
           fontSize: 10,
-          letterSpacing: 0.2,
+          letterSpacing: 0.25,
         },
         tabBarStyle: {
           backgroundColor: colors.creamCard,
           borderTopColor: colors.creamBorder,
           borderTopWidth: StyleSheetHairline(),
-          height: Platform.OS === "ios" ? 88 : 64,
-          paddingTop: 6,
-          ...shadows.soft,
+          height: Platform.OS === "ios" ? 88 : 66,
+          paddingTop: 8,
+          ...shadows.card,
+        },
+        tabBarItemStyle: {
+          paddingTop: 2,
         },
         headerShown,
         headerStyle: {
           backgroundColor: colors.cream,
           borderBottomWidth: StyleSheetHairline(),
           borderBottomColor: colors.creamBorder,
-          ...shadows.soft,
         },
         headerShadowVisible: false,
         headerTitle: () => <LeafHeaderTitle />,
@@ -159,8 +157,7 @@ export default function TabLayout() {
             <Ionicons name={focused ? "person-circle" : "person-circle-outline"} color={color} size={size} />
           ),
           headerRight: () => (
-            <View style={{ flexDirection: "row", alignItems: "center", paddingRight: 8, gap: 2 }}>
-              <HeaderIcon href="/search" name="search" />
+            <View style={{ paddingRight: 12 }}>
               <HeaderIcon href="/settings" name="settings-outline" />
             </View>
           ),

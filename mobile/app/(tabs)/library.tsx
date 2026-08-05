@@ -22,7 +22,8 @@ import { bookHref } from "@/lib/navigation";
 import type { Book, LibraryPayload, LibraryShelf } from "@/lib/types";
 import BookCover from "@/components/BookCover";
 import Bookshelf from "@/components/Bookshelf";
-import { colors, fonts } from "@/constants/theme";
+import { ScreenBackdrop } from "@/components/ui";
+import { colors, fonts, radii, shadows } from "@/constants/theme";
 
 const ALL_SHELF_ID = "__all__";
 const GRID_GAP = 12;
@@ -166,11 +167,11 @@ export default function LibraryScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <ScreenBackdrop>
       <ScrollView
-        style={styles.container}
+        style={styles.scroll}
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} />}
         nestedScrollEnabled
         onLayout={(e) => {
           const w = e.nativeEvent.layout.width - 32;
@@ -306,7 +307,7 @@ export default function LibraryScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </ScreenBackdrop>
   );
 }
 
@@ -329,6 +330,7 @@ function StatTile({ label, value }: { label: string; value: number }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.cream },
+  scroll: { flex: 1, backgroundColor: "transparent" },
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.cream, gap: 12 },
   errorText: { fontSize: 13, color: colors.charcoalMuted, fontFamily: fonts.sans },
   retryButton: {
@@ -338,24 +340,25 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brand,
   },
   retryText: { fontSize: 13, fontFamily: fonts.sansBold, color: colors.white },
-  content: { padding: 16, paddingTop: 12, paddingBottom: 48, gap: 14 },
+  content: { padding: 16, paddingTop: 12, paddingBottom: 48, gap: 16 },
   statsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     backgroundColor: colors.creamCard,
     borderWidth: 1,
     borderColor: colors.creamBorder,
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: radii.xl,
+    padding: 18,
+    ...shadows.card,
   },
   statTile: { alignItems: "center", gap: 2 },
-  statValue: { fontSize: 20, fontFamily: fonts.sansBold, color: colors.charcoal },
+  statValue: { fontSize: 22, fontFamily: fonts.serif, color: colors.charcoal },
   statLabel: {
     fontSize: 9,
     color: colors.charcoalMuted,
     textTransform: "uppercase",
     fontFamily: fonts.sansSemiBold,
-    letterSpacing: 0.4,
+    letterSpacing: 0.5,
   },
   shelfRow: { flexGrow: 0 },
   shelfRowContent: { flexDirection: "row", alignItems: "center", gap: 8, paddingRight: 4 },
@@ -367,46 +370,57 @@ const styles = StyleSheet.create({
   toolbarActions: { flexDirection: "row", alignItems: "center", gap: 8 },
   resultsText: { fontSize: 12, color: colors.charcoalMuted, fontFamily: fonts.sans },
   shareButton: {
-    padding: 9,
-    borderRadius: 10,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.creamCard,
     borderWidth: 1,
     borderColor: colors.creamBorder,
-    backgroundColor: colors.creamCard,
   },
   chip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 999,
+    borderRadius: radii.pill,
     borderWidth: 1,
     borderColor: colors.creamBorder,
     backgroundColor: colors.creamCard,
   },
   chipActive: { backgroundColor: colors.brand, borderColor: colors.brand },
-  chipText: { fontSize: 12, fontFamily: fonts.sansSemiBold, color: colors.charcoal },
+  chipText: { fontSize: 12, fontFamily: fonts.sansSemiBold, color: colors.charcoalMuted },
   chipTextActive: { color: colors.white },
   newShelfChip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 999,
+    borderRadius: radii.pill,
+    backgroundColor: colors.brandWash,
     borderWidth: 1,
-    borderColor: colors.brand,
-    borderStyle: "dashed",
+    borderColor: "rgba(46,77,56,0.16)",
   },
   newShelfChipText: { fontSize: 12, fontFamily: fonts.sansSemiBold, color: colors.brand },
   viewToggle: {
     flexDirection: "row",
+    backgroundColor: colors.creamCard,
     borderWidth: 1,
     borderColor: colors.creamBorder,
-    borderRadius: 10,
-    overflow: "hidden",
+    borderRadius: 12,
+    padding: 3,
+    gap: 2,
   },
-  viewToggleButton: { paddingHorizontal: 10, paddingVertical: 8, backgroundColor: colors.creamCard },
+  viewToggleButton: {
+    width: 32,
+    height: 28,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   viewToggleButtonActive: { backgroundColor: colors.brand },
   emptyText: {
-    fontSize: 12,
+    fontSize: 13,
     color: colors.charcoalMuted,
     fontStyle: "italic",
     textAlign: "center",
@@ -418,28 +432,34 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: GRID_GAP,
   },
-  bookCell: { gap: 4 },
-  bookTitle: { fontSize: 11, fontFamily: fonts.sansBold, color: colors.charcoal },
+  bookCell: { gap: 6 },
+  bookTitle: { fontSize: 11, fontFamily: fonts.sansSemiBold, color: colors.charcoal },
   bookAuthor: { fontSize: 10, color: colors.charcoalMuted, fontFamily: fonts.sans },
-  modalBackdrop: { flex: 1, backgroundColor: "rgba(28,28,26,0.4)", justifyContent: "center", padding: 24 },
-  modalSheet: { backgroundColor: colors.cream, borderRadius: 20, padding: 20, gap: 12 },
-  modalTitle: { fontSize: 18, fontFamily: fonts.serif, color: colors.charcoal },
+  modalBackdrop: { flex: 1, backgroundColor: "rgba(28,28,26,0.35)", justifyContent: "center", padding: 24 },
+  modalSheet: {
+    backgroundColor: colors.creamCard,
+    borderRadius: radii.xl,
+    padding: 20,
+    gap: 12,
+    ...shadows.float,
+  },
+  modalTitle: { fontSize: 22, fontFamily: fonts.serif, color: colors.charcoal },
   modalError: { fontSize: 12, color: colors.error, fontFamily: fonts.sans },
   modalInput: {
     borderWidth: 1,
     borderColor: colors.creamBorder,
-    borderRadius: 12,
+    borderRadius: radii.md,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 14,
     fontFamily: fonts.sans,
-    backgroundColor: colors.creamCard,
+    backgroundColor: colors.cream,
     color: colors.charcoal,
   },
   modalActions: { flexDirection: "row", justifyContent: "flex-end", gap: 10 },
   modalCancel: { paddingHorizontal: 16, paddingVertical: 10 },
   modalCancelText: { fontSize: 13, fontFamily: fonts.sansSemiBold, color: colors.charcoalMuted },
-  modalSave: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10, backgroundColor: colors.brand },
+  modalSave: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: radii.md, backgroundColor: colors.brand },
   modalSaveDisabled: { opacity: 0.5 },
   modalSaveText: { fontSize: 13, fontFamily: fonts.sansBold, color: colors.white },
 });

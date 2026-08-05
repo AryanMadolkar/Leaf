@@ -5,7 +5,7 @@ import { authFetch } from "@/lib/api";
 import { profileHref } from "@/lib/navigation";
 import { resolveMediaUrl } from "@/lib/media";
 import type { Reader } from "@/lib/types";
-import { colors, fonts } from "@/constants/theme";
+import { colors, fonts, shadows } from "@/constants/theme";
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -90,30 +90,26 @@ export default function ReaderCard({ reader }: { reader: Reader }) {
 
 const styles = StyleSheet.create({
   card: {
-    width: 152,
+    width: 158,
     padding: 14,
-    gap: 6,
+    gap: 8,
     alignItems: "center",
     backgroundColor: colors.creamCard,
     borderWidth: 1,
     borderColor: colors.creamBorder,
-    borderRadius: 18,
-    shadowColor: "#1C1C1A",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.06,
-    shadowRadius: 14,
-    elevation: 3,
+    borderRadius: 22,
+    ...shadows.card,
   },
   avatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: colors.creamDark,
-    borderWidth: 2,
-    borderColor: colors.cream,
+    borderWidth: 3,
+    borderColor: colors.brandWash,
   },
   avatarFallback: { alignItems: "center", justifyContent: "center", backgroundColor: colors.brandWash },
-  avatarInitials: { fontFamily: fonts.sansBold, color: colors.brand },
+  avatarInitials: { fontFamily: fonts.sansBold, color: colors.brand, fontSize: 18 },
   name: { fontSize: 13, fontFamily: fonts.sansSemiBold, color: colors.charcoal, marginTop: 4 },
   username: { fontSize: 10, color: colors.charcoalMuted, fontFamily: fonts.sans },
   badgeRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 6, marginTop: 2 },
@@ -121,7 +117,7 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontFamily: fonts.sansSemiBold,
     color: colors.charcoalMuted,
-    backgroundColor: colors.cream,
+    backgroundColor: colors.paper,
     borderWidth: 1,
     borderColor: colors.creamBorder,
     borderRadius: 999,
@@ -142,8 +138,8 @@ const styles = StyleSheet.create({
   followButton: {
     marginTop: 6,
     width: "100%",
-    paddingVertical: 8,
-    borderRadius: 10,
+    paddingVertical: 9,
+    borderRadius: 12,
     alignItems: "center",
     backgroundColor: colors.brand,
   },

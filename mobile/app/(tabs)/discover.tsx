@@ -8,12 +8,14 @@ import {
   Text,
   View,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { authFetch } from "@/lib/api";
 import { bookHref } from "@/lib/navigation";
 import type { Book } from "@/lib/types";
 import BookCover from "@/components/BookCover";
-import { colors, fonts } from "@/constants/theme";
+import { Eyebrow, ScreenBackdrop, SectionHeader } from "@/components/ui";
+import { colors, fonts, radii, shadows } from "@/constants/theme";
 
 const SHELVES: { key: string; title: string }[] = [
   { key: "trending", title: "Trending This Week" },
@@ -125,170 +127,207 @@ export default function DiscoverScreen() {
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator />
-      </View>
+      <ScreenBackdrop>
+        <View style={styles.center}>
+          <ActivityIndicator color={colors.brand} />
+        </View>
+      </ScreenBackdrop>
     );
   }
 
   if (loadFailed) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.errorText}>Couldn’t load Discover</Text>
-        <Pressable
-          style={styles.retryButton}
-          onPress={async () => {
-            setLoading(true);
-            await load();
-          }}
-        >
-          <Text style={styles.retryText}>Try again</Text>
-        </Pressable>
-      </View>
+      <ScreenBackdrop>
+        <View style={styles.center}>
+          <Text style={styles.errorText}>Couldn’t load Discover</Text>
+          <Pressable
+            style={styles.retryButton}
+            onPress={async () => {
+              setLoading(true);
+              await load();
+            }}
+          >
+            <Text style={styles.retryText}>Try again</Text>
+          </Pressable>
+        </View>
+      </ScreenBackdrop>
     );
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-    >
-      {featured && (
-        <View style={styles.hero}>
-          <Text style={styles.heroLabel}>Featured Volume of the Day</Text>
-          <View style={styles.heroBody}>
-            <BookCover
-              uri={featured.coverImage}
-              title={featured.title}
-              width={90}
-              height={132}
-              onPress={() => router.push(bookHref(featured.id))}
-            />
-            <View style={styles.heroInfo}>
-              <Text style={styles.heroTitle} numberOfLines={2}>
-                {featured.title}
-              </Text>
-              <Text style={styles.heroAuthor} numberOfLines={1}>
-                by {featured.author}
-              </Text>
-              <Text style={styles.heroDescription} numberOfLines={4}>
-                {featured.description}
-              </Text>
+    <ScreenBackdrop>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} />}
+      >
+        {featured && (
+          <Pressable onPress={() => router.push(bookHref(featured.id))} style={styles.heroWrap}>
+            <LinearGradient
+              colors={[colors.brandDeep, colors.brand, colors.brandLight]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.hero}
+            >
+              <View style={styles.heroGlow} />
+              <Eyebrow style={styles.heroLabel}>Featured Volume of the Day</Eyebrow>
+              <View style={styles.heroBody}>
+                <BookCover uri={featured.coverImage} title={featured.title} width={102} height={150} />
+                <View style={styles.heroInfo}>
+                  <Text style={styles.heroTitle} numberOfLines={3}>
+                    {featured.title}
+                  </Text>
+                  <Text style={styles.heroAuthor} numberOfLines={1}>
+                    by {featured.author}
+                  </Text>
+                  <Text style={styles.heroDescription} numberOfLines={4}>
+                    {featured.description}
+                  </Text>
+                </View>
+              </View>
+            </LinearGradient>
+          </Pressable>
+        )}
+
+        {SHELVES.map((s) => {
+          const books = shelves[s.key] || [];
+          if (books.length === 0) return null;
+          return (
+            <View key={s.key} style={styles.section}>
+              <SectionHeader title={s.title} />
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 14, paddingRight: 8, paddingVertical: 4 }}
+              >
+                {books.map((item) => (
+                  <View key={item.id} style={styles.bookCard}>
+                    <BookCover
+                      uri={item.coverImage}
+                      title={item.title}
+                      width={108}
+                      height={160}
+                      onPress={() => router.push(bookHref(item.id))}
+                    />
+                    <Text style={styles.bookTitle} numberOfLines={2}>
+                      {item.title}
+                    </Text>
+                    <Text style={styles.bookAuthor} numberOfLines={1}>
+                      {item.author}
+                    </Text>
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          );
+        })}
+
+        {loadingMore && (
+          <View style={styles.moreLoading}>
+            <ActivityIndicator color={colors.brand} />
+          </View>
+        )}
+
+        {leaderboard.length > 0 && (
+          <View style={styles.section}>
+            <SectionHeader title="Top 25 on Leaf" subtitle="What readers keep returning to" />
+            <View style={{ gap: 10 }}>
+              {leaderboard.map((book, idx) => (
+                <Pressable key={book.id} style={styles.leaderboardRow} onPress={() => router.push(bookHref(book.id))}>
+                  <Text style={[styles.rank, idx < 3 && styles.rankTop]}>{idx + 1}</Text>
+                  <BookCover uri={book.coverImage} title={book.title} width={44} height={64} />
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={styles.bookTitle} numberOfLines={1}>
+                      {book.title}
+                    </Text>
+                    <Text style={styles.bookAuthor} numberOfLines={1}>
+                      {book.author}
+                    </Text>
+                  </View>
+                  {book.averageRating > 0 && <Text style={styles.rating}>★ {book.averageRating.toFixed(1)}</Text>}
+                </Pressable>
+              ))}
             </View>
           </View>
-        </View>
-      )}
-
-      {SHELVES.map((s) => {
-        const books = shelves[s.key] || [];
-        if (books.length === 0) return null;
-        return (
-          <View key={s.key} style={styles.section}>
-            <Text style={styles.sectionTitle}>{s.title}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
-              {books.map((item) => (
-                <View key={item.id} style={styles.bookCard}>
-                  <BookCover
-                    uri={item.coverImage}
-                    title={item.title}
-                    width={100}
-                    height={148}
-                    onPress={() => router.push(bookHref(item.id))}
-                  />
-                  <Text style={styles.bookTitle} numberOfLines={1}>
-                    {item.title}
-                  </Text>
-                  <Text style={styles.bookAuthor} numberOfLines={1}>
-                    {item.author}
-                  </Text>
-                </View>
-              ))}
-            </ScrollView>
-          </View>
-        );
-      })}
-
-      {loadingMore && (
-        <View style={styles.moreLoading}>
-          <ActivityIndicator />
-        </View>
-      )}
-
-      {leaderboard.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Top 25 Books on Leaf</Text>
-          <View style={{ gap: 8 }}>
-            {leaderboard.map((book, idx) => (
-              <Pressable key={book.id} style={styles.leaderboardRow} onPress={() => router.push(bookHref(book.id))}>
-                <Text style={styles.rank}>{idx + 1}</Text>
-                <BookCover uri={book.coverImage} title={book.title} width={40} height={58} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.bookTitle} numberOfLines={1}>
-                    {book.title}
-                  </Text>
-                  <Text style={styles.bookAuthor} numberOfLines={1}>
-                    {book.author}
-                  </Text>
-                </View>
-                {book.averageRating > 0 && <Text style={styles.rating}>★ {book.averageRating.toFixed(1)}</Text>}
-              </Pressable>
-            ))}
-          </View>
-        </View>
-      )}
-    </ScrollView>
+        )}
+      </ScrollView>
+    </ScreenBackdrop>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.cream },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.cream, gap: 12 },
+  container: { flex: 1, backgroundColor: "transparent" },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   errorText: { fontSize: 13, color: colors.charcoalMuted, fontFamily: fonts.sans },
   retryButton: {
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: 10,
+    borderRadius: radii.md,
     backgroundColor: colors.brand,
   },
   retryText: { fontSize: 13, fontFamily: fonts.sansBold, color: colors.white },
-  content: { padding: 16, gap: 24, paddingBottom: 48 },
+  content: { padding: 20, gap: 30, paddingBottom: 64 },
+  heroWrap: { ...shadows.float, borderRadius: radii.xxl },
   hero: {
-    backgroundColor: colors.creamCard,
-    borderWidth: 1,
-    borderColor: colors.creamBorder,
-    borderRadius: 16,
-    padding: 16,
-    gap: 10,
+    borderRadius: radii.xxl,
+    padding: 20,
+    gap: 14,
+    overflow: "hidden",
+  },
+  heroGlow: {
+    position: "absolute",
+    top: -40,
+    right: -30,
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: "rgba(255,255,255,0.08)",
   },
   heroLabel: {
-    fontSize: 9,
-    fontFamily: fonts.sansBold,
-    color: colors.brand,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+    color: colors.goldSoft,
   },
-  heroBody: { flexDirection: "row", gap: 12 },
-  heroInfo: { flex: 1, gap: 4, justifyContent: "center" },
-  heroTitle: { fontSize: 18, fontFamily: fonts.serif, color: colors.charcoal },
-  heroAuthor: { fontSize: 11, color: colors.charcoalMuted, fontFamily: fonts.sans },
-  heroDescription: { fontSize: 11, color: colors.charcoalLight, fontFamily: fonts.sans, lineHeight: 16 },
-  section: { gap: 10 },
-  sectionTitle: { fontSize: 18, fontFamily: fonts.serif, color: colors.charcoal },
-  bookCard: { width: 100, gap: 4 },
-  bookTitle: { fontSize: 11, fontFamily: fonts.sansBold, color: colors.charcoal },
-  bookAuthor: { fontSize: 10, color: colors.charcoalMuted, fontFamily: fonts.sans },
+  heroBody: { flexDirection: "row", gap: 16 },
+  heroInfo: { flex: 1, gap: 6, justifyContent: "center" },
+  heroTitle: {
+    fontSize: 24,
+    fontFamily: fonts.serif,
+    color: colors.white,
+    letterSpacing: -0.4,
+    lineHeight: 28,
+  },
+  heroAuthor: { fontSize: 12, color: "rgba(250,248,245,0.72)", fontFamily: fonts.sans },
+  heroDescription: {
+    fontSize: 12,
+    color: "rgba(250,248,245,0.78)",
+    fontFamily: fonts.sans,
+    lineHeight: 18,
+    marginTop: 2,
+  },
+  section: { gap: 12 },
+  bookCard: { width: 108, gap: 8 },
+  bookTitle: { fontSize: 12, fontFamily: fonts.sansSemiBold, color: colors.charcoal, lineHeight: 15 },
+  bookAuthor: { fontSize: 11, color: colors.charcoalMuted, fontFamily: fonts.sans },
   moreLoading: { paddingVertical: 8, alignItems: "center" },
   leaderboardRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
     backgroundColor: colors.creamCard,
     borderWidth: 1,
     borderColor: colors.creamBorder,
-    borderRadius: 10,
-    padding: 8,
+    borderRadius: radii.lg,
+    padding: 12,
+    ...shadows.soft,
   },
-  rank: { width: 20, textAlign: "center", fontSize: 13, fontFamily: fonts.serif, color: colors.brandMuted },
-  rating: { fontSize: 10, fontFamily: fonts.sansBold, color: colors.gold },
+  rank: {
+    width: 24,
+    textAlign: "center",
+    fontSize: 16,
+    fontFamily: fonts.serif,
+    color: colors.brandMuted,
+  },
+  rankTop: {
+    color: colors.brand,
+  },
+  rating: { fontSize: 11, fontFamily: fonts.sansBold, color: colors.gold },
 });
