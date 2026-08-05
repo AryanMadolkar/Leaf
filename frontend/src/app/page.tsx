@@ -105,7 +105,7 @@ export default function LandingPage() {
         <div className="flex items-center gap-3">
           <a
             href={APP_DOWNLOAD_URL}
-            download
+            download="leaf.apk"
             className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 text-charcoal font-medium text-xs rounded-lg border border-cream-border hover:bg-cream-card transition-colors"
           >
             <Download className="w-3.5 h-3.5" />
@@ -141,7 +141,7 @@ export default function LandingPage() {
             <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
               <a
                 href={APP_DOWNLOAD_URL}
-                download
+                download="leaf.apk"
                 className="inline-flex items-center gap-2 px-6 py-3 bg-charcoal hover:bg-charcoal-light text-cream font-medium text-sm rounded-lg shadow transition-colors"
               >
                 <Download className="w-4 h-4" />
