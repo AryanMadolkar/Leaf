@@ -195,7 +195,7 @@ export default function FeedScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "transparent" },
-  content: { padding: 20, gap: 34, paddingBottom: 64 },
+  content: { padding: 20, gap: 34, paddingBottom: 140 },
   header: { gap: 6, paddingTop: 8, paddingBottom: 4 },
   greeting: {
     fontSize: 12,

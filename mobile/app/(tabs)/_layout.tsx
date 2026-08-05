@@ -1,10 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Link, Redirect, Tabs } from "expo-router";
 import { ActivityIndicator, Image, Platform, Pressable, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { colors, fonts, radii, shadows } from "@/constants/theme";
 import { useClientOnlyValue } from "@/components/useClientOnlyValue";
 import { useAuth } from "@/lib/auth";
+
+const FLOAT_BAR_HEIGHT = 74;
+const FLOAT_SIDE = 16;
 
 function LeafHeaderTitle() {
   return (
@@ -62,8 +66,10 @@ function HeaderIcon({ href, name }: { href: "/search" | "/settings"; name: keyof
 
 export default function TabLayout() {
   const { isLoading, isAuthenticated } = useAuth();
+  const insets = useSafeAreaInsets();
   // Must run before any early return — conditional hooks break React's rules.
   const headerShown = useClientOnlyValue(false, true);
+  const bottomGap = Math.max(insets.bottom, Platform.OS === "web" ? 20 : 12);
 
   if (isLoading) {
     return (
@@ -82,21 +88,47 @@ export default function TabLayout() {
       screenOptions={{
         tabBarActiveTintColor: colors.brand,
         tabBarInactiveTintColor: colors.charcoalMuted,
+        tabBarShowLabel: true,
         tabBarLabelStyle: {
           fontFamily: fonts.sansSemiBold,
           fontSize: 10,
-          letterSpacing: 0.25,
+          letterSpacing: 0.2,
+          marginTop: 2,
+          marginBottom: 0,
+          lineHeight: 12,
         },
         tabBarStyle: {
+          position: "absolute",
+          left: FLOAT_SIDE,
+          right: FLOAT_SIDE,
+          bottom: bottomGap,
+          height: FLOAT_BAR_HEIGHT,
+          borderRadius: radii.xxl,
           backgroundColor: colors.creamCard,
-          borderTopColor: colors.creamBorder,
-          borderTopWidth: StyleSheetHairline(),
-          height: Platform.OS === "ios" ? 88 : 66,
-          paddingTop: 8,
-          ...shadows.card,
+          borderTopWidth: 0,
+          borderWidth: 1,
+          borderColor: colors.creamBorder,
+          paddingTop: 10,
+          paddingBottom: 10,
+          overflow: "visible",
+          ...shadows.float,
+          ...(Platform.OS === "web"
+            ? ({
+                boxShadow: "0 12px 28px rgba(28, 28, 26, 0.12)",
+              } as object)
+            : null),
         },
         tabBarItemStyle: {
-          paddingTop: 2,
+          paddingTop: 0,
+          paddingBottom: 0,
+          height: FLOAT_BAR_HEIGHT - 4,
+          justifyContent: "center",
+        },
+        tabBarIconStyle: {
+          marginTop: 0,
+        },
+        sceneStyle: {
+          backgroundColor: colors.cream,
         },
         headerShown,
         headerStyle: {

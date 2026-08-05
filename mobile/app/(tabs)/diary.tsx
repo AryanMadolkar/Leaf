@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brand,
   },
   retryText: { fontSize: 13, fontFamily: fonts.sansBold, color: colors.white },
-  content: { padding: 16, gap: 12, paddingBottom: 48 },
+  content: { padding: 16, gap: 12, paddingBottom: 140 },
   emptyText: { fontSize: 12, color: colors.charcoalMuted, fontStyle: "italic", textAlign: "center", marginTop: 24 },
   row: {
     flexDirection: "row",

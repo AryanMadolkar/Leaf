@@ -266,7 +266,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brand,
   },
   retryText: { fontSize: 13, fontFamily: fonts.sansBold, color: colors.white },
-  content: { padding: 20, gap: 30, paddingBottom: 64 },
+  content: { padding: 20, gap: 30, paddingBottom: 140 },
   heroWrap: { ...shadows.float, borderRadius: radii.xxl },
   hero: {
     borderRadius: radii.xxl,

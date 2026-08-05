@@ -340,7 +340,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brand,
   },
   retryText: { fontSize: 13, fontFamily: fonts.sansBold, color: colors.white },
-  content: { padding: 16, paddingTop: 12, paddingBottom: 48, gap: 16 },
+  content: { padding: 16, paddingTop: 12, paddingBottom: 140, gap: 16 },
   statsRow: {
     flexDirection: "row",
     justifyContent: "space-between",

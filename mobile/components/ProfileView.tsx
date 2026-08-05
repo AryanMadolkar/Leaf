@@ -262,7 +262,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brand,
   },
   retryText: { fontSize: 13, fontFamily: fonts.sansBold, color: colors.white },
-  content: { padding: 20, gap: 14, paddingBottom: 56 },
+  content: { padding: 20, gap: 14, paddingBottom: 140 },
   header: { alignItems: "center", gap: 4, paddingVertical: 16 },
   avatarRing: {
     padding: 4,
