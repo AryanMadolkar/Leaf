@@ -54,7 +54,18 @@ export function filterBooksByShelf(books: Book[], shelf: CatalogShelf): Book[] {
         (b) => b.genres.some((g) => g.toLowerCase().includes("bestseller")) || b.pages > 450
       );
     case "booktok":
-      return books.filter((b) => b.genres.some((g) => g.toLowerCase().includes("booktok")));
+      // No real Open Library subject maps to "BookTok" — fall back to the
+      // viral-adjacent genres (romance/contemporary/YA/fantasy) with a high
+      // rating, on top of anything explicitly tagged, so the shelf doesn't
+      // stay stuck at a handful of hand-picked titles.
+      return books.filter(
+        (b) =>
+          b.genres.some((g) => g.toLowerCase().includes("booktok")) ||
+          (b.averageRating >= 4.3 &&
+            b.genres.some((g) =>
+              ["romance", "contemporary", "young adult", "fantasy"].includes(g.toLowerCase())
+            ))
+      );
     case "award-winners":
       return books.filter(
         (b) =>
@@ -64,7 +75,7 @@ export function filterBooksByShelf(books: Book[], shelf: CatalogShelf): Book[] {
     case "modern-classics":
       // Handled by curated pool in getCatalogBooks
       return books.filter(
-        (b) => b.genres.some((g) => g.toLowerCase().includes("classic")) && b.year >= 1945
+        (b) => b.genres.some((g) => g.toLowerCase().includes("classic")) && b.year >= 1900
       );
     case "scifi":
       return books.filter(
@@ -261,6 +272,21 @@ function getModernClassicsBooks(limit = 15, offset = 0): Book[] {
     seen.add(id);
     books.push(book);
   }
+
+  // The hand-picked pool above only resolves for whichever of those ISBNs
+  // happen to be in the catalog with a cover override — pad out the rest
+  // from the genre filter so the shelf isn't stuck at a handful of books.
+  const needed = offset + limit - books.length;
+  if (needed > 0) {
+    const fallback = preferBooksWithCovers(filterBooksByShelf(INITIAL_BOOKS, "modern-classics"));
+    for (const book of fallback) {
+      if (books.length >= offset + limit) break;
+      if (seen.has(book.id)) continue;
+      seen.add(book.id);
+      books.push(book);
+    }
+  }
+
   return books.slice(offset, offset + limit).map(withResolvedCover);
 }
 

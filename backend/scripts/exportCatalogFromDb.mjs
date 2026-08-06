@@ -92,8 +92,13 @@ async function main() {
     if (!row.id || !row.title || !row.author_name || !row.cover_url) continue;
 
     const genres = parseGenres(row.subjects);
+    // Catalog id must stay ISBN-first — INITIAL_LISTS and other static
+    // references are hardcoded against isbn_13. The DB's own primary key
+    // (mostly Open Library edition keys) is a different id space; book
+    // detail lookup (getCachedBook) already resolves by isbn OR db id OR
+    // open_library_key, so isbn-as-catalog-id doesn't break anything else.
     books.push({
-      id: row.id,
+      id: row.isbn_13 || row.id,
       title: row.title,
       author: row.author_name,
       year: row.first_publish_year || 2000,
