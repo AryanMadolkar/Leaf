@@ -5,8 +5,8 @@ import { CACHE_DAILY } from "@/utils/apiCache";
 
 const getCachedFeatured = unstable_cache(
   async (dateKey: string) => getFeaturedBookForDate(dateKey),
-  ["featured-book-daily"],
-  { revalidate: 3600, tags: ["featured-book"] }
+  ["featured-book-daily-v2"],
+  { revalidate: 3600, tags: ["featured-book-v2"] }
 );
 
 export async function GET(request: Request) {
