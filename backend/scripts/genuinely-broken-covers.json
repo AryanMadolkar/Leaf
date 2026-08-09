@@ -1,0 +1,267 @@
+[
+  {
+    "id": "OL1167271W",
+    "title": "The FHA story in summary, 1934-1959",
+    "author_name": "United States. Federal Housing Administration.",
+    "cover_url": null
+  },
+  {
+    "id": "OL35710972W",
+    "title": "Weirdo",
+    "author_name": "Sara Pascoe",
+    "cover_url": "/api/covers?size=M&title=Weirdo&author=Sara+Pascoe",
+    "reason": "Failed to parse URL from /api/covers?size=M&title=Weirdo&author=Sara+Pascoe"
+  },
+  {
+    "id": "OL29355621W",
+    "title": "One Hundred Years of Solitude",
+    "author_name": "Gregory Rabassa",
+    "cover_url": "/api/covers?size=M&title=One+Hundred+Years+of+Solitude&author=Gregory+Rabassa",
+    "reason": "Failed to parse URL from /api/covers?size=M&title=One+Hundred+Years+of+Solitude&author=Gregory+Rabassa"
+  },
+  {
+    "id": "OL36412450W",
+    "title": "Discipline Is Destiny",
+    "author_name": "Unknown Author",
+    "cover_url": "/api/covers?size=M&isbn=9780593191705",
+    "reason": "Failed to parse URL from /api/covers?size=M&isbn=9780593191705"
+  },
+  {
+    "id": "OL36735881W",
+    "title": "The Martian / Artemis / Project Hail Mary",
+    "author_name": "Andy Weir",
+    "cover_url": "https://covers.openlibrary.org/b/isbn/9781637990520-L.jpg?default=false",
+    "reason": "HTTP 404"
+  },
+  {
+    "id": "OL36196411W",
+    "title": "White Nights",
+    "author_name": "Fyodor Dostoyevsky",
+    "cover_url": "/api/covers?id=14598226&size=M&v=3",
+    "reason": "Failed to parse URL from /api/covers?id=14598226&size=M&v=3"
+  },
+  {
+    "id": "OL35712675W",
+    "title": "Water",
+    "author_name": "John Boyne",
+    "cover_url": "/api/covers?size=M&isbn=9780857529800",
+    "reason": "Failed to parse URL from /api/covers?size=M&isbn=9780857529800"
+  },
+  {
+    "id": "OL44870937W",
+    "title": "My Husbands Wife",
+    "author_name": "Alice Feeney",
+    "cover_url": "/api/covers?size=M&isbn=9781250337818",
+    "reason": "Failed to parse URL from /api/covers?size=M&isbn=9781250337818"
+  },
+  {
+    "id": "OL51113536M",
+    "title": "When among Crows",
+    "author_name": "Veronica Roth",
+    "cover_url": "https://covers.openlibrary.org/b/id/14629482-L.jpg?default=false",
+    "reason": "HTTP 503"
+  },
+  {
+    "id": "OL27689734M",
+    "title": "Guide to Tolkien's world",
+    "author_name": "David Day",
+    "cover_url": "https://covers.openlibrary.org/b/id/9128805-L.jpg?default=false",
+    "reason": "fetch failed"
+  },
+  {
+    "id": "OL24084379M",
+    "title": "Five hundred years after",
+    "author_name": "Steven Brust",
+    "cover_url": "https://covers.openlibrary.org/b/id/6298792-L.jpg?default=false",
+    "reason": "fetch failed"
+  },
+  {
+    "id": "OL33970048M",
+    "title": "The Wonderful Happens",
+    "author_name": "Cynthia Rylant",
+    "cover_url": "https://covers.openlibrary.org/b/id/435615-L.jpg?default=false",
+    "reason": "fetch failed"
+  },
+  {
+    "id": "OL11758198M",
+    "title": "Duainfey",
+    "author_name": "Sharon Lee",
+    "cover_url": "https://covers.openlibrary.org/b/id/2787311-L.jpg?default=false",
+    "reason": "fetch failed"
+  },
+  {
+    "id": "OL28711676M",
+    "title": "Wizard of the Pigeons",
+    "author_name": "Robin Hobb",
+    "cover_url": "https://covers.openlibrary.org/b/isbn/9780441894673-L.jpg?default=false",
+    "reason": "fetch failed"
+  },
+  {
+    "id": "OL60787589M",
+    "title": "FLCL Vol. 1",
+    "author_name": "Hajime Ueda",
+    "cover_url": "https://covers.openlibrary.org/b/id/15150613-L.jpg?default=false",
+    "reason": "fetch failed"
+  },
+  {
+    "id": "OL47264301M",
+    "title": "Death Note, Vol. 12",
+    "author_name": "Tsugumi Ohba",
+    "cover_url": "https://covers.openlibrary.org/b/id/13715981-L.jpg?default=false",
+    "reason": "fetch failed"
+  },
+  {
+    "id": "OL14698945M",
+    "title": "Ben and Me",
+    "author_name": "Robert Lawson",
+    "cover_url": "https://covers.openlibrary.org/b/id/6292249-L.jpg?default=false",
+    "reason": "fetch failed"
+  },
+  {
+    "id": "OL56753181M",
+    "title": "Cinq semaines en ballon",
+    "author_name": "Jules Verne",
+    "cover_url": "https://covers.openlibrary.org/b/isbn/9781444821130-L.jpg?default=false",
+    "reason": "fetch failed"
+  },
+  {
+    "id": "OL31334003M",
+    "title": "Brothers in Arms (Dragonlance",
+    "author_name": "Margaret Weis",
+    "cover_url": "https://covers.openlibrary.org/b/id/10511526-L.jpg?default=false",
+    "reason": "fetch failed"
+  },
+  {
+    "id": "OL59040425M",
+    "title": "Smith of Wooten Major and Farmer Giles of Ham",
+    "author_name": "J.R.R. Tolkien",
+    "cover_url": "https://covers.openlibrary.org/b/id/6612555-L.jpg?default=false",
+    "reason": "fetch failed"
+  },
+  {
+    "id": "OL4408439M",
+    "title": "Soonie and the dragon",
+    "author_name": "Shirley Rousseau Murphy",
+    "cover_url": "https://covers.openlibrary.org/b/id/4396085-L.jpg?default=false",
+    "reason": "fetch failed"
+  },
+  {
+    "id": "OL7384504M",
+    "title": "Classics",
+    "author_name": "Mary Beard",
+    "cover_url": "https://covers.openlibrary.org/b/id/119828-L.jpg?default=false",
+    "reason": "HTTP 502"
+  },
+  {
+    "id": "OL7354760M",
+    "title": "Inquiry into the nature and causes of the wealth of nations",
+    "author_name": "Adam Smith",
+    "cover_url": "https://covers.openlibrary.org/b/id/103128-L.jpg?default=false",
+    "reason": "HTTP 502"
+  },
+  {
+    "id": "OL11417747M",
+    "title": "Miss High-Heels",
+    "author_name": "Anonymous",
+    "cover_url": "https://covers.openlibrary.org/b/id/6681531-L.jpg?default=false",
+    "reason": "HTTP 502"
+  },
+  {
+    "id": "OL51096369M",
+    "title": "Classical Myth",
+    "author_name": "Barry B. Powell",
+    "cover_url": "https://covers.openlibrary.org/b/id/14671954-L.jpg?default=false",
+    "reason": "HTTP 502"
+  },
+  {
+    "id": "OL5726803M",
+    "title": "Le paysan parvenu",
+    "author_name": "Pierre Carlet de Chamblain de Marivaux",
+    "cover_url": "https://covers.openlibrary.org/b/isbn/9782020195850-L.jpg?default=false",
+    "reason": "HTTP 502"
+  },
+  {
+    "id": "OL56826140M",
+    "title": "Gamiani, or Two Nights of Excess",
+    "author_name": "Alfred de Musset",
+    "cover_url": "https://covers.openlibrary.org/b/isbn/9781412188227-L.jpg?default=false",
+    "reason": "HTTP 502"
+  },
+  {
+    "id": "OL32072789M",
+    "title": "Utopia",
+    "author_name": "Thomas More",
+    "cover_url": "https://covers.openlibrary.org/b/id/10725059-L.jpg?default=false",
+    "reason": "HTTP 502"
+  },
+  {
+    "id": "OL14042729M",
+    "title": "Poetical works",
+    "author_name": "John Milton",
+    "cover_url": "https://covers.openlibrary.org/b/id/5964709-L.jpg?default=false",
+    "reason": "HTTP 502"
+  },
+  {
+    "id": "OL11646293M",
+    "title": "Cy Whittaker's Place",
+    "author_name": "Joseph Crosby Lincoln",
+    "cover_url": "https://covers.openlibrary.org/b/id/2747852-L.jpg?default=false",
+    "reason": "HTTP 502"
+  },
+  {
+    "id": "OL20824513M",
+    "title": "Greek architecture",
+    "author_name": "A. W. Lawrence",
+    "cover_url": "https://covers.openlibrary.org/b/id/14471917-L.jpg?default=false",
+    "reason": "HTTP 502"
+  },
+  {
+    "id": "OL7464718M",
+    "title": "Ten Apples Up on Top",
+    "author_name": "Dr. Seuss",
+    "cover_url": "https://covers.openlibrary.org/b/isbn/9780613002202-L.jpg?default=false",
+    "reason": "HTTP 502"
+  },
+  {
+    "id": "OL60351562M",
+    "title": "A Wonder-Book ; Tanglewood Tales, and Grandfather's Chair",
+    "author_name": "Nathaniel Hawthorne",
+    "cover_url": "https://covers.openlibrary.org/b/id/10228815-L.jpg?default=false",
+    "reason": "HTTP 502"
+  },
+  {
+    "id": "OL59909857M",
+    "title": "A Man of the People",
+    "author_name": "Chinua Achebe",
+    "cover_url": "https://covers.openlibrary.org/b/id/6535892-L.jpg?default=false",
+    "reason": "HTTP 502"
+  },
+  {
+    "id": "OL7845470M",
+    "title": "Understanding Folk Religion",
+    "author_name": "Paul G. Hiebert",
+    "cover_url": "https://covers.openlibrary.org/b/id/562851-L.jpg?default=false",
+    "reason": "HTTP 502"
+  },
+  {
+    "id": "OL43254128W",
+    "title": "The Art of Being Alone",
+    "author_name": "Renuka Gavrani",
+    "cover_url": "/api/covers?id=15052166&size=M",
+    "reason": "Failed to parse URL from /api/covers?id=15052166&size=M"
+  },
+  {
+    "id": "OL2010879W",
+    "title": "Rich Dad, Poor Dad",
+    "author_name": "Robert T. Kiyosaki",
+    "cover_url": "/api/covers?id=15168753&size=M",
+    "reason": "Failed to parse URL from /api/covers?id=15168753&size=M"
+  },
+  {
+    "id": "OL15090503W",
+    "title": "Cashflow Quadrant",
+    "author_name": "Robert T. Kiyosaki",
+    "cover_url": "/api/covers?id=288183&size=M",
+    "reason": "Failed to parse URL from /api/covers?id=288183&size=M"
+  }
+]
