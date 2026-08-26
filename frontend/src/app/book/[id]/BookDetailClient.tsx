@@ -1,15 +1,16 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Header, { StarRating } from "@/components/Header";
 import ReviewCard, { StarDisplay } from "@/components/ReviewCard";
 import BookCard from "@/components/BookCard";
 import { useLeaf } from "@/context/LeafContext";
-import { Book } from "@/data/mockData";
+import { Book, Review } from "@/data/mockData";
 import { BookOpen, Calendar, Check, Heart, Plus, Star, Users, Award, RotateCcw, Ban } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import UserAvatar from "@/components/UserAvatar";
 import CoverImage from "@/components/CoverImage";
+import { authFetch } from "@/utils/auth/client";
 
 interface BookDetailClientProps {
   book: Book;
@@ -30,6 +31,8 @@ export default function BookDetailClient({ book: initialBook }: BookDetailClient
   } = useLeaf();
 
   const [book, setBook] = useState<Book>(initialBook);
+  const [bookPageReviews, setBookPageReviews] = useState<Review[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
 
   // States for logging review
   const [logStatus, setLogStatus] = useState<"Want to Read" | "Currently Reading" | "Finished" | null>(null);
@@ -57,6 +60,32 @@ export default function BookDetailClient({ book: initialBook }: BookDetailClient
     }
   }, [initialBook, addCachedBookToContext]);
 
+  // Load community reviews for this specific book (context only keeps a recent feed slice)
+  useEffect(() => {
+    let cancelled = false;
+    async function loadBookReviews() {
+      setReviewsLoading(true);
+      try {
+        const res = await authFetch(
+          `/api/reviews?bookId=${encodeURIComponent(initialBook.id)}&limit=50`,
+          { cache: "no-store" },
+        );
+        const data = await res.json();
+        if (!cancelled && data.success && Array.isArray(data.reviews)) {
+          setBookPageReviews(data.reviews);
+        }
+      } catch (err) {
+        console.error("Failed to load book reviews:", err);
+      } finally {
+        if (!cancelled) setReviewsLoading(false);
+      }
+    }
+    loadBookReviews();
+    return () => {
+      cancelled = true;
+    };
+  }, [initialBook.id]);
+
   // Synchronise book data with context if it updates (e.g. metadata refresh)
   useEffect(() => {
     const cached = books.find(
@@ -72,8 +101,12 @@ export default function BookDetailClient({ book: initialBook }: BookDetailClient
   const currentActiveStatus = userLogs.length > 0 ? userLogs[0].status : null;
   const currentLoggedRating = userLogs.length > 0 ? userLogs[0].rating : undefined;
 
-  // Reviews for this book
-  const bookReviews = reviews.filter((r) => r.bookId === book.id);
+  // Reviews for this book — prefer book-scoped fetch, fall back to context feed
+  const bookReviews = useMemo(() => {
+    const fromPage = bookPageReviews.filter((r) => r.bookId === book.id || r.bookId === initialBook.id);
+    if (fromPage.length > 0) return fromPage;
+    return reviews.filter((r) => r.bookId === book.id || r.bookId === initialBook.id);
+  }, [bookPageReviews, reviews, book.id, initialBook.id]);
 
   // Friends who read it
   const friendLogs = diaryLogs.filter((l) => l.bookId === book.id && l.userId !== currentUser.id && l.status === "Finished");
@@ -675,10 +708,19 @@ export default function BookDetailClient({ book: initialBook }: BookDetailClient
             {/* Community Reviews timeline */}
             <div className="space-y-6 pt-6 border-t border-cream-border">
               <h3 className="font-serif text-lg font-bold text-charcoal">
-                Reviews ({bookReviews.length})
+                Reviews {reviewsLoading ? "" : `(${bookReviews.length})`}
               </h3>
               
-              {bookReviews.length > 0 ? (
+              {reviewsLoading ? (
+                <div className="space-y-4">
+                  {[0, 1].map((i) => (
+                    <div
+                      key={i}
+                      className="h-28 bg-cream-card border border-cream-border rounded-xl animate-pulse"
+                    />
+                  ))}
+                </div>
+              ) : bookReviews.length > 0 ? (
                 <div className="space-y-6">
                   {bookReviews.map((review) => (
                     <ReviewCard key={review.id} review={review} showBookCover={false} />

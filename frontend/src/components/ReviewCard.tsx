@@ -67,7 +67,13 @@ export default function ReviewCard({ review, showBookCover = true }: ReviewCardP
   const authorUser = users.find((u) => u.id === review.userId);
   const reviewComments = comments.filter((c) => c.reviewId === review.id);
 
-  if (!book || !authorUser) return null;
+  const reviewerName = authorUser?.name || review.reviewerName || "Reader";
+  const reviewerUsername = authorUser?.username || review.reviewerUsername || "reader";
+  const reviewerAvatar = authorUser?.avatar || review.reviewerAvatar || "";
+  const bookTitle = book?.title || review.bookTitle || "Untitled";
+  const bookAuthor = book?.author || review.bookAuthor || "Unknown Author";
+  const bookCover = book?.coverImage || review.bookCover || "";
+  const bookHrefId = book?.id || review.bookId;
 
   const handleCommentSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,15 +88,15 @@ export default function ReviewCard({ review, showBookCover = true }: ReviewCardP
         
         {/* Book Cover Thumbnail (Left Column) */}
         {showBookCover && (
-          <Link href={`/book/${book.id}`} className="flex-shrink-0 group">
+          <Link href={`/book/${bookHrefId}`} className="flex-shrink-0 group">
             <div className="relative w-20 h-28 md:w-24 md:h-36 rounded-md overflow-hidden shadow-sm group-hover:shadow-md transition-all duration-300">
               <div className="absolute top-0 bottom-0 left-0 w-[3px] bg-charcoal/20 z-10" />
               <CoverImage
-                src={book.coverImage}
-                title={book.title}
-                author={book.author}
-                bookId={book.id}
-                isbn={book.id}
+                src={bookCover}
+                title={bookTitle}
+                author={bookAuthor}
+                bookId={bookHrefId}
+                isbn={bookHrefId}
                 size="M"
                 className="w-full h-full"
                 imgClassName="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
@@ -105,18 +111,18 @@ export default function ReviewCard({ review, showBookCover = true }: ReviewCardP
             {/* Header info */}
             <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
               <div className="flex items-center gap-2">
-                <Link href={`/profile/${authorUser.username}`}>
-                  <UserAvatar avatarUrl={authorUser.avatar} name={authorUser.name} size="xs" />
+                <Link href={`/profile/${reviewerUsername}`}>
+                  <UserAvatar avatarUrl={reviewerAvatar} name={reviewerName} size="xs" />
                 </Link>
                 <div className="text-xs leading-tight">
                   <Link
-                    href={`/profile/${authorUser.username}`}
+                    href={`/profile/${reviewerUsername}`}
                     className="font-semibold text-charcoal hover:text-brand transition-colors"
                   >
-                    {authorUser.name}
+                    {reviewerName}
                   </Link>
                   <span className="text-charcoal-muted text-[10px] ml-1">
-                    @{authorUser.username}
+                    @{reviewerUsername}
                   </span>
                 </div>
               </div>
@@ -127,20 +133,26 @@ export default function ReviewCard({ review, showBookCover = true }: ReviewCardP
             </div>
 
             {/* Book Info */}
-            <div className="mb-2">
-              <Link
-                href={`/book/${book.id}`}
-                className="font-serif text-base font-bold text-charcoal hover:text-brand transition-colors"
-              >
-                {book.title}
-              </Link>
-              <span className="text-charcoal-muted text-xs ml-1.5">by {book.author}</span>
-            </div>
+            {showBookCover && (
+              <div className="mb-2">
+                <Link
+                  href={`/book/${bookHrefId}`}
+                  className="font-serif text-base font-bold text-charcoal hover:text-brand transition-colors"
+                >
+                  {bookTitle}
+                </Link>
+                <span className="text-charcoal-muted text-xs ml-1.5">by {bookAuthor}</span>
+              </div>
+            )}
 
             {/* Review Content */}
-            <p className="text-xs text-charcoal-light leading-relaxed font-sans line-clamp-4 md:line-clamp-none">
-              &ldquo;{review.content}&rdquo;
-            </p>
+            {review.content?.trim() ? (
+              <p className="text-xs text-charcoal-light leading-relaxed font-sans line-clamp-4 md:line-clamp-none">
+                &ldquo;{review.content.trim()}&rdquo;
+              </p>
+            ) : (
+              <p className="text-xs text-charcoal-muted italic font-sans">Rated this book.</p>
+            )}
           </div>
 
           {/* Card Actions (Footer) */}
@@ -165,7 +177,9 @@ export default function ReviewCard({ review, showBookCover = true }: ReviewCardP
             {/* Comments Toggle */}
             <button
               onClick={() => setShowComments(!showComments)}
-              className="flex items-center gap-1.5 hover:text-charcoal transition-colors group focus:outline-none"
+              className={`flex items-center gap-1.5 hover:text-charcoal transition-colors group focus:outline-none ${
+                showComments ? "text-charcoal" : ""
+              }`}
             >
               <MessageSquare className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
               <span>{reviewComments.length} {reviewComments.length === 1 ? "Comment" : "Comments"}</span>
@@ -190,20 +204,21 @@ export default function ReviewCard({ review, showBookCover = true }: ReviewCardP
                 <div className="space-y-3">
                   {reviewComments.map((comment) => {
                     const commentUser = users.find((u) => u.id === comment.userId);
-                    if (!commentUser) return null;
+                    const commentName = commentUser?.name || "Reader";
+                    const commentAvatar = commentUser?.avatar || "";
                     return (
                       <div key={comment.id} className="flex gap-2 text-xs leading-normal">
                         <CornerDownRight className="w-3.5 h-3.5 text-charcoal-muted mt-1 flex-shrink-0" />
                         <UserAvatar
-                          avatarUrl={commentUser.avatar}
-                          name={commentUser.name}
+                          avatarUrl={commentAvatar}
+                          name={commentName}
                           size={22}
                           className="flex-shrink-0"
                         />
                         <div className="flex-1 bg-cream border border-cream-border/70 rounded-lg p-2.5">
                           <div className="flex items-center justify-between mb-1">
                             <span className="font-semibold text-charcoal text-[11px]">
-                              {commentUser.name}
+                              {commentName}
                             </span>
                             <span className="text-[9px] text-charcoal-muted">
                               {comment.dateString}
@@ -239,7 +254,7 @@ export default function ReviewCard({ review, showBookCover = true }: ReviewCardP
                     type="submit"
                     className="absolute right-1.5 top-1.5 p-1 text-charcoal-muted hover:text-brand focus:outline-none"
                   >
-                    <ArrowRight className="w-3 h-3" />
+                    <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </form>
