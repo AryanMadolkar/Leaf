@@ -124,7 +124,17 @@ export async function POST(request: Request) {
     const body = await request.json();
     console.log("[DEBUG] [user-books] Incoming request body:", body);
 
-    const { bookId, status, rating, review } = body;
+    const {
+      bookId,
+      status,
+      rating,
+      review,
+      dnfReasons,
+      dnfNote,
+      stoppedAtPage,
+      stoppedAtChapter,
+      currentChapter,
+    } = body;
 
     // 3. Payload validation
     if (!bookId || !status) {
@@ -232,7 +242,7 @@ export async function POST(request: Request) {
     console.log("[DEBUG] [user-books] Querying existing user_book record...");
     const { data: existingUserBook, error: fetchError } = await dbClient
       .from("user_books")
-      .select("id, started_at, finished_at, current_page, status")
+      .select("id, started_at, finished_at, current_page, current_chapter, status")
       .eq("user_id", user.id)
       .eq("book_id", resolvedBookId)
       .maybeSingle();
@@ -270,9 +280,25 @@ export async function POST(request: Request) {
         if (!existingUserBook.started_at) {
           updatePayload.started_at = today;
         }
+        if (stoppedAtPage !== undefined && stoppedAtPage !== null) {
+          const page = Math.max(0, Math.min(totalPages, Number(stoppedAtPage) || 0));
+          updatePayload.current_page = page;
+        }
+        if (stoppedAtChapter !== undefined && stoppedAtChapter !== null) {
+          updatePayload.current_chapter = String(stoppedAtChapter).trim() || null;
+        } else if (currentChapter !== undefined) {
+          updatePayload.current_chapter = currentChapter ? String(currentChapter).trim() : null;
+        }
       } else if (mappedStatus === "finished") {
         updatePayload.finished_at = today;
         updatePayload.current_page = totalPages;
+      }
+
+      if (
+        mappedStatus === "reading" &&
+        currentChapter !== undefined
+      ) {
+        updatePayload.current_chapter = currentChapter ? String(currentChapter).trim() : null;
       }
 
       console.log("[DEBUG] [user-books] Database update payload:", updatePayload);
@@ -287,6 +313,23 @@ export async function POST(request: Request) {
       if (res.error) throw res.error;
     } else {
       // Insert new
+      const dnfPage =
+        mappedStatus === "did_not_finish" && stoppedAtPage != null
+          ? Math.max(0, Math.min(totalPages, Number(stoppedAtPage) || 0))
+          : mappedStatus === "finished"
+            ? totalPages
+            : 0;
+      const chapterValue =
+        mappedStatus === "did_not_finish"
+          ? stoppedAtChapter != null
+            ? String(stoppedAtChapter).trim() || null
+            : currentChapter
+              ? String(currentChapter).trim()
+              : null
+          : currentChapter
+            ? String(currentChapter).trim()
+            : null;
+
       const insertPayload: any = {
         id: crypto.randomUUID(),
         user_id: user.id,
@@ -298,7 +341,8 @@ export async function POST(request: Request) {
           mappedStatus === "reading" || mappedStatus === "did_not_finish" ? today : null,
         finished_at: mappedStatus === "finished" ? today : null,
         created_at: new Date().toISOString(),
-        current_page: mappedStatus === "finished" ? totalPages : 0,
+        current_page: dnfPage,
+        current_chapter: chapterValue,
       };
 
       console.log("[DEBUG] [user-books] Database insert payload:", insertPayload);
@@ -317,6 +361,49 @@ export async function POST(request: Request) {
       await addBooksToCollectionShelf(user.id, [resolvedBookId]);
     } catch (shelfErr) {
       console.error("[DEBUG] [user-books] Failed to add book to collection shelf:", shelfErr);
+    }
+
+    // Persist DNF reasons when abandoning
+    if (mappedStatus === "did_not_finish") {
+      const reasons = Array.isArray(dnfReasons)
+        ? dnfReasons.filter((r: unknown) => typeof r === "string" && r.trim()).map((r: string) => r.trim())
+        : [];
+      const pageForRecord =
+        stoppedAtPage != null
+          ? Math.max(0, Math.min(totalPages, Number(stoppedAtPage) || 0))
+          : existingUserBook?.current_page ?? 0;
+      const chapterForRecord =
+        stoppedAtChapter != null
+          ? String(stoppedAtChapter).trim() || null
+          : existingUserBook?.current_chapter ?? null;
+
+      const { error: dnfErr } = await dbClient.from("dnf_records").insert({
+        user_id: user.id,
+        book_id: resolvedBookId,
+        stopped_at_page: pageForRecord,
+        stopped_at_chapter: chapterForRecord,
+        reasons,
+        note: typeof dnfNote === "string" && dnfNote.trim() ? dnfNote.trim() : null,
+      });
+      if (dnfErr) {
+        // Table may not exist yet in some envs — log but don't fail the shelf update
+        console.error("[DEBUG] [user-books] Failed to insert dnf_records:", dnfErr);
+      }
+
+      // Best-effort DNA refresh after abandon signal
+      try {
+        const { recomputeReadingDna } = await import("@/utils/readingDna");
+        await recomputeReadingDna(user.id);
+      } catch (dnaErr) {
+        console.warn("[DEBUG] [user-books] DNA recompute skipped:", dnaErr);
+      }
+    } else if (mappedStatus === "finished") {
+      try {
+        const { recomputeReadingDna } = await import("@/utils/readingDna");
+        await recomputeReadingDna(user.id);
+      } catch (dnaErr) {
+        console.warn("[DEBUG] [user-books] DNA recompute skipped:", dnaErr);
+      }
     }
 
     // 8. Upsert into public reviews feed table if review is provided

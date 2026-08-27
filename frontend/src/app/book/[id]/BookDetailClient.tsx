@@ -6,10 +6,12 @@ import ReviewCard, { StarDisplay } from "@/components/ReviewCard";
 import BookCard from "@/components/BookCard";
 import { useLeaf } from "@/context/LeafContext";
 import { Book, Review } from "@/data/mockData";
-import { BookOpen, Calendar, Check, Heart, Plus, Star, Users, Award, RotateCcw, Ban } from "lucide-react";
+import { BookOpen, Calendar, Check, Heart, Plus, Star, Users, Award, RotateCcw, Ban, MessageCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import UserAvatar from "@/components/UserAvatar";
 import CoverImage from "@/components/CoverImage";
+import DnfReasonModal from "@/components/DnfReasonModal";
+import AskLeafDrawer from "@/components/AskLeafDrawer";
 import { authFetch } from "@/utils/auth/client";
 
 interface BookDetailClientProps {
@@ -44,6 +46,7 @@ export default function BookDetailClient({ book: initialBook }: BookDetailClient
   const [detailLogMethod, setDetailLogMethod] = useState<"increment" | "absolute">("increment");
   const [detailPagesRead, setDetailPagesRead] = useState("");
   const [detailCurrentPage, setDetailCurrentPage] = useState("");
+  const [detailChapter, setDetailChapter] = useState("");
   const [detailMinutes, setDetailMinutes] = useState("");
   const [detailNote, setDetailNote] = useState("");
 
@@ -52,6 +55,8 @@ export default function BookDetailClient({ book: initialBook }: BookDetailClient
   const [detailRating, setDetailRating] = useState(0);
   const [detailReview, setDetailReview] = useState("");
   const [showStatusSelect, setShowStatusSelect] = useState(false);
+  const [showDnfModal, setShowDnfModal] = useState(false);
+  const [askLeafOpen, setAskLeafOpen] = useState(false);
 
   // Sync book data to the client Leaf context on mount
   useEffect(() => {
@@ -100,6 +105,7 @@ export default function BookDetailClient({ book: initialBook }: BookDetailClient
   const userLogs = diaryLogs.filter((l) => l.userId === currentUser.id && l.bookId === book.id);
   const currentActiveStatus = userLogs.length > 0 ? userLogs[0].status : null;
   const currentLoggedRating = userLogs.length > 0 ? userLogs[0].rating : undefined;
+  const currentPageProgress = userLogs.length > 0 ? userLogs[0].currentPage || 0 : 0;
 
   // Reviews for this book — prefer book-scoped fetch, fall back to context feed
   const bookReviews = useMemo(() => {
@@ -140,10 +146,24 @@ export default function BookDetailClient({ book: initialBook }: BookDetailClient
     setLogStatus(null);
   };
 
-  const handleDidNotFinish = async () => {
-    await logBook(book.id, "Did Not Finish");
-    setShowLogDrawer(false);
+  const handleDidNotFinish = () => {
+    setShowDnfModal(true);
     setShowStatusSelect(false);
+  };
+
+  const submitDnf = async (payload: {
+    reasons: string[];
+    note: string;
+    stoppedAtPage: number | null;
+    stoppedAtChapter: string;
+  }) => {
+    await logBook(book.id, "Did Not Finish", undefined, undefined, {
+      dnfReasons: payload.reasons,
+      dnfNote: payload.note || undefined,
+      stoppedAtPage: payload.stoppedAtPage,
+      stoppedAtChapter: payload.stoppedAtChapter || null,
+    });
+    setShowLogDrawer(false);
     setLogStatus(null);
   };
 
@@ -159,6 +179,7 @@ export default function BookDetailClient({ book: initialBook }: BookDetailClient
   const handleDetailProgressSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     let res = null;
+    const chapter = detailChapter.trim() || undefined;
     if (detailLogMethod === "increment") {
       const pRead = parseInt(detailPagesRead) || 0;
       if (pRead <= 0 || pRead >= book.pages) return;
@@ -166,7 +187,8 @@ export default function BookDetailClient({ book: initialBook }: BookDetailClient
         book.id,
         pRead,
         detailNote || undefined,
-        parseInt(detailMinutes) || undefined
+        parseInt(detailMinutes) || undefined,
+        chapter
       );
     } else {
       const curPage = parseInt(detailCurrentPage) || 0;
@@ -175,7 +197,8 @@ export default function BookDetailClient({ book: initialBook }: BookDetailClient
         book.id,
         curPage,
         detailNote || undefined,
-        parseInt(detailMinutes) || undefined
+        parseInt(detailMinutes) || undefined,
+        chapter
       );
     }
 
@@ -185,6 +208,7 @@ export default function BookDetailClient({ book: initialBook }: BookDetailClient
       setDetailCurrentPage("");
       setDetailMinutes("");
       setDetailNote("");
+      setDetailChapter("");
 
       if (res.autoFinished) {
         setShowDetailCompletion(true);
@@ -335,7 +359,10 @@ export default function BookDetailClient({ book: initialBook }: BookDetailClient
                         <div className="space-y-3">
                           <div className="space-y-1.5">
                             <div className="flex justify-between text-xs font-semibold text-charcoal">
-                              <span>Progress</span>
+                              <span>
+                                Currently reading → Page {currentPage}
+                                {totalPages ? ` of ${totalPages}` : ""}
+                              </span>
                               <span className="text-brand font-serif italic">{progressPercent}%</span>
                             </div>
                             <div className="w-full bg-cream-dark h-2 rounded-full overflow-hidden">
@@ -431,15 +458,25 @@ export default function BookDetailClient({ book: initialBook }: BookDetailClient
                                 />
                               </div>
                               <div>
-                                <label className="text-[8px] font-bold text-charcoal-muted uppercase block mb-0.5">Note</label>
+                                <label className="text-[8px] font-bold text-charcoal-muted uppercase block mb-0.5">Chapter</label>
                                 <input
                                   type="text"
-                                  placeholder="Note"
-                                  value={detailNote}
-                                  onChange={(e) => setDetailNote(e.target.value)}
+                                  placeholder="e.g. Ch. 12"
+                                  value={detailChapter}
+                                  onChange={(e) => setDetailChapter(e.target.value)}
                                   className="w-full h-8 px-2 text-xs bg-cream border border-cream-border rounded-lg text-charcoal focus:outline-none"
                                 />
                               </div>
+                            </div>
+                            <div>
+                              <label className="text-[8px] font-bold text-charcoal-muted uppercase block mb-0.5">Note</label>
+                              <input
+                                type="text"
+                                placeholder="Note"
+                                value={detailNote}
+                                onChange={(e) => setDetailNote(e.target.value)}
+                                className="w-full h-8 px-2 text-xs bg-cream border border-cream-border rounded-lg text-charcoal focus:outline-none"
+                              />
                             </div>
 
                             <button
@@ -498,6 +535,17 @@ export default function BookDetailClient({ book: initialBook }: BookDetailClient
                     );
                   })}
                 </div>
+
+                {currentActiveStatus !== "Did Not Finish" && (
+                  <button
+                    type="button"
+                    onClick={handleDidNotFinish}
+                    className="w-full h-9 flex items-center justify-center gap-1.5 text-[10px] font-bold rounded-lg border bg-cream border-cream-border text-charcoal-muted hover:border-rose-200 hover:text-rose-700 transition-colors"
+                  >
+                    <Ban className="w-3 h-3" />
+                    Did Not Finish
+                  </button>
+                )}
 
                 {currentActiveStatus === "Finished" && (
                   <button
@@ -766,6 +814,33 @@ export default function BookDetailClient({ book: initialBook }: BookDetailClient
         </div>
 
       </main>
+
+      <DnfReasonModal
+        open={showDnfModal}
+        bookTitle={book.title}
+        initialPage={currentPageProgress}
+        totalPages={book.pages}
+        onClose={() => setShowDnfModal(false)}
+        onSubmit={submitDnf}
+      />
+
+      <button
+        type="button"
+        onClick={() => setAskLeafOpen(true)}
+        className="fixed bottom-6 right-6 z-40 h-12 px-4 rounded-full bg-brand text-cream shadow-lg hover:bg-brand-light inline-flex items-center gap-2 text-xs font-bold"
+      >
+        <MessageCircle className="w-4 h-4" />
+        Ask Leaf
+      </button>
+
+      <AskLeafDrawer
+        open={askLeafOpen}
+        onClose={() => setAskLeafOpen(false)}
+        bookId={book.id}
+        bookTitle={book.title}
+        page={currentPageProgress || undefined}
+        chapter={detailChapter || undefined}
+      />
     </div>
   );
 }

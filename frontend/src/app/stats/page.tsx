@@ -19,12 +19,18 @@ import {
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { buildGenreDistribution } from "@/utils/genreUtils";
+import { authFetch } from "@/utils/auth/client";
 
 export default function StatsPage() {
   const { currentUser, diaryLogs, readingSessions, books, userStats, isAuthenticated, isProfileLoading } = useLeaf();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [lineChartPeriod, setLineChartPeriod] = useState<"7days" | "30days" | "12months">("30days");
+  const [dnaSnippet, setDnaSnippet] = useState<{
+    summary: string | null;
+    confidence: number;
+    genres: Array<{ name: string }>;
+  } | null>(null);
   
   // Interactive chart hover states
   const [hoveredLinePoint, setHoveredLinePoint] = useState<any>(null);
@@ -274,6 +280,32 @@ export default function StatsPage() {
     }
     loadStats();
   }, [currentUser.id, readingSessions, diaryLogs, needsLogin, isProfileLoading]);
+
+  useEffect(() => {
+    if (isProfileLoading || needsLogin) {
+      setDnaSnippet(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await authFetch("/api/reading-dna");
+        const payload = await res.json();
+        if (!cancelled && res.ok && payload.success && payload.dna) {
+          setDnaSnippet({
+            summary: payload.dna.profile_summary || null,
+            confidence: payload.dna.confidence || 0,
+            genres: Array.isArray(payload.dna.genres) ? payload.dna.genres.slice(0, 4) : [],
+          });
+        }
+      } catch {
+        /* optional card */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isProfileLoading, needsLogin, currentUser.id]);
 
   if (isProfileLoading || loading) {
     return (
@@ -731,6 +763,41 @@ export default function StatsPage() {
             </p>
           </div>
         </section>
+
+        {dnaSnippet && (
+          <Link
+            href="/dna"
+            className="block bg-cream-card border border-cream-border rounded-2xl p-5 shadow-xs hover:shadow-md transition-shadow"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-2 min-w-0">
+                <div className="flex items-center gap-2 text-brand">
+                  <Heart className="w-3.5 h-3.5" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Reading DNA</span>
+                </div>
+                <p className="font-serif text-lg text-charcoal leading-snug line-clamp-2">
+                  {dnaSnippet.summary ||
+                    (dnaSnippet.confidence < 0.2
+                      ? "Still learning your taste — finish a few more books to unlock a fuller profile."
+                      : "Your preference sketch is taking shape. Open Reading DNA for the full picture.")}
+                </p>
+                {dnaSnippet.genres.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {dnaSnippet.genres.map((g) => (
+                      <span
+                        key={g.name}
+                        className="text-[10px] px-2 py-0.5 rounded-full border border-cream-border text-charcoal-muted"
+                      >
+                        {g.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <ArrowUpRight className="w-4 h-4 text-charcoal-muted flex-shrink-0 mt-1" />
+            </div>
+          </Link>
+        )}
 
         {/* Counts/Streak Metrics Widgets */}
         <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">

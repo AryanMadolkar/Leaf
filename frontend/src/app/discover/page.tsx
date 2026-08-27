@@ -20,6 +20,9 @@ import {
   ChevronRight, Loader2, Library, Plus, MessageSquare, History, RefreshCw, Dice5
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import DnfReasonModal from "@/components/DnfReasonModal";
+import { authFetch } from "@/utils/auth/client";
+import { MOODS, type MoodId } from "@/utils/moods";
 
 type ShelfConfig = { key: CatalogShelf; title: string; description: string; icon: React.ElementType };
 
@@ -66,10 +69,17 @@ export default function DiscoverPage() {
 
   // Quick Action Shelf Drawer/Log Modal state
   const [logModalBook, setLogModalBook] = useState<Book | null>(null);
-  const [selectedStatus, setSelectedStatus] = useState<"Want to Read" | "Currently Reading" | "Finished">("Want to Read");
+  const [selectedStatus, setSelectedStatus] = useState<"Want to Read" | "Currently Reading" | "Finished" | "Did Not Finish">("Want to Read");
   const [selectedRating, setSelectedRating] = useState<number>(0);
   const [logReview, setLogReview] = useState("");
   const [isLogging, setIsLogging] = useState(false);
+  const [showDnfModal, setShowDnfModal] = useState(false);
+  const [selectedMoods, setSelectedMoods] = useState<MoodId[]>([]);
+  const [moodLoading, setMoodLoading] = useState(false);
+  const [moodError, setMoodError] = useState<string | null>(null);
+  const [moodResults, setMoodResults] = useState<
+    Array<{ book: Book; matchScore: number; reasons: string[]; mismatches: string[] }>
+  >([]);
 
   // Fetch daily featured volume from cached API
   useEffect(() => {
@@ -249,9 +259,45 @@ export default function DiscoverPage() {
     setRandomSeen((prev) => [...prev, pick.id].slice(-24));
   };
 
+  const toggleMood = (id: MoodId) => {
+    setSelectedMoods((prev) => {
+      if (prev.includes(id)) return prev.filter((m) => m !== id);
+      if (prev.length >= 3) return prev;
+      return [...prev, id];
+    });
+  };
+
+  const runMoodRecommend = async () => {
+    if (selectedMoods.length === 0) {
+      setMoodError("Pick at least one mood.");
+      return;
+    }
+    setMoodLoading(true);
+    setMoodError(null);
+    try {
+      const res = await authFetch("/api/recommend/mood", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ moods: selectedMoods }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "Could not recommend");
+      setMoodResults(data.recommendations || []);
+    } catch (err: any) {
+      setMoodError(err.message || "Could not recommend");
+      setMoodResults([]);
+    } finally {
+      setMoodLoading(false);
+    }
+  };
+
   // Quick log execution
   const handleQuickLog = async () => {
     if (!logModalBook) return;
+    if (selectedStatus === "Did Not Finish") {
+      setShowDnfModal(true);
+      return;
+    }
     setIsLogging(true);
     try {
       await logBook(logModalBook.id, selectedStatus, selectedRating || undefined, logReview || undefined);
@@ -312,6 +358,99 @@ export default function DiscoverPage() {
       <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-8 space-y-14">
         
         <>
+            {/* Mood-based recommendations */}
+            <section className="space-y-5">
+              <div className="space-y-1">
+                <h2 className="font-serif text-2xl font-bold text-charcoal">What are you in the mood for?</h2>
+                <p className="text-[11px] text-charcoal-muted uppercase tracking-wider font-medium">
+                  Pick up to three moods — Leaf scores catalog picks with reasons, not random %.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                {MOODS.map((mood) => {
+                  const active = selectedMoods.includes(mood.id);
+                  return (
+                    <button
+                      key={mood.id}
+                      type="button"
+                      onClick={() => toggleMood(mood.id)}
+                      className={`text-left rounded-xl border px-3.5 py-3 transition-colors ${
+                        active
+                          ? "bg-brand border-brand text-cream"
+                          : "bg-cream-card border-cream-border hover:border-charcoal-light"
+                      }`}
+                    >
+                      <p className={`font-serif text-base font-bold ${active ? "text-cream" : "text-charcoal"}`}>
+                        {mood.label}
+                      </p>
+                      <p className={`text-[10px] mt-0.5 ${active ? "text-cream/80" : "text-charcoal-muted"}`}>
+                        {mood.hint}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => void runMoodRecommend()}
+                  disabled={moodLoading || selectedMoods.length === 0}
+                  className="h-10 px-5 rounded-lg bg-brand text-cream text-xs font-bold hover:bg-brand-light disabled:opacity-50 inline-flex items-center gap-2"
+                >
+                  {moodLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  Find matches
+                </button>
+                {moodError && <p className="text-xs text-rose-700">{moodError}</p>}
+              </div>
+
+              {moodResults.length > 0 && (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {moodResults.map((rec) => (
+                    <button
+                      key={rec.book.id}
+                      type="button"
+                      onClick={() => router.push(`/book/${rec.book.id}`)}
+                      className="text-left bg-cream-card border border-cream-border rounded-2xl p-4 hover:shadow-md transition-shadow space-y-3"
+                    >
+                      <div className="flex gap-3">
+                        <div className="w-14 h-20 rounded-md overflow-hidden bg-cream-dark flex-shrink-0">
+                          <CoverImage
+                            src={rec.book.coverImage}
+                            title={rec.book.title}
+                            author={rec.book.author}
+                            bookId={rec.book.id}
+                            className="w-full h-full"
+                            imgClassName="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="font-serif text-sm font-bold text-charcoal line-clamp-2">{rec.book.title}</p>
+                            <span className="text-[11px] font-bold text-brand tabular-nums flex-shrink-0">
+                              {rec.matchScore}%
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-charcoal-muted truncate">{rec.book.author}</p>
+                        </div>
+                      </div>
+                      <ul className="space-y-1">
+                        {rec.reasons.slice(0, 2).map((r) => (
+                          <li key={r} className="text-[10px] text-charcoal-light">
+                            · {r}
+                          </li>
+                        ))}
+                        {rec.mismatches.slice(0, 1).map((m) => (
+                          <li key={m} className="text-[10px] text-rose-700/80">
+                            · {m}
+                          </li>
+                        ))}
+                      </ul>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+
             {/* Random for You */}
             {randomBook && (
               <section className="bg-cream-card border border-cream-border rounded-2xl p-5 md:p-6 shadow-sm">
@@ -632,8 +771,8 @@ export default function DiscoverPage() {
                 <label className="text-[10px] uppercase font-bold tracking-wider text-charcoal-muted">
                   Status
                 </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {(["Want to Read", "Currently Reading", "Finished"] as const).map((status) => (
+                <div className="grid grid-cols-2 gap-2">
+                  {(["Want to Read", "Currently Reading", "Finished", "Did Not Finish"] as const).map((status) => (
                     <button
                       key={status}
                       onClick={() => {
@@ -642,7 +781,9 @@ export default function DiscoverPage() {
                       }}
                       className={`py-2 rounded-lg border text-[10px] font-bold text-center transition-all ${
                         selectedStatus === status
-                          ? "bg-brand border-brand text-cream shadow-sm"
+                          ? status === "Did Not Finish"
+                            ? "bg-rose-600 border-rose-600 text-cream shadow-sm"
+                            : "bg-brand border-brand text-cream shadow-sm"
                           : "bg-cream-card border-cream-border text-charcoal hover:border-charcoal"
                       }`}
                     >
@@ -713,6 +854,30 @@ export default function DiscoverPage() {
           </div>
         )}
       </AnimatePresence>
+
+      <DnfReasonModal
+        open={showDnfModal}
+        bookTitle={logModalBook?.title}
+        onClose={() => setShowDnfModal(false)}
+        onSubmit={async (payload) => {
+          if (!logModalBook) return;
+          setIsLogging(true);
+          try {
+            await logBook(logModalBook.id, "Did Not Finish", undefined, undefined, {
+              dnfReasons: payload.reasons,
+              dnfNote: payload.note || undefined,
+              stoppedAtPage: payload.stoppedAtPage,
+              stoppedAtChapter: payload.stoppedAtChapter || null,
+            });
+            setLogModalBook(null);
+            setSelectedStatus("Want to Read");
+            setSelectedRating(0);
+            setLogReview("");
+          } finally {
+            setIsLogging(false);
+          }
+        }}
+      />
     </div>
   );
 }

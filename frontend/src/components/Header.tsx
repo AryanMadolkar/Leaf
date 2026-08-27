@@ -11,6 +11,7 @@ import LeafLogo from "@/components/LeafLogo";
 import CoverImage from "@/components/CoverImage";
 import { AnimatePresence, motion } from "framer-motion";
 import UserAvatar from "@/components/UserAvatar";
+import DnfReasonModal from "@/components/DnfReasonModal";
 
 // Star Rating helper
 export const StarRating = ({
@@ -166,9 +167,11 @@ export default function Header() {
   const [logSearchResults, setLogSearchResults] = useState<Book[]>([]);
   const [logLoading, setLogLoading] = useState(false);
   const [selectedBook, setSelectedBook] = useState<any>(null);
-  const [logStatus, setLogStatus] = useState<"Want to Read" | "Currently Reading" | "Finished">("Finished");
+  const [logStatus, setLogStatus] = useState<"Want to Read" | "Currently Reading" | "Finished" | "Did Not Finish">("Finished");
   const [logRating, setLogRating] = useState<number>(0);
   const [logReview, setLogReview] = useState("");
+  const [showDnfModal, setShowDnfModal] = useState(false);
+  const [dnfTargetBook, setDnfTargetBook] = useState<Book | null>(null);
 
   // Reading Companion Drawer state
   const [isCompanionOpen, setIsCompanionOpen] = useState(false);
@@ -374,6 +377,13 @@ export default function Header() {
     e.preventDefault();
     if (!selectedBook) return;
 
+    if (logStatus === "Did Not Finish") {
+      setDnfTargetBook(selectedBook);
+      setShowDnfModal(true);
+      setIsLogOpen(false);
+      return;
+    }
+
     const book = selectedBook;
     const status = logStatus;
     const rating = logStatus === "Finished" ? logRating : undefined;
@@ -493,6 +503,7 @@ export default function Header() {
     { label: "Lists", href: "/lists" },
     { label: "Diary", href: "/diary" },
     { label: "Stats", href: "/stats" },
+    { label: "Reading DNA", href: "/dna" },
   ];
 
   return (
@@ -1012,15 +1023,17 @@ export default function Header() {
                       <label className="text-xs font-semibold text-charcoal uppercase tracking-wider block">
                         Reading Status
                       </label>
-                      <div className="grid grid-cols-3 gap-2">
-                        {(["Want to Read", "Currently Reading", "Finished"] as const).map((status) => (
+                      <div className="grid grid-cols-2 gap-2">
+                        {(["Want to Read", "Currently Reading", "Finished", "Did Not Finish"] as const).map((status) => (
                           <button
                             type="button"
                             key={status}
                             onClick={() => setLogStatus(status)}
                             className={`py-2 px-3 text-xs font-medium border rounded-lg transition-all ${
                               logStatus === status
-                                ? "bg-brand border-brand text-cream shadow-sm"
+                                ? status === "Did Not Finish"
+                                  ? "bg-rose-600 border-rose-600 text-cream shadow-sm"
+                                  : "bg-brand border-brand text-cream shadow-sm"
                                 : "bg-cream-card border-cream-border text-charcoal-muted hover:border-charcoal hover:text-charcoal"
                             }`}
                           >
@@ -1028,6 +1041,11 @@ export default function Header() {
                           </button>
                         ))}
                       </div>
+                      {logStatus === "Did Not Finish" && (
+                        <p className="text-[10px] text-charcoal-muted">
+                          Not every book is meant to be finished — you’ll pick reasons next.
+                        </p>
+                      )}
                     </div>
 
                     {/* Finished details (Rating & Review) */}
@@ -1424,6 +1442,16 @@ export default function Header() {
                           >
                             Save Entry
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDnfTargetBook(activeBook);
+                              setShowDnfModal(true);
+                            }}
+                            className="w-full py-2.5 border border-rose-200 bg-rose-50 text-rose-700 font-semibold text-xs rounded-lg hover:bg-rose-100 transition-colors"
+                          >
+                            Did Not Finish
+                          </button>
                         </form>
                       </div>
                     );
@@ -1545,6 +1573,37 @@ export default function Header() {
       </div>
     )}
   </AnimatePresence>
+
+  <DnfReasonModal
+    open={showDnfModal}
+    bookTitle={dnfTargetBook?.title}
+    initialPage={
+      dnfTargetBook
+        ? diaryLogs.find((l) => l.bookId === dnfTargetBook.id && l.userId === currentUser.id)?.currentPage || 0
+        : 0
+    }
+    totalPages={dnfTargetBook?.pages}
+    onClose={() => {
+      setShowDnfModal(false);
+      setDnfTargetBook(null);
+      setSelectedBook(null);
+      setLogStatus("Finished");
+    }}
+    onSubmit={async (payload) => {
+      if (!dnfTargetBook) return;
+      await logBook(dnfTargetBook.id, "Did Not Finish", undefined, undefined, {
+        dnfReasons: payload.reasons,
+        dnfNote: payload.note || undefined,
+        stoppedAtPage: payload.stoppedAtPage,
+        stoppedAtChapter: payload.stoppedAtChapter || null,
+      });
+      setSelectedBook(null);
+      setLogSearch("");
+      setLogStatus("Finished");
+      setIsCompanionOpen(false);
+      router.push("/diary");
+    }}
+  />
 </>
 );
 }

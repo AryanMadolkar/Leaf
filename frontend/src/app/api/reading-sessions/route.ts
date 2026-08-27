@@ -63,7 +63,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { bookId, pagesRead, startPage, endPage, note, readingMinutes } = body;
+    const { bookId, pagesRead, startPage, endPage, note, readingMinutes, chapter } = body;
 
     if (!bookId || pagesRead === undefined || startPage === undefined || endPage === undefined) {
       return NextResponse.json({ success: false, error: "Missing required fields" }, { status: 400 });
@@ -120,6 +120,10 @@ export async function POST(request: Request) {
         current_page: endPage,
       };
 
+      if (typeof chapter === "string" && chapter.trim()) {
+        updatePayload.current_chapter = chapter.trim();
+      }
+
       if (isCompleted) {
         updatePayload.status = "finished";
         updatePayload.finished_at = today;
@@ -145,6 +149,7 @@ export async function POST(request: Request) {
           finished_at: isCompleted ? today : null,
           created_at: new Date().toISOString(),
           current_page: endPage,
+          current_chapter: typeof chapter === "string" && chapter.trim() ? chapter.trim() : null,
         });
     }
 

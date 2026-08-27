@@ -16,6 +16,7 @@ import type { LibraryPayload, LibraryViewMode } from "@/utils/library";
 import type { Book } from "@/data/mockData";
 import Link from "next/link";
 import { Copy, Check, BookOpen } from "lucide-react";
+import DnfReasonModal from "@/components/DnfReasonModal";
 
 export default function UserLibraryPage() {
   const { currentUser, logBook, isProfileLoading, diaryLogs, isAuthenticated } = useLeaf();
@@ -25,6 +26,7 @@ export default function UserLibraryPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [dnfBookId, setDnfBookId] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
   const [sortMode, setSortMode] = useState<SortMode>("custom");
@@ -228,10 +230,16 @@ export default function UserLibraryPage() {
 
   const handleStatus = useCallback(
     (bookId: string, status: "Want to Read" | "Currently Reading" | "Finished" | "Did Not Finish") => {
+      if (status === "Did Not Finish") {
+        setDnfBookId(bookId);
+        return;
+      }
       logBook(bookId, status);
     },
     [logBook],
   );
+
+  const dnfBook = dnfBookId ? bookMap.get(dnfBookId) || null : null;
 
   const shareUrl =
     typeof window !== "undefined" && currentUser?.username
@@ -485,6 +493,28 @@ export default function UserLibraryPage() {
           </div>
         </div>
       )}
+
+      <DnfReasonModal
+        open={!!dnfBookId}
+        bookTitle={dnfBook?.title}
+        initialPage={
+          dnfBookId
+            ? diaryLogs.find((l) => l.bookId === dnfBookId && l.userId === currentUser.id)?.currentPage || 0
+            : 0
+        }
+        totalPages={dnfBook?.pages}
+        onClose={() => setDnfBookId(null)}
+        onSubmit={async (payload) => {
+          if (!dnfBookId) return;
+          await logBook(dnfBookId, "Did Not Finish", undefined, undefined, {
+            dnfReasons: payload.reasons,
+            dnfNote: payload.note || undefined,
+            stoppedAtPage: payload.stoppedAtPage,
+            stoppedAtChapter: payload.stoppedAtChapter || null,
+          });
+          setDnfBookId(null);
+        }}
+      />
     </div>
   );
 }

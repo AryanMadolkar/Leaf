@@ -38,20 +38,33 @@ interface LeafContextType {
     bookId: string,
     status: "Want to Read" | "Currently Reading" | "Finished" | "Did Not Finish",
     rating?: number,
-    reviewContent?: string
-  ) => void;
+    reviewContent?: string,
+    dnf?: {
+      dnfReasons?: string[];
+      dnfNote?: string;
+      stoppedAtPage?: number | null;
+      stoppedAtChapter?: string | null;
+    }
+  ) => Promise<void> | void;
   createList: (title: string, description: string, coverImage: string, bookIds: string[]) => void;
   toggleFollowUser: (userId: string) => void;
   updateProfile: (name: string, bio: string, avatar: string, favoriteBookIds: string[], genres?: string[]) => void;
   addCachedBookToContext: (book: Book) => void;
   readingSessions: any[];
   userStats: any | null;
-  logReadingSession: (bookId: string, pagesRead: number, note?: string, readingMinutes?: number) => Promise<any>;
   updateBookProgressDirectly: (
     bookId: string,
     currentPage: number,
     note?: string,
-    readingMinutes?: number
+    readingMinutes?: number,
+    chapter?: string
+  ) => Promise<any>;
+  logReadingSession: (
+    bookId: string,
+    pagesRead: number,
+    note?: string,
+    readingMinutes?: number,
+    chapter?: string
   ) => Promise<any>;
   /** Bulk-import matched library books (e.g. Goodreads CSV). */
   importLibraryBooks: (
@@ -733,7 +746,13 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     bookId: string,
     status: "Want to Read" | "Currently Reading" | "Finished" | "Did Not Finish",
     rating?: number,
-    reviewContent?: string
+    reviewContent?: string,
+    dnf?: {
+      dnfReasons?: string[];
+      dnfNote?: string;
+      stoppedAtPage?: number | null;
+      stoppedAtChapter?: string | null;
+    }
   ) => {
     // Optimistic update so Diary/Library show the shelf change immediately
     const dateLogged = new Date().toISOString().split("T")[0];
@@ -751,9 +770,11 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
           status === "Finished"
             ? book?.pages || 300
             : status === "Did Not Finish"
-              ? existingIndex >= 0
-                ? prev[existingIndex].currentPage || 0
-                : 0
+              ? dnf?.stoppedAtPage != null
+                ? dnf.stoppedAtPage
+                : existingIndex >= 0
+                  ? prev[existingIndex].currentPage || 0
+                  : 0
               : existingIndex >= 0
                 ? prev[existingIndex].currentPage || 0
                 : 0,
@@ -782,6 +803,14 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
           status,
           rating,
           review: reviewContent,
+          ...(status === "Did Not Finish" && dnf
+            ? {
+                dnfReasons: dnf.dnfReasons,
+                dnfNote: dnf.dnfNote,
+                stoppedAtPage: dnf.stoppedAtPage,
+                stoppedAtChapter: dnf.stoppedAtChapter,
+              }
+            : {}),
         }),
       });
 
@@ -827,7 +856,8 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     bookId: string,
     pagesRead: number,
     note?: string,
-    readingMinutes?: number
+    readingMinutes?: number,
+    chapter?: string
   ) => {
     const log = diaryLogs.find((l) => l.bookId === bookId);
     const book = books.find((b) => b.id === bookId);
@@ -847,6 +877,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
           endPage,
           note,
           readingMinutes,
+          chapter: chapter || undefined,
         }),
       });
 
@@ -884,7 +915,8 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
     bookId: string,
     targetPage: number,
     note?: string,
-    readingMinutes?: number
+    readingMinutes?: number,
+    chapter?: string
   ) => {
     const log = diaryLogs.find((l) => l.bookId === bookId);
     const book = books.find((b) => b.id === bookId);
@@ -904,6 +936,7 @@ export const LeafProvider: React.FC<{ children: React.ReactNode }> = ({ children
           endPage,
           note,
           readingMinutes,
+          chapter: chapter || undefined,
         }),
       });
 
