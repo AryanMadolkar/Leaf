@@ -10,7 +10,6 @@ import { Dna, Loader2, RefreshCw, Sparkles } from "lucide-react";
 type DnaGenre = { name: string; weight: number };
 type ReadingDnaClient = {
   genres: DnaGenre[];
-  themes: DnaGenre[];
   pacing_preference: number;
   character_preference: number;
   worldbuilding_preference: number;
@@ -198,22 +197,6 @@ export default function ReadingDnaPage() {
                       className="px-3 py-1.5 rounded-full border border-cream-border bg-cream-card text-xs font-medium text-charcoal"
                     >
                       {g.name}
-                    </span>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {dna.themes?.length > 0 && (
-              <section className="space-y-3">
-                <h2 className="font-serif text-lg font-bold text-charcoal">Themes</h2>
-                <div className="flex flex-wrap gap-2">
-                  {dna.themes.slice(0, 12).map((t) => (
-                    <span
-                      key={t.name}
-                      className="px-3 py-1.5 rounded-full border border-cream-border/80 text-[11px] text-charcoal-muted"
-                    >
-                      {t.name}
                     </span>
                   ))}
                 </div>

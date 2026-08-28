@@ -436,12 +436,12 @@ export default function DiscoverPage() {
                       <ul className="space-y-1">
                         {rec.reasons.slice(0, 2).map((r) => (
                           <li key={r} className="text-[10px] text-charcoal-light">
-                            · {r}
+                            <span className="text-brand/80 font-semibold">Why</span> {r}
                           </li>
                         ))}
-                        {rec.mismatches.slice(0, 1).map((m) => (
-                          <li key={m} className="text-[10px] text-rose-700/80">
-                            · {m}
+                        {rec.mismatches.slice(0, 2).map((m) => (
+                          <li key={m} className="text-[10px] text-rose-700/85">
+                            <span className="font-semibold">Note</span> {m}
                           </li>
                         ))}
                       </ul>
