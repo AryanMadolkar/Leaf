@@ -1,8 +1,8 @@
 import { INITIAL_BOOKS } from "@/data/mockData";
 import type { Book } from "@/data/mockData";
-import { COVER_ID_BY_ISBN } from "@/data/coverOverrides";
 import type { ReadingDnaRow } from "@/utils/readingDna";
 import { getCatalogBooks, isFakeBookId, type CatalogShelf } from "@/utils/bookCatalog";
+import { bookHasCover } from "@/utils/covers";
 import { MOODS, type MoodId } from "@/utils/moods";
 
 export { MOODS, type MoodId };
@@ -169,8 +169,8 @@ export type MoodRecommendation = {
   mismatches: string[];
 };
 
-function hasCover(bookId: string): boolean {
-  return !isFakeBookId(bookId) && Boolean(COVER_ID_BY_ISBN[bookId]);
+function hasCover(book: Book): boolean {
+  return !isFakeBookId(book.id) && bookHasCover(book.id, book.coverImage);
 }
 
 function normalizeGenres(book: Book): string[] {
@@ -304,7 +304,7 @@ function buildPool(opts: {
   const pool = new Map<string, Book>();
 
   const add = (book: Book | undefined) => {
-    if (!book || opts.excludeIds.has(book.id) || !hasCover(book.id)) return;
+    if (!book || opts.excludeIds.has(book.id) || !hasCover(book)) return;
     pool.set(book.id, book);
   };
 
@@ -320,7 +320,7 @@ function buildPool(opts: {
 
   // Genre sweep across catalog for stronger recall
   for (const book of INITIAL_BOOKS) {
-    if (opts.excludeIds.has(book.id) || !hasCover(book.id)) continue;
+    if (opts.excludeIds.has(book.id) || !hasCover(book)) continue;
     const genres = normalizeGenres(book).join(" ");
     for (const mood of opts.moods) {
       const p = MOOD_PROFILES[mood];

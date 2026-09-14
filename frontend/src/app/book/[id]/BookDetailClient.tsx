@@ -827,7 +827,8 @@ export default function BookDetailClient({ book: initialBook }: BookDetailClient
       <button
         type="button"
         onClick={() => setAskLeafOpen(true)}
-        className="fixed bottom-6 right-6 z-40 h-12 px-4 rounded-full bg-brand text-cream shadow-lg hover:bg-brand-light inline-flex items-center gap-2 text-xs font-bold"
+        className="fixed bottom-[5.75rem] right-6 z-40 h-12 px-4 rounded-full bg-brand text-cream shadow-lg hover:bg-brand-light inline-flex items-center gap-2 text-xs font-bold"
+        aria-label="Ask Leaf about this book"
       >
         <MessageCircle className="w-4 h-4" />
         Ask Leaf

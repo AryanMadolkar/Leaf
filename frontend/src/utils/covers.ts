@@ -147,3 +147,17 @@ export function resolveBookCover(
     author: meta?.author,
   });
 }
+
+/** True when we have a cover_i override or a non-placeholder cover URL. */
+export function bookHasCover(
+  bookId: string | null | undefined,
+  coverImage?: string | null
+): boolean {
+  if (bookId && COVER_ID_BY_ISBN[bookId]) return true;
+  const raw = (coverImage || "").trim();
+  if (!raw) return false;
+  if (raw.includes("photo-1543002588-bfa74002ed7e") || raw.includes("placeholder")) {
+    return false;
+  }
+  return true;
+}

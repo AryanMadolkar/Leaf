@@ -1,6 +1,5 @@
 import { Book, INITIAL_BOOKS } from "@/data/mockData";
-import { COVER_ID_BY_ISBN } from "@/data/coverOverrides";
-import { resolveBookCover } from "@/utils/covers";
+import { bookHasCover, resolveBookCover } from "@/utils/covers";
 
 export type CatalogShelf =
   | "all-time-greats"
@@ -37,7 +36,7 @@ export function withResolvedCover(book: Book): Book {
 
 /** Real catalog entries only — no procedural fakes, must have a known cover. */
 function realBooksWithCovers(books: Book[]): Book[] {
-  return books.filter((b) => !isFakeBookId(b.id) && COVER_ID_BY_ISBN[b.id]);
+  return books.filter((b) => !isFakeBookId(b.id) && bookHasCover(b.id, b.coverImage));
 }
 
 export function filterBooksByShelf(books: Book[], shelf: CatalogShelf): Book[] {
@@ -201,9 +200,9 @@ function getTrendingPool(): Book[] {
   const seen = new Set<string>();
 
   for (const id of TRENDING_POOL_IDS) {
-    if (seen.has(id) || exclude.has(id) || TRENDING_EXCLUDE_IDS.has(id) || !COVER_ID_BY_ISBN[id]) continue;
+    if (seen.has(id) || exclude.has(id) || TRENDING_EXCLUDE_IDS.has(id)) continue;
     const book = catalogById.get(id);
-    if (!book || isExcludedFromTrending(book)) continue;
+    if (!book || !bookHasCover(book.id, book.coverImage) || isExcludedFromTrending(book)) continue;
     seen.add(id);
     books.push(book);
   }
@@ -266,9 +265,9 @@ function getModernClassicsBooks(limit = 15, offset = 0): Book[] {
   const books: Book[] = [];
   const seen = new Set<string>();
   for (const id of MODERN_CLASSICS_POOL_IDS) {
-    if (seen.has(id) || isFakeBookId(id) || !COVER_ID_BY_ISBN[id]) continue;
+    if (seen.has(id) || isFakeBookId(id)) continue;
     const book = catalogById.get(id);
-    if (!book) continue;
+    if (!book || !bookHasCover(book.id, book.coverImage)) continue;
     seen.add(id);
     books.push(book);
   }
