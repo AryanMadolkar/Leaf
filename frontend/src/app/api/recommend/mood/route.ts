@@ -2,7 +2,53 @@ import { NextResponse } from "next/server";
 import { getRequestUser } from "@/utils/auth/getRequestUser";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { getOrRecomputeReadingDna } from "@/utils/readingDna";
-import { MOODS, recommendByMood } from "@/utils/recommend";
+import { MOODS, recommendByMood, type TasteSignal } from "@/utils/recommend";
+import { canonicalGenresForBook } from "@/utils/genreUtils";
+
+function parseSubjects(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw.map(String);
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.map(String) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function buildTasteGenres(userBooks: unknown): TasteSignal[] {
+  const weights = new Map<string, number>();
+  const rows = Array.isArray(userBooks) ? userBooks : [];
+
+  for (const raw of rows) {
+    const ub = raw as {
+      status?: string | null;
+      rating?: number | null;
+      book?: { subjects?: unknown } | { subjects?: unknown }[] | null;
+    };
+    const status = (ub.status || "").toLowerCase();
+    if (!["finished", "reading", "want_to_read"].includes(status)) continue;
+
+    let w = 0.4;
+    if (status === "reading") w = 0.85;
+    if (status === "finished") {
+      const rating = typeof ub.rating === "number" ? ub.rating : 0;
+      w = rating >= 4.5 ? 2.2 : rating >= 4 ? 1.6 : rating >= 3 ? 1 : 0.55;
+    }
+
+    const book = Array.isArray(ub.book) ? ub.book[0] : ub.book;
+    for (const genre of canonicalGenresForBook(parseSubjects(book?.subjects))) {
+      weights.set(genre, (weights.get(genre) || 0) + w);
+    }
+  }
+
+  return [...weights.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([name, weight]) => ({ name, weight: Math.round(weight * 100) / 100 }));
+}
 
 export async function POST(request: Request) {
   try {
@@ -13,7 +59,7 @@ export async function POST(request: Request) {
 
     const body = await request.json().catch(() => ({}));
     const moodsRaw = Array.isArray(body.moods) ? body.moods.map(String) : [];
-    const moods = moodsRaw.filter((m: string) => MOODS.some((x) => x.id === m)).slice(0, 4);
+    const moods = moodsRaw.filter((m: string) => MOODS.some((x) => x.id === m)).slice(0, 3);
     if (moods.length === 0) {
       return NextResponse.json(
         { success: false, error: "Pick at least one mood", moods: MOODS },
@@ -23,7 +69,10 @@ export async function POST(request: Request) {
 
     const db = createAdminClient();
     const [{ data: userBooks }, { data: dnfRows }, { data: recentEvents }, dna] = await Promise.all([
-      db.from("user_books").select("book_id, status").eq("user_id", user.id),
+      db
+        .from("user_books")
+        .select("book_id, status, rating, book:books(subjects)")
+        .eq("user_id", user.id),
       db.from("dnf_records").select("reasons, book:books(subjects)").eq("user_id", user.id),
       db
         .from("recommendation_events")
@@ -48,29 +97,22 @@ export async function POST(request: Request) {
 
     const dnfGenrePenalties = new Map<string, number>();
     for (const row of dnfRows || []) {
-      const subjectsRaw = (row as any).book?.subjects;
-      let subjects: string[] = [];
-      if (typeof subjectsRaw === "string") {
-        try {
-          subjects = JSON.parse(subjectsRaw);
-        } catch {
-          subjects = [];
-        }
-      } else if (Array.isArray(subjectsRaw)) {
-        subjects = subjectsRaw;
-      }
-      for (const s of subjects.slice(0, 4)) {
-        dnfGenrePenalties.set(s, (dnfGenrePenalties.get(s) || 0) + 0.04);
+      const subjects = parseSubjects((row as { book?: { subjects?: unknown } }).book?.subjects);
+      for (const s of canonicalGenresForBook(subjects).slice(0, 4)) {
+        dnfGenrePenalties.set(s.toLowerCase(), (dnfGenrePenalties.get(s.toLowerCase()) || 0) + 0.04);
       }
     }
+
+    const tasteGenres = buildTasteGenres(userBooks || []);
 
     const recommendations = recommendByMood({
       moods,
       dna,
+      tasteGenres,
       excludeIds,
       dnfGenrePenalties,
       recentRecIds,
-      limit: 5,
+      limit: 6,
     });
 
     const bookIds = recommendations.map((r) => r.book.id);
@@ -89,6 +131,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       moods,
+      tasteGenres: tasteGenres.slice(0, 5).map((g) => g.name),
       recommendations: recommendations.map((r) => ({
         book: r.book,
         matchScore: r.matchScore,
@@ -96,11 +139,9 @@ export async function POST(request: Request) {
         mismatches: r.mismatches,
       })),
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Could not recommend";
     console.error("[recommend/mood]", err);
-    return NextResponse.json(
-      { success: false, error: err.message || "Could not recommend" },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }

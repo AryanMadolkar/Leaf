@@ -23,6 +23,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import DnfReasonModal from "@/components/DnfReasonModal";
 import { authFetch } from "@/utils/auth/client";
 import { MOODS, type MoodId } from "@/utils/moods";
+import { recommendByMood } from "@/utils/recommend";
 
 type ShelfConfig = { key: CatalogShelf; title: string; description: string; icon: React.ElementType };
 
@@ -290,16 +291,38 @@ export default function DiscoverPage() {
     setMoodLoading(true);
     setMoodError(null);
     try {
+      const localTaste = tasteProfile.dist.map((g) => ({
+        name: g.name,
+        weight: g.count,
+      }));
+
       const res = await authFetch("/api/recommend/mood", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ moods: selectedMoods }),
       });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || "Could not recommend");
-      setMoodResults(data.recommendations || []);
-    } catch (err: any) {
-      setMoodError(err.message || "Could not recommend");
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok && data.success && Array.isArray(data.recommendations) && data.recommendations.length > 0) {
+        setMoodResults(data.recommendations);
+        return;
+      }
+
+      // Local fallback (guest / API miss): same scorer, using diary-derived taste
+      const local = recommendByMood({
+        moods: selectedMoods,
+        dna: null,
+        tasteGenres: localTaste,
+        excludeIds: loggedBookIds,
+        limit: 6,
+      });
+      if (local.length === 0) {
+        throw new Error(data.error || "No strong matches — try another mood mix.");
+      }
+      setMoodResults(local);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Could not recommend";
+      setMoodError(message);
       setMoodResults([]);
     } finally {
       setMoodLoading(false);
@@ -378,7 +401,8 @@ export default function DiscoverPage() {
               <div className="space-y-1">
                 <h2 className="font-serif text-2xl font-bold text-charcoal">What are you in the mood for?</h2>
                 <p className="text-[11px] text-charcoal-muted uppercase tracking-wider font-medium">
-                  Pick up to three moods — Leaf scores catalog picks with reasons, not random %.
+                  Pick up to three moods — Leaf blends them with your reading taste
+                  {tasteProfile.topGenres.length > 0 ? ` (${tasteLabel})` : ""}, with reasons — not random %.
                 </p>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">

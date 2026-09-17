@@ -297,9 +297,69 @@ function dnaBoost(book: Book, dna: ReadingDnaRow | null): { delta: number; reaso
   return { delta, reasons, mismatches };
 }
 
+export type TasteSignal = { name: string; weight: number };
+
+/** 0–1 affinity between a book and the reader's usual genres (+ DNA soft prefs). */
+function tasteAffinity(
+  book: Book,
+  dna: ReadingDnaRow | null,
+  tasteGenres: TasteSignal[]
+): { score: number; reasons: string[]; mismatches: string[] } {
+  const genres = normalizeGenres(book);
+  const reasons: string[] = [];
+  const mismatches: string[] = [];
+
+  const signals: TasteSignal[] =
+    tasteGenres.length > 0
+      ? tasteGenres
+      : (dna?.genres || []).map((g) => ({ name: g.name, weight: Math.max(0.1, g.weight || 0.1) }));
+
+  if (signals.length === 0) {
+    const soft = dnaBoost(book, dna);
+    return { score: Math.max(0, Math.min(1, soft.delta * 4)), reasons: soft.reasons, mismatches: soft.mismatches };
+  }
+
+  const maxW = Math.max(...signals.map((s) => s.weight), 1);
+  let weightedHits = 0;
+  let hitCount = 0;
+
+  for (const signal of signals.slice(0, 6)) {
+    const needle = signal.name.toLowerCase();
+    const matched = genres.some((g) => g.includes(needle) || needle.includes(g));
+    if (!matched) continue;
+    hitCount += 1;
+    weightedHits += signal.weight / maxW;
+    if (reasons.length < 2) {
+      reasons.push(
+        hitCount === 1
+          ? `Fits how you usually read (${signal.name})`
+          : `Also aligns with your ${signal.name} shelf`
+      );
+    }
+  }
+
+  let score = Math.min(1, weightedHits * 0.55 + (hitCount > 1 ? 0.18 : 0));
+
+  // Soft DNA pacing / emotion nudges (smaller than genre taste)
+  const soft = dnaBoost(book, dna);
+  score = Math.max(0, Math.min(1, score + soft.delta));
+  for (const r of soft.reasons) {
+    if (reasons.length < 3 && !reasons.includes(r)) reasons.push(r);
+  }
+  mismatches.push(...soft.mismatches);
+
+  if (hitCount === 0 && signals.length > 0) {
+    mismatches.push(`Less like your usual ${signals[0].name} reading`);
+    score *= 0.35;
+  }
+
+  return { score, reasons, mismatches };
+}
+
 function buildPool(opts: {
   moods: MoodId[];
   excludeIds: Set<string>;
+  tasteGenres?: TasteSignal[];
 }): Map<string, Book> {
   const pool = new Map<string, Book>();
 
@@ -314,14 +374,13 @@ function buildPool(opts: {
     const profile = MOOD_PROFILES[mood];
     for (const id of profile.curatedIds) add(catalogById.get(id));
     for (const shelf of profile.shelves) {
-      for (const b of getCatalogBooks(shelf, 36, 0)) add(b);
+      for (const b of getCatalogBooks(shelf, 40, 0)) add(b);
     }
   }
 
   // Genre sweep across catalog for stronger recall
   for (const book of INITIAL_BOOKS) {
     if (opts.excludeIds.has(book.id) || !hasCover(book)) continue;
-    const genres = normalizeGenres(book).join(" ");
     for (const mood of opts.moods) {
       const p = MOOD_PROFILES[mood];
       if (
@@ -334,12 +393,27 @@ function buildPool(opts: {
     }
   }
 
+  // Pull in the reader's favorite genres, but only when mood-compatible
+  const tasteNeedles = (opts.tasteGenres || []).slice(0, 5).map((g) => g.name.toLowerCase());
+  if (tasteNeedles.length > 0) {
+    for (const book of INITIAL_BOOKS) {
+      if (opts.excludeIds.has(book.id) || !hasCover(book) || pool.has(book.id)) continue;
+      const genres = normalizeGenres(book);
+      const tasteHit = tasteNeedles.some((n) => genres.some((g) => g.includes(n) || n.includes(g)));
+      if (!tasteHit) continue;
+      const moodOk = opts.moods.some((m) => scoreBookForMood(book, m).core >= 0.1);
+      if (moodOk) pool.set(book.id, book);
+    }
+  }
+
   return pool;
 }
 
 export function recommendByMood(opts: {
   moods: string[];
   dna: ReadingDnaRow | null;
+  /** Explicit genre tastes from the user's logs (preferred over DNA alone). */
+  tasteGenres?: TasteSignal[];
   excludeIds: Set<string>;
   dnfGenrePenalties?: Map<string, number>;
   recentRecIds?: Set<string>;
@@ -348,8 +422,13 @@ export function recommendByMood(opts: {
   const moods = opts.moods.filter((m): m is MoodId => MOODS.some((x) => x.id === m));
   if (moods.length === 0) return [];
 
-  const pool = buildPool({ moods, excludeIds: opts.excludeIds });
+  const tasteGenres = opts.tasteGenres || [];
+  const pool = buildPool({ moods, excludeIds: opts.excludeIds, tasteGenres });
   const scored: Array<MoodRecommendation & { raw: number }> = [];
+  const hasTaste =
+    tasteGenres.length > 0 || Boolean(opts.dna && (opts.dna.confidence || 0) >= 0.15);
+  const moodWeight = hasTaste ? 0.58 : 0.88;
+  const tasteWeight = hasTaste ? 0.42 : 0.12;
 
   for (const book of pool.values()) {
     if (opts.recentRecIds?.has(book.id)) continue;
@@ -365,9 +444,27 @@ export function recommendByMood(opts: {
       mismatches.push(...part.mismatches);
     }
     moodCore /= moods.length;
+    // Normalize typical mood cores (~0–0.7) toward 0–1 for blending
+    const moodNorm = Math.max(0, Math.min(1, moodCore / 0.7));
 
-    const dna = dnaBoost(book, opts.dna);
-    let score = moodCore + dna.delta;
+    const taste = tasteAffinity(book, opts.dna, tasteGenres);
+    reasons.push(...taste.reasons);
+    mismatches.push(...taste.mismatches);
+
+    let score = moodWeight * moodNorm + tasteWeight * taste.score;
+
+    // Reward books that satisfy both the picked mood and the reader's habits
+    if (moodNorm >= 0.35 && taste.score >= 0.28) {
+      score += 0.14;
+      if (!reasons.some((r) => /mood pick and your usual/i.test(r))) {
+        reasons.unshift("Matches both your mood pick and your usual tastes");
+      }
+    }
+
+    // Don't let pure-taste hits drown out a weak mood fit
+    if (hasTaste && moodNorm < 0.16) {
+      score *= 0.55;
+    }
 
     if (book.averageRating >= 4.4) score += 0.03;
     else if (book.averageRating < 3.4) score -= 0.04;
@@ -388,17 +485,25 @@ export function recommendByMood(opts: {
     });
   }
 
-  let threshold = 0.28;
+  let threshold = hasTaste ? 0.32 : 0.28;
   let filtered = scored.filter((s) => s.raw >= threshold);
-  if (filtered.length < 3) threshold = 0.18;
-  filtered = scored.filter((s) => s.raw >= threshold);
+  if (filtered.length < 4) {
+    threshold = hasTaste ? 0.22 : 0.18;
+    filtered = scored.filter((s) => s.raw >= threshold);
+  }
+  if (filtered.length < 3) filtered = [...scored].sort((a, b) => b.raw - a.raw).slice(0, 6);
 
   filtered.sort((a, b) => b.raw - a.raw);
 
-  const limit = opts.limit ?? 5;
+  const limit = opts.limit ?? 6;
   return filtered.slice(0, limit).map(({ raw, ...rest }) => ({
     ...rest,
-    matchScore: Math.round(Math.max(0.12, Math.min(0.96, raw)) * 100),
-    reasons: rest.reasons.length > 0 ? rest.reasons : ["Best available match in your catalog"],
+    matchScore: Math.round(Math.max(0.14, Math.min(0.97, raw)) * 100),
+    reasons:
+      rest.reasons.length > 0
+        ? rest.reasons
+        : hasTaste
+          ? ["Best blend of your mood pick and reading taste"]
+          : ["Best available match for this mood"],
   }));
 }
