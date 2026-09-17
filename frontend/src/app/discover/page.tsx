@@ -8,8 +8,8 @@ import CoverImage from "@/components/CoverImage";
 import { useLeaf } from "@/context/LeafContext";
 import { Book } from "@/data/mockData";
 import type { CatalogShelf } from "@/utils/bookCatalog";
-import { isFakeBookId } from "@/utils/bookCatalog";
-import { bookHasCover } from "@/utils/covers";
+import { isFakeBookId, isShowcaseBook } from "@/utils/bookCatalog";
+import { bookHasCover, hasGenericCatalogBlurb, looksLikeEnglishTitle } from "@/utils/covers";
 import {
   buildGenreDistribution,
   canonicalGenresForBook,
@@ -212,7 +212,13 @@ export default function DiscoverPage() {
   /** Taste-biased pool for the Random for You card */
   const randomPool = useMemo(() => {
     const scored = books
-      .filter((b) => !loggedBookIds.has(b.id) && !isFakeBookId(b.id) && bookHasCover(b.id, b.coverImage))
+      .filter(
+        (b) =>
+          !loggedBookIds.has(b.id) &&
+          isShowcaseBook(b) &&
+          looksLikeEnglishTitle(b.title) &&
+          !hasGenericCatalogBlurb(b.description)
+      )
       .map((b) => {
         const genres = canonicalGenresForBook(b.genres);
         const { topGenres, genreWeights } = tasteProfile;
@@ -229,8 +235,17 @@ export default function DiscoverPage() {
       })
       .sort((a, b) => b.score - a.score);
 
-    const topN = Math.min(60, Math.max(20, scored.length));
-    return scored.slice(0, topN).map((x) => x.book);
+    // If quality filter is too strict, fall back to verified-cover English titles
+    const pool =
+      scored.length >= 8
+        ? scored
+        : books
+            .filter((b) => !loggedBookIds.has(b.id) && isShowcaseBook(b))
+            .map((b) => ({ book: b, score: b.averageRating }))
+            .sort((a, b) => b.score - a.score);
+
+    const topN = Math.min(60, Math.max(20, pool.length));
+    return pool.slice(0, topN).map((x) => x.book);
   }, [books, loggedBookIds, tasteProfile]);
 
   const [randomBook, setRandomBook] = useState<Book | null>(null);

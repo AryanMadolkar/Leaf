@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { createServerClient } from "@supabase/ssr";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { getRequestUser } from "@/utils/auth/getRequestUser";
+import { requireOwnUserId } from "@/utils/apiAccess";
 import { recalculateUserStats } from "@/utils/supabaseStats";
 import { getBookById, ensureBookRow } from "@/utils/booksApi";
 import { mapUserBookToDiaryLog } from "@/utils/diaryLogs";
@@ -29,7 +30,6 @@ function getSupabaseClient(serviceRoleKey?: string) {
   const { url, anonKey } = verifyEnv();
   
   if (serviceRoleKey) {
-    console.log("[DEBUG] [user-books] Initializing database client using Service Role Key (Admin Access).");
     return createServerClient(
       url,
       serviceRoleKey,
@@ -41,7 +41,6 @@ function getSupabaseClient(serviceRoleKey?: string) {
       }
     );
   }
-  console.log("[DEBUG] [user-books] Initializing database client using Anon/Publishable Key (User Access).");
   return null;
 }
 
@@ -74,40 +73,27 @@ async function verifyDatabaseSchema(supabaseClient: any) {
 
 export async function GET(request: Request) {
   try {
-    console.log("[DEBUG] [user-books] Incoming GET request.");
-    const { url: envUrl, anonKey: envAnonKey, serviceRoleKey } = verifyEnv();
-    console.log("[DEBUG] [user-books] Env verification passed. URL:", envUrl, "Anon Key Length:", envAnonKey.length);
-
+    const { serviceRoleKey } = verifyEnv();
     const { searchParams } = new URL(request.url);
-    const { user, error: authError } = await getRequestUser();
-    if (authError) {
-      console.warn("[DEBUG] [user-books] Session auth error:", authError);
-    }
-    const targetUserId = searchParams.get("userId") || user?.id;
-
-    if (!targetUserId) {
-      console.warn("[DEBUG] [user-books] Missing target userId parameter or session.");
-      return NextResponse.json({ success: false, error: "Missing target userId" }, { status: 400 });
-    }
+    const { user } = await getRequestUser();
+    const access = requireOwnUserId(user, searchParams.get("userId"));
+    if ("error" in access) return access.error;
 
     const dbClient = getSupabaseClient(serviceRoleKey) || createAdminClient();
     await verifyDatabaseSchema(dbClient);
 
     const { data: rows, error: selectError } = await dbClient
       .from("user_books")
-      .select("*")
-      .eq("user_id", targetUserId);
+      .select(
+        "id, user_id, book_id, status, rating, review, current_page, started_at, finished_at, created_at, updated_at"
+      )
+      .eq("user_id", access.userId);
 
-    if (selectError) {
-      console.error("[DEBUG] [user-books] Error querying user_books:", selectError);
-      throw selectError;
-    }
-    
-    console.log(`[DEBUG] [user-books] GET returning ${rows ? rows.length : 0} logs.`);
+    if (selectError) throw selectError;
+
     return NextResponse.json({ success: true, logs: rows });
   } catch (error: any) {
-    console.error("[DEBUG] [user-books] GET API error:", error);
-    console.error(error.stack);
+    console.error("[user-books] GET error:", error);
     return NextResponse.json({ success: false, error: error.message || "Internal Server Error" }, { status: 500 });
   }
 }

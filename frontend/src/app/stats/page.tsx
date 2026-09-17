@@ -260,7 +260,7 @@ export default function StatsPage() {
 
       try {
         setLoading(true);
-        const res = await fetch(`/api/stats?userId=${currentUser.id}`);
+        const res = await authFetch("/api/stats");
         if (res.ok) {
           const payload = await res.json();
           if (payload.success && payload.stats) {

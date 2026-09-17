@@ -1,5 +1,11 @@
 import { Book, INITIAL_BOOKS } from "@/data/mockData";
-import { bookHasCover, resolveBookCover } from "@/utils/covers";
+import {
+  bookHasCover,
+  bookHasVerifiedCover,
+  hasGenericCatalogBlurb,
+  looksLikeEnglishTitle,
+  resolveBookCover,
+} from "@/utils/covers";
 
 export type CatalogShelf =
   | "all-time-greats"
@@ -23,6 +29,16 @@ export function isFakeBookId(id: string): boolean {
   return /^97810[0-3]/.test(id);
 }
 
+/** Books safe to feature on Discover shelves / Random / leaderboard. */
+export function isShowcaseBook(book: Book): boolean {
+  if (isFakeBookId(book.id)) return false;
+  if (!bookHasVerifiedCover(book.id)) return false;
+  if (!looksLikeEnglishTitle(book.title)) return false;
+  if (!looksLikeEnglishTitle(book.author)) return false;
+  if ((book.pages || 0) > 0 && (book.pages || 0) < 50) return false;
+  return true;
+}
+
 export function withResolvedCover(book: Book): Book {
   return {
     ...book,
@@ -37,6 +53,10 @@ export function withResolvedCover(book: Book): Book {
 /** Real catalog entries only — no procedural fakes, must have a known cover. */
 function realBooksWithCovers(books: Book[]): Book[] {
   return books.filter((b) => !isFakeBookId(b.id) && bookHasCover(b.id, b.coverImage));
+}
+
+function showcaseBooks(books: Book[]): Book[] {
+  return books.filter(isShowcaseBook);
 }
 
 export function filterBooksByShelf(books: Book[], shelf: CatalogShelf): Book[] {
@@ -127,14 +147,18 @@ export function filterBooksByShelf(books: Book[], shelf: CatalogShelf): Book[] {
           b.genres.some((g) => g.toLowerCase().includes("science"))
       );
     case "leaderboard":
-      return [...books].sort((a, b) => b.averageRating - a.averageRating);
+      return showcaseBooks(books)
+        .filter((b) => !hasGenericCatalogBlurb(b.description) || b.averageRating >= 4.2)
+        .sort((a, b) => b.averageRating - a.averageRating || (b.pages || 0) - (a.pages || 0));
     default:
       return books;
   }
 }
 
 function preferBooksWithCovers(books: Book[]): Book[] {
-  return [...realBooksWithCovers(books)].sort((a, b) => b.averageRating - a.averageRating);
+  const preferred = showcaseBooks(books);
+  const pool = preferred.length >= 12 ? preferred : realBooksWithCovers(books);
+  return [...pool].sort((a, b) => b.averageRating - a.averageRating);
 }
 
 /** ISO week key, e.g. "2026-W29" — used to rotate trending picks weekly. */
@@ -202,7 +226,7 @@ function getTrendingPool(): Book[] {
   for (const id of TRENDING_POOL_IDS) {
     if (seen.has(id) || exclude.has(id) || TRENDING_EXCLUDE_IDS.has(id)) continue;
     const book = catalogById.get(id);
-    if (!book || !bookHasCover(book.id, book.coverImage) || isExcludedFromTrending(book)) continue;
+    if (!book || !isShowcaseBook(book) || isExcludedFromTrending(book)) continue;
     seen.add(id);
     books.push(book);
   }
@@ -267,7 +291,7 @@ function getModernClassicsBooks(limit = 15, offset = 0): Book[] {
   for (const id of MODERN_CLASSICS_POOL_IDS) {
     if (seen.has(id) || isFakeBookId(id)) continue;
     const book = catalogById.get(id);
-    if (!book || !bookHasCover(book.id, book.coverImage)) continue;
+    if (!book || !isShowcaseBook(book)) continue;
     seen.add(id);
     books.push(book);
   }

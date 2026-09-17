@@ -553,19 +553,20 @@ export default function Header() {
               {mobileNavOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
             </button>
             {/* Search Bar */}
-            <div ref={searchRef} className="relative w-full max-w-[200px] md:max-w-[240px]">
+            <div ref={searchRef} className="relative w-[9.5rem] sm:w-full sm:max-w-[200px] md:max-w-[240px] flex-shrink min-w-0">
               <div className="relative">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-charcoal-muted" />
                 <input
                   type="text"
-                  placeholder="Search books, readers..."
+                  placeholder="Search..."
+                  aria-label="Search books and readers"
                   value={searchQuery}
                   onChange={(e) => {
                     setSearchQuery(e.target.value);
                     setShowSearchResults(true);
                   }}
                   onFocus={() => setShowSearchResults(true)}
-                  className="w-full h-9 pl-9 pr-4 text-xs bg-cream-dark/50 border border-cream-border rounded-lg text-charcoal placeholder-charcoal-muted focus:outline-none focus:border-brand-muted focus:bg-cream-dark transition-all duration-300"
+                  className="w-full h-9 pl-9 pr-3 text-xs bg-cream-dark/50 border border-cream-border rounded-lg text-charcoal placeholder-charcoal-muted focus:outline-none focus:border-brand-muted focus:bg-cream-dark transition-all duration-300"
                 />
               </div>
 

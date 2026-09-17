@@ -35,8 +35,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Enter a valid email address." }, { status: 400 });
     }
 
-    if (password.length < 6) {
-      return NextResponse.json({ success: false, error: "Password must be at least 6 characters." }, { status: 400 });
+    if (password.length < 8) {
+      return NextResponse.json({ success: false, error: "Password must be at least 8 characters." }, { status: 400 });
     }
 
     if (!username) username = `reader_${randomUUID().slice(0, 6)}`;

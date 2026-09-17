@@ -5,11 +5,32 @@ import { COVER_ID_BY_ISBN } from "@/data/coverOverrides";
 export const runtime = "nodejs";
 
 const VALID_SIZES = new Set(["S", "M", "L"]);
+const MAX_META_LEN = 180;
 
 // Google Books serves this exact "image not available" graphic (128x170
 // grayscale PNG) for any ISBN it doesn't have art for, instead of a 404 —
 // it must be fingerprinted and rejected or it gets cached as a real cover.
 const GOOGLE_BOOKS_PLACEHOLDER_HASH = "e89e0e364e83c0ecfba5da41007c9a2c";
+
+function cleanIsbn(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const clean = raw.replace(/[^0-9Xx]/g, "");
+  return clean.length >= 10 && clean.length <= 13 ? clean : null;
+}
+
+function cleanCoverId(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const digits = raw.replace(/\D/g, "");
+  if (!digits || digits.length > 12) return null;
+  return digits;
+}
+
+function clipMeta(value: string | null): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.slice(0, MAX_META_LEN);
+}
 
 function upstreamUrl(params: {
   id?: string | null;
@@ -21,20 +42,17 @@ function upstreamUrl(params: {
     return `https://covers.openlibrary.org/b/id/${params.id}-${size}.jpg?default=false`;
   }
   if (params.isbn) {
-    const clean = params.isbn.replace(/[^0-9Xx]/g, "");
-    if (!clean) return null;
-    const coverId = COVER_ID_BY_ISBN[clean] || COVER_ID_BY_ISBN[params.isbn];
+    const coverId = COVER_ID_BY_ISBN[params.isbn];
     if (coverId) {
       return `https://covers.openlibrary.org/b/id/${coverId}-${size}.jpg?default=false`;
     }
-    return `https://covers.openlibrary.org/b/isbn/${clean}-${size}.jpg?default=false`;
+    return `https://covers.openlibrary.org/b/isbn/${params.isbn}-${size}.jpg?default=false`;
   }
   return null;
 }
 
 function googleBooksUrl(isbn: string): string {
-  const clean = isbn.replace(/[^0-9Xx]/g, "");
-  return `https://books.google.com/books/content?vid=ISBN${clean}&printsec=frontcover&img=1&zoom=1`;
+  return `https://books.google.com/books/content?vid=ISBN${isbn}&printsec=frontcover&img=1&zoom=1`;
 }
 
 async function fetchCoverBytes(url: string): Promise<{ bytes: ArrayBuffer; contentType: string } | null> {
@@ -58,10 +76,9 @@ async function fetchCoverBytes(url: string): Promise<{ bytes: ArrayBuffer; conte
     if (createHash("md5").update(Buffer.from(bytes)).digest("hex") === GOOGLE_BOOKS_PLACEHOLDER_HASH) {
       return null;
     }
-    return {
-      bytes,
-      contentType: res.headers.get("Content-Type") || "image/jpeg",
-    };
+    const contentType = (res.headers.get("Content-Type") || "image/jpeg").split(";")[0].trim();
+    if (!contentType.startsWith("image/")) return null;
+    return { bytes, contentType };
   } catch {
     return null;
   } finally {
@@ -79,11 +96,11 @@ async function fetchCoverBytes(url: string): Promise<{ bytes: ArrayBuffer; conte
  */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const id = searchParams.get("id");
-  const isbn = searchParams.get("isbn");
+  const id = cleanCoverId(searchParams.get("id"));
+  const isbn = cleanIsbn(searchParams.get("isbn"));
   const size = (searchParams.get("size") || "M").toUpperCase();
-  const title = searchParams.get("title");
-  const author = searchParams.get("author");
+  const title = clipMeta(searchParams.get("title"));
+  const author = clipMeta(searchParams.get("author"));
 
   const primary = upstreamUrl({ id, isbn, size });
   let payload = primary ? await fetchCoverBytes(primary) : null;
@@ -93,8 +110,9 @@ export async function GET(request: Request) {
     payload = await fetchCoverBytes(googleBooksUrl(isbn));
   }
 
-  // Fallback: Open Library search by title/author (helps fake/generated ISBNs)
-  if (!payload && title) {
+  // Title/author search only when we have no ISBN/id — otherwise wrong covers
+  // get cached forever for the wrong book.
+  if (!payload && !isbn && !id && title) {
     try {
       const q = new URLSearchParams({
         title,
@@ -108,10 +126,10 @@ export async function GET(request: Request) {
       if (searchRes.ok) {
         const data = await searchRes.json();
         const coverI = data?.docs?.[0]?.cover_i;
-        if (coverI) {
+        if (coverI && Number.isFinite(Number(coverI))) {
           const sz = VALID_SIZES.has(size) ? size : "M";
           payload = await fetchCoverBytes(
-            `https://covers.openlibrary.org/b/id/${coverI}-${sz}.jpg?default=false`
+            `https://covers.openlibrary.org/b/id/${Number(coverI)}-${sz}.jpg?default=false`
           );
         }
       }

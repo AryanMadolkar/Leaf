@@ -36,6 +36,11 @@ export default function AuthPage() {
 
     try {
       if (isSignUp) {
+        if (password.length < 8) {
+          setErrorMsg("Password must be at least 8 characters.");
+          setLoading(false);
+          return;
+        }
         const data = await signUpWithPassword(email, password, username, name);
         if (data.user?.onboarding_completed) {
           router.push("/feed");
@@ -171,12 +176,16 @@ export default function AuthPage() {
                 <input
                   type="password"
                   required
+                  minLength={isSignUp ? 8 : undefined}
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full h-10 px-3 text-xs bg-cream-card border border-cream-border rounded-lg text-charcoal focus:outline-none focus:border-brand-muted"
                 />
-              </div>
+                {isSignUp && (
+                  <p className="text-[10px] text-charcoal-muted">At least 8 characters.</p>
+                )}
+            </div>
 
             <button
               type="submit"

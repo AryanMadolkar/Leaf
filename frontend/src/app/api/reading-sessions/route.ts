@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { getRequestUser } from "@/utils/auth/getRequestUser";
+import { requireOwnUserId } from "@/utils/apiAccess";
 import { recalculateUserStats } from "@/utils/supabaseStats";
 import { getBookById, ensureBookRow } from "@/utils/booksApi";
 import { mapUserBookToDiaryLog } from "@/utils/diaryLogs";
@@ -11,14 +12,9 @@ export async function GET(request: Request) {
   try {
     const supabase = createAdminClient();
     const { searchParams } = new URL(request.url);
-    
-    // Default to active user session, fallback to searchParam if querying another profile
     const { user } = await getRequestUser();
-    const targetUserId = searchParams.get("userId") || user?.id;
-
-    if (!targetUserId) {
-      return NextResponse.json({ success: false, error: "Missing target userId" }, { status: 400 });
-    }
+    const access = requireOwnUserId(user, searchParams.get("userId"));
+    if ("error" in access) return access.error;
 
     const { data: sessions, error } = await supabase
       .from("reading_sessions")
@@ -26,7 +22,7 @@ export async function GET(request: Request) {
         *,
         book:books(title, author_name, cover_url)
       `)
-      .eq("user_id", targetUserId)
+      .eq("user_id", access.userId)
       .order("logged_at", { ascending: false });
 
     if (error) throw error;

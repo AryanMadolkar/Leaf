@@ -1,29 +1,17 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { getRequestUser } from "@/utils/auth/getRequestUser";
+import { requireOwnUserId } from "@/utils/apiAccess";
 import { buildGenreDistribution } from "@/utils/genreUtils";
 
 export async function GET(request: Request) {
   try {
     const supabase = createAdminClient();
     const { searchParams } = new URL(request.url);
-
-    // Default to active user session, fallback to searchParam if querying another profile
     const { user } = await getRequestUser();
-    const targetUserId = searchParams.get("userId") || user?.id;
-
-    if (!targetUserId) {
-      return NextResponse.json({ success: false, error: "Missing target userId" }, { status: 400 });
-    }
-
-    // Guest / mock IDs are not UUIDs — skip Supabase to avoid 22P02 errors
-    const isUuid =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-        targetUserId
-      );
-    if (!isUuid) {
-      return NextResponse.json({ success: true, stats: null });
-    }
+    const access = requireOwnUserId(user, searchParams.get("userId"));
+    if ("error" in access) return access.error;
+    const targetUserId = access.userId;
 
     // 1. Fetch main user stats row (with self-healing fallback)
     let stats = null;

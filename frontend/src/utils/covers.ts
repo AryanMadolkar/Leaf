@@ -161,3 +161,28 @@ export function bookHasCover(
   }
   return true;
 }
+
+/** Prefer books with a known Open Library cover_i (more reliable than ISBN/proxy). */
+export function bookHasVerifiedCover(bookId: string | null | undefined): boolean {
+  return Boolean(bookId && COVER_ID_BY_ISBN[bookId]);
+}
+
+/** Reject titles that are clearly non-Latin / non-English catalog noise. */
+export function looksLikeEnglishTitle(title: string | null | undefined): boolean {
+  const t = (title || "").trim();
+  if (t.length < 2 || t.length > 120) return false;
+  const latin = (t.match(/[A-Za-z\u00C0-\u024F]/g) || []).length;
+  const letters = (t.match(/\p{L}/gu) || []).length;
+  if (letters === 0) return false;
+  if (latin / letters < 0.75) return false;
+  // Avoid bare codes / edition dumps
+  if (/^[\d\s\-.:]+$/.test(t)) return false;
+  return true;
+}
+
+/** Generic generator blurbs are a signal the record is low-quality filler. */
+export function hasGenericCatalogBlurb(description: string | null | undefined): boolean {
+  const d = (description || "").trim();
+  if (!d) return true;
+  return /^.{1,160} by .{1,100}, first published \d{4}\.?$/i.test(d);
+}

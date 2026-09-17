@@ -23,6 +23,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import UserAvatar from "@/components/UserAvatar";
+import { authFetch } from "@/utils/auth/client";
 
 export default function RecapPage() {
   const { currentUser, books, diaryLogs } = useLeaf();
@@ -40,7 +41,7 @@ export default function RecapPage() {
     async function fetchStats() {
       try {
         setLoading(true);
-        const res = await fetch(`/api/stats?userId=${currentUser.id}`);
+        const res = await authFetch("/api/stats");
         if (res.ok) {
           const payload = await res.json();
           if (payload.success) {
